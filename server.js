@@ -7,7 +7,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, WebSocket } from 'ws';
 import QRCode from 'qrcode';
-import { MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCars,sanitizeInput,botInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
+import { MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCars,resolveNudges,sanitizeInput,botInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
 import { createChase, updateChase, chaseSnapshot, cameraFrame } from './shared/chase.js';
 import { initCombat, createPickups, collectPickup, WEAPONS, pressWeapon, updateCombat } from './shared/combat.js';
 import { targetScoreForPlayers, scoreRound, nextRoundDue } from './shared/tournament.js';
@@ -15,7 +15,7 @@ const root=path.dirname(fileURLToPath(import.meta.url));
 const rooms=new Map(),connections=new Map();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
 const MAX_ROOMS=100, GRACE_MS=20000;
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.mid':'audio/midi'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json','.json':'application/json','.mid':'audio/midi'};
 function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}
 const server=http.createServer(async(req,res)=>{
   try{
@@ -28,7 +28,7 @@ const server=http.createServer(async(req,res)=>{
       if(!value||value.length>512||!/^https?:\/\//.test(value)){res.writeHead(400);return res.end();}
       res.setHeader('Content-Type','image/svg+xml');return res.end(await QRCode.toString(value,{type:'svg',margin:1,color:{dark:'#101d26',light:'#ffffff'}}));
     }
-    const routes={'/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/chase.js':'shared/chase.js','/shared/combat.js':'shared/combat.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
+    const routes={'/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
@@ -43,9 +43,9 @@ const server=http.createServer(async(req,res)=>{
 const wss=new WebSocketServer({server,path:'/ws',maxPayload:2048,perMessageDeflate:{threshold:1024,zlibDeflateOptions:{level:1},concurrencyLimit:4}});
 function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(JSON.stringify(data));}
 function fail(ws,message){send(ws,{type:'error',message});}
-function roomCode(){let code;do{code=Array.from(randomBytes(5),b=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b%31]).join('');}while(rooms.has(code));return code;}
+function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
 function broadcast(room,data){for(const p of room.players.values())send(p.ws,data);}
-function snapshot(room){return {type:'state',code:room.code,host:room.host,phase:room.phase,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,score:p.score||0,ready:!!p.ready,seq:p.seq,...p.car})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains};}
+function snapshot(room){return {type:'state',code:room.code,host:room.host,phase:room.phase,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,score:p.score||0,ready:!!p.ready,seq:p.seq,...p.car})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains};}
 function publish(room){if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
 function resetRoom(room,{newTournament=true,startFraction=START_FRACTION}={}){
   room.phase='lobby';room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();
@@ -83,7 +83,7 @@ wss.on('connection',(ws,req)=>{
         if(rooms.size>=MAX_ROOMS)return fail(ws,'The server is full. Try again shortly.');
         room={code:roomCode(),players:new Map(),host:null,createdAt:now};resetRoom(room);rooms.set(room.code,room);
       }else room=rooms.get(String(msg.code||'').toUpperCase());
-      if(!room)return fail(ws,'Room not found. Check the five-character code.');
+      if(!room)return fail(ws,'Room not found. Check the three-letter code.');
       let player=[...room.players.values()].find(p=>!p.bot&&typeof msg.token==='string'&&p.token===msg.token);
       if(player){const old=player.ws;player.ws=ws;player.disconnectedAt=null;player.lastInput=now;player.input={...NEUTRAL};if(old&&old!==ws)old.close(4001,'Connected elsewhere');}
       else{
@@ -133,6 +133,7 @@ const timer=setInterval(()=>{
           if(!p.car.finished&&!p.car.eliminated&&p.car.progress>=room.finishProgress){p.car.finished=true;p.car.finishTime=now-room.startAt;}
           collectPickup(p.car,room.pickups,now);
         }
+        resolveNudges([...room.players.values()].map(p=>p.car));
         collideCars([...room.players.values()].map(p=>p.car),{road:true});
         updateCombat(room,STEP,now);
         for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}

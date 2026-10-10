@@ -22,24 +22,27 @@ To use another port: `PORT=4000 npm start`. To bind only to this machine: `HOST=
 
 ## Play
 
-1. Enter a name and create a room. Share its five-character code or invite URL.
+1. Enter a name and create a room. Share its three-letter code or invite URL.
 2. Friends join and receive different random colours. The host starts the race.
 3. Add optional practice drivers to try it alone. Bots count toward the six-car limit.
 4. Keep ahead of the red elimination line. It stays **108 game metres of road distance behind the leader**, roughly three seconds at the normal maximum speed. It is not a timer: a stopped leader does not make the line creep forward. Crossing behind it eliminates your car; eliminated drivers spectate. In multiplayer, the last survivor wins. If more than one survives, the three-lap finish still applies. Round scores carry forward automatically. Every connected human can tap Ready; the next countdown starts as soon as everyone is ready or five seconds elapse. The next grid forms behind the previous winner’s finishing checkpoint.
 
-Landscape is required: portrait shows a full-screen rotate prompt, and controls are released when the device rotates. The circuit is approximately **2.43 km, 30% shorter than v0.2**, with chicanes and hairpins on a narrow island causeway. Both exposed edges drop into water and kill the car; scenery islands are separated from the road by water. There is no safe field runoff. Everyone shares a moving overhead camera framing the cutoff line, the leader, and another **22 metres of road ahead**; local player prediction does not affect its target. The camera rotates with the route to use a wide phone screen efficiently.
+Landscape is required: portrait shows a full-screen rotate prompt, and controls are released when the device rotates. The circuit is approximately **2.43 km, 30% shorter than v0.2**, with two extended straights and fewer turns on a narrow island causeway. Both exposed edges drop into water and kill the car; scenery islands are separated from the road by water. There is no safe field runoff. Everyone shares a perspective camera behind the surviving pack. It anticipates bends, includes **20 metres ahead of the leader** and **10 metres behind the last car**, and rises gradually from a 26° chase view toward a 70° overhead view as the pack spreads out. The death line enters view when it approaches the last car. Viewport fitting keeps every surviving car and its roof weapon in frame, including during camera turns and local prediction.
 
 | Control | Phone | Keyboard |
 | --- | --- | --- |
-| Accelerate | Hold GAS, lower right | W / Up |
-| Steer | Move left stick sideways | A/D or Left/Right |
-| Reverse | Hold DRIFT/R for at least 0.7 seconds; release to reset | Hold Space, or S / Down |
-| Handbrake / drift | Briefly hold DRIFT/R, above and right of GAS | Briefly hold Space |
-| Use pickup | Item button above and left of the stick | E |
+| Accelerate | Hold GO, lower right | W / Up |
+| Steer | Hold LEFT or RIGHT | A/D or Left/Right |
+| Reverse | Hold DRIFT/R for at least 0.35 seconds; release to reset | Hold Space, or S / Down |
+| Handbrake / drift | Briefly hold DRIFT/R, above and right of GO | Briefly hold Space |
+| Nudge sideways | Top-left / top-right corner | Q / R |
+| Use pickup | WEAPON button above and right of GO | E |
 
-Holding GAS through the countdown continues driving at GO. Start holding it with **1,000 ms remaining, within ±20 ms**, for a 0.8-second launch boost (35% extra acceleration, 10% extra speed ceiling). Hold continuously from **more than 2,000 ms before GO** and the car spins for 1.1 seconds before accelerating. Releasing GAS resets the attempt. Controls carry their original press timestamp in the synchronized server clock; the server bounds timestamp compensation to 250 ms and owns the outcome. Countdown numbers update at animation-frame frequency.
+Holding GO through the countdown continues driving at GO. Start holding it with **1,000 ms remaining, within ±20 ms**, for a 0.8-second launch boost (35% extra acceleration, 10% extra speed ceiling). Hold continuously from **more than 2,000 ms before GO** and the car spins for 1.1 seconds before accelerating. Releasing GO resets the attempt. Controls carry their original press timestamp in the synchronized server clock; the server bounds timestamp compensation to 250 ms and owns the outcome. Countdown numbers update at animation-frame frequency.
 
-Cars reach 36 game metres/second (20% faster than v0.2) at full health. Damage reduces engine acceleration and the speed ceiling linearly: `0.6 + 0.4 × (health − 1) / 99`, giving 100% speed at 100 HP and 60% speed at 1 HP. External crash/weapon impulses can temporarily exceed the engine limit.
+Tap a corner nudge to shift one car width sideways over 0.2 seconds, with a 0.8-second cooldown. Contact deals 8 damage once per target, pushes the other car about 1.75 widths and turns it away. Barriers and shields still apply.
+
+Cars reach 36 game metres/second (20% faster than v0.2) at full health. Damage reduces engine acceleration and the speed ceiling linearly: `0.8 + 0.2 × (health − 1) / 99`, giving 100% speed at 100 HP and 80% speed at 1 HP. Damage also reduces lateral grip and steering response, making battered cars drift more. External crash/weapon impulses can temporarily exceed the engine limit.
 
 The long, low chassis is fitted directly to the shared **4.9 × 2.1m** oriented collision box, including bumpers and wheels. Contacts use the overlap of bumper/door faces, friction, and six solver passes with road constraints. Impulses transfer momentum and rotation, so contact can push cars into barriers or off unprotected outer edges. Cars have 100 HP, five damage states, increasing smoke and fire, and an eight-second shield. Hard barrier impacts and car crashes also cause damage. Zero HP creates an airborne, tumbling wreck that remains a physical obstacle until the round ends.
 
@@ -49,16 +52,16 @@ The long, low chassis is fitted directly to the shared **4.9 × 2.1m** oriented 
 | Homing rocket | Targets the next car ahead in race order; can be intercepted | 42 |
 | Machine gun | Hold to fire 30 fast, swept-hit rounds | 2 per round |
 | Shield | Bubble blocks damage and weapon knockback for 8 seconds | — |
-| Railgun | One instant 150m piercing shot with a lingering trail | 75 per target |
-| Mines | Three taps; arm after 0.65s; launch and tumble cars | 28 |
+| Railgun | One instant 150m piercing shot with a lingering trail and a small airborne launch | 75 per target |
+| Mines | Three taps; arm after 0.1s; launch and tumble cars | 28 |
 | Ball & chain | Momentum-driven tether about two car lengths behind; detonates on contact | 45 |
-| Flamethrower | Hold for up to 5 seconds of fuel; forward cone about two car lengths | 12/second |
+| Flamethrower | Hold for up to 3 seconds of fuel; forward cone about two car lengths | 12/second |
 | Plasma cannon | 12 straight shots at 54m/s; hold to continue | 8 per shot |
-| Side shotgun | Four shells; five pellets out each side with outward knockback | Up to 35 per side |
+| Shotgun | Four shells with a 0.3s cooldown; five pellets out each side with outward knockback | Up to 35 per side |
 
-These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its six-second respawn. Sound is opt-in. The physics is a lightweight arcade simulation: planar rigid-body impulses, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or is stranded on its roof until the elimination line catches it; it is not a full suspension or general-purpose 3D rigid-body engine.
+Weapon pickups form rows of three or four across the road, spaced about ten seconds apart at full speed. These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its six-second respawn. Sound is opt-in. The physics is a lightweight arcade simulation: planar rigid-body impulses, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or is stranded on its roof until the elimination line catches it; it is not a full suspension or general-purpose 3D rigid-body engine.
 
-The race uses the full screen, with a floating Settings button and a compact HUD. Rendering uses worn asphalt and concrete, rounded chassis, softer billboard smoke, muted coastal colours, water highlights, and a light vignette. All textures and models are generated locally; no remote art assets or image processing passes are required.
+The race uses the full screen, with Settings, round count and segmented score thermometers centred at the top. Score segments glow more as players approach the winning total. Rendering uses worn asphalt and concrete, rounded chassis, softer billboard smoke, muted coastal colours, water highlights, and a light vignette. All textures and models are generated locally; no remote art assets or image processing passes are required.
 
 ## Multiplayer design
 
@@ -114,7 +117,7 @@ Rooms live in process memory. This first version is **not highly available**: a 
 npm test
 ```
 
-The tests start a separate server on localhost:33211 and use six real WebSocket connections to verify unique colours, capacity rejection, host-only start, authoritative positions, countdown, token reconnection, pickups, elimination, a last-survivor finish, shared camera bounds, tournament readiness, score retention, advancing start grids, and host handover. Physics and combat tests cover road clearance, full-course navigation, steering validation, reverse, drift, solid collisions, wall damage, persistent wrecks, upside-down landings, and the damage, ammo, timing and targeting rules of all ten weapons. Network tests also reject client-supplied health and weapons. Launch tests cover the exact ±20ms boundaries, release/reset, held GAS across GO, and all three start outcomes using live sockets. Regression checks cover health-speed endpoints, both fatal road edges, camera lookahead, bumper/door impulses, and peer collision prediction.
+The tests start a separate server on localhost:33211 and use six real WebSocket connections to verify unique colours, capacity rejection, host-only start, authoritative positions, countdown, token reconnection, pickups, elimination, a last-survivor finish, shared camera bounds, tournament readiness, score retention, advancing start grids, and host handover. Physics and combat tests cover road clearance, full-course navigation, steering validation, reverse, drift, solid collisions, wall damage, persistent wrecks, upside-down landings, and the damage, ammo, timing and targeting rules of all ten weapons. Network tests also reject client-supplied health and weapons. Launch tests cover the exact ±20ms boundaries, release/reset, held GO across GO, and all three start outcomes using live sockets. Regression checks cover health-speed endpoints, both fatal road edges, camera lookahead, bumper/door impulses, and peer collision prediction.
 
 Browser QA uses landscape phone emulation in Chrome: multi-touch, long holds, double taps, release/reset, reverse timing, and rotation to portrait. CSS touch-action, user-select and -webkit-touch-callout plus non-passive game-surface touch handlers suppress browser gestures while keeping lobby inputs editable. Input text is at least 16px to avoid iPhone focus zoom. Actual iPhone Safari verification is still needed: emulation cannot reproduce every iOS callout or OS edge gesture. Add to Home Screen can reduce browser chrome; it does not remove system gestures. A native wrapper is a possible later option, not required for these normal touch controls.
 

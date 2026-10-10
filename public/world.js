@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {syncCarWeapon} from './car-weapons.js';
 import {buildLandmarks,animateLandmarks,LANDMARKS} from './landmarks.js';
 import { createPickupModel, PICKUP_COLORS } from './pickups.js';
 import { WEAPON_IDS } from '/shared/combat.js';
@@ -6,6 +7,7 @@ import { RoundedBoxGeometry } from '/vendor/RoundedBoxGeometry.js';
 import { mergeGeometries } from '/vendor/BufferGeometryUtils.js';
 import { TRACK, SEGMENTS, ROAD_WIDTH, trackAt, angleDelta, COLORS, TRACK_LENGTH, START_FRACTION, PICKUP_LOCATIONS, spawnCar, hasBarrier, damageLevel, CAR_LENGTH, CAR_WIDTH, SURFACE_HALF_WIDTH, nearestTrack, collideCars, OBSTACLES } from '/shared/game.js';
 import { cameraFrame, createChase } from '/shared/chase.js';
+import { CAMERA_FOV, stepCamera, cameraPose } from '/shared/camera.js';
 const C={asphalt:0x394951,sand:0x938d7c,cliff:0x777568,cream:0xc8c6b7,coral:0xae6654,navy:0x263941,teal:0x497475,lime:0xd4f65e};
 export class World{
   constructor(container){
@@ -15,7 +17,7 @@ export class World{
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.12;this.renderer.outputColorSpace=THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
-    this.camera=new THREE.OrthographicCamera(-60,60,40,-40,.1,300);this.camera.position.set(0,90,64);this.camera.lookAt(0,0,0);
+    this.camera=new THREE.PerspectiveCamera(CAMERA_FOV,1,.2,240);this.camera.position.set(0,90,64);this.camera.lookAt(0,0,0);
     this.scene.add(new THREE.HemisphereLight(0xc4d6e5,0x555344,1.55));
     const sun=new THREE.DirectionalLight(0xffe6c8,3.1);sun.position.set(-45,75,-38);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-68,right:68,top:58,bottom:-58,near:1,far:180});sun.shadow.radius=3;sun.shadow.normalBias=.07;sun.shadow.bias=-.0004;this.scene.add(sun);this.sun=sun;this.scene.add(sun.target);
     this.materials=new Map();this.textures=new Map();this.static=new THREE.Group();this.scene.add(this.static);this.cars=new Map();this.boxes=[];this.rockets=new Map();this.effects=new Map();this.trails=[];this.frame=0;this.mines=new Map();this.chains=new Map();this.seenEffects=new Set();this.particles=[];this.particleClock=0;
@@ -31,10 +33,11 @@ export class World{
     if(kind==='glow'){
       const grad=ctx.createRadialGradient(256,256,0,256,256,256);grad.addColorStop(0,'#ffffff');grad.addColorStop(.25,'#ffffffaa');grad.addColorStop(.6,'#ffffff35');grad.addColorStop(1,'#ffffff00');ctx.fillStyle=grad;ctx.fillRect(0,0,512,512);
     }else{
-      ctx.fillStyle=kind==='asphalt'?'#737a7f':'#c5c2b8';ctx.fillRect(0,0,512,512);
+      ctx.fillStyle=kind==='sand'?'#c6a66f':kind==='asphalt'?'#737a7f':'#c5c2b8';ctx.fillRect(0,0,512,512);
       for(let i=0;i<50;i++){const x=random()*512,y=random()*512,r=15+random()*110,grad=ctx.createRadialGradient(x,y,0,x,y,r);grad.addColorStop(0,i%2?'#10191d23':'#eff5f012');grad.addColorStop(1,'#00000000');ctx.fillStyle=grad;ctx.fillRect(x-r,y-r,r*2,r*2);}
       for(let i=0;i<26000;i++){ctx.fillStyle=i%2?'#eef0e51a':'#10192329';const size=1+random()*2;ctx.fillRect(random()*512,random()*512,size,size);}
-      for(let i=0;i<(kind==='asphalt'?10:24);i++){let x=random()*512,y=random()*512;ctx.beginPath();ctx.moveTo(x,y);for(let j=0;j<5;j++){x+=(random()-.4)*15;y+=random()*18;ctx.lineTo(x,y);}ctx.lineWidth=kind==='asphalt'?.8:1.2;ctx.strokeStyle='#18212430';ctx.stroke();}
+      for(let i=0;i<(kind==='sand'?0:kind==='asphalt'?10:24);i++){let x=random()*512,y=random()*512;ctx.beginPath();ctx.moveTo(x,y);for(let j=0;j<5;j++){x+=(random()-.4)*15;y+=random()*18;ctx.lineTo(x,y);}ctx.lineWidth=kind==='asphalt'?.8:1.2;ctx.strokeStyle='#18212430';ctx.stroke();}
+      if(kind==='sand'){for(let i=0;i<1800;i++){const x=random()*512,y=random()*512;ctx.fillStyle=i%2?'#6f543a55':'#ffe2a666';ctx.beginPath();ctx.ellipse(x,y,1+random()*2,.5+random(),random()*Math.PI,0,Math.PI*2);ctx.fill();}}
       if(kind==='asphalt'){ctx.strokeStyle='#10191d10';ctx.lineWidth=5;for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(random()*512,0);ctx.bezierCurveTo(random()*512,150,random()*512,350,random()*512,512);ctx.stroke();}}
     }
     const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;if(kind!=='glow')texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=4;this.textures.set(kind,texture);return texture;
@@ -47,7 +50,8 @@ export class World{
     const vertices=[],uv=[];
     for(let i=0;i<TRACK.length;i++){
       if(skip&&Math.floor(i/skip)%2)continue;
-      if(protectedOnly&&!hasBarrier(SEGMENTS[i].start/TRACK_LENGTH))continue;
+      if(protectedOnly===true&&!hasBarrier(SEGMENTS[i].start/TRACK_LENGTH))continue;
+      if(protectedOnly==='exposed'&&hasBarrier(SEGMENTS[i].start/TRACK_LENGTH))continue;
       const a=SEGMENTS[i],b=SEGMENTS[(i+1)%TRACK.length];
       const ao=typeof offset==='function'?offset(a):offset,bo=typeof offset==='function'?offset(b):offset,aw=typeof width==='function'?width(a):width,bw=typeof width==='function'?width(b):width;
       const p=[[a.x+a.nx*(ao-aw/2),y,a.z+a.nz*(ao-aw/2)],[a.x+a.nx*(ao+aw/2),y,a.z+a.nz*(ao+aw/2)],[b.x+b.nx*(bo-bw/2),y,b.z+b.nz*(bo-bw/2)],[b.x+b.nx*(bo+bw/2),y,b.z+b.nz*(bo+bw/2)]];
@@ -65,10 +69,11 @@ export class World{
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geo.computeVertexNormals();const mat=this.mat(C.cliff);mat.side=THREE.DoubleSide;this.mesh(geo,mat);
     }
     this.ribbon(0,p=>p.halfWidth*2+.8,-.05,0x797d6c);
-    this.ribbon(0,p=>p.halfWidth*2,.01,new THREE.MeshStandardMaterial({map:this.texture('asphalt'),color:0x939fa5,roughness:.72,metalness:.06,side:THREE.DoubleSide}));
+    this.ribbon(0,p=>p.halfWidth*2,.01,new THREE.MeshStandardMaterial({map:this.texture('asphalt'),color:0x939fa5,roughness:.72,metalness:.06,side:THREE.DoubleSide}),0,true);
+    this.ribbon(0,p=>(p.halfWidth+.6)*2,.01,new THREE.MeshStandardMaterial({map:this.texture('sand'),color:0xe6c38a,roughness:1,side:THREE.DoubleSide}),0,'exposed');
     for(const side of [-1,1]){
-      // Exposed edges have flat yellow paint; only protected edges have raised walls.
-      this.ribbon(p=>side*(p.halfWidth-.18),.28,.045,0xffce32);
+      // Unprotected sections are bare sand; paint and curbs belong to guarded asphalt.
+      this.ribbon(p=>side*(p.halfWidth-.18),.28,.045,0xffce32,0,true);
       this.ribbon(p=>side*(p.halfWidth+.16),.55,.06,C.cream,0,true);
       this.ribbon(p=>side*(p.halfWidth+.16),.55,.065,C.coral,3,true);
       for(let i=0;i<TRACK.length;i+=2){
@@ -91,7 +96,7 @@ export class World{
       for(const offset of [-.6,.6]){const stripe=this.box(o.x+Math.cos(trackAt(o.fraction).angle)*offset,1.51,o.z+Math.sin(trackAt(o.fraction).angle)*offset,.35,.025,2.25,0x18252d);stripe.rotation.y=-trackAt(o.fraction).angle;}
       this.cylinder(o.x,1.68,o.z,.13,.13,.48,0xf18e23,8);
     }
-    this.ribbon(0,.12,.06,0xb6b89d,5);
+    this.ribbon(0,.12,.06,0xb6b89d,5,true);
     const start=trackAt(START_FRACTION);
     const line=new THREE.Group();line.position.set(start.x,.075,start.z);line.rotation.y=-start.angle;this.static.add(line);
     for(let r=0;r<2;r++)for(let c=0;c<12;c++)this.box((r-.5)*.7,0,(c-5.5)*.9,.7,.02,.9,(r+c)%2?0xf4efd4:0x1c2d34,line);
@@ -187,18 +192,14 @@ export class World{
     for(const side of [-1,1])this.cylinder(0,2,side*(ROAD_WIDTH/2+1),.15,.15,4,0xff514f,6,this.deadline);
     this.scene.add(this.deadline);this.deadline.visible=false;
   }
-  followFrame(frame,dt){
-    if(!this.follow)this.follow={...frame};
-    const t=1-Math.exp(-dt*12),f=this.follow;
-    f.x+=(frame.x-f.x)*t;f.z+=(frame.z-f.z)*t;f.angle+=angleDelta(frame.angle,f.angle)*t;
-    // Grow immediately to keep both ends in frame; ease inward when the route bends.
-    f.halfWidth=Math.max(frame.halfWidth,f.halfWidth+(frame.halfWidth-f.halfWidth)*t);
-    f.halfHeight=Math.max(frame.halfHeight,f.halfHeight+(frame.halfHeight-f.halfHeight)*t);
+  followFrame(frame,dt,cars){
     const aspect=this.container.clientWidth/Math.max(1,this.container.clientHeight);
-    const halfW=Math.max(f.halfWidth,f.halfHeight*aspect),halfH=halfW/aspect;
-    this.camera.left=-halfW;this.camera.right=halfW;this.camera.top=halfH;this.camera.bottom=-halfH;this.camera.updateProjectionMatrix();
-    const nx=-Math.sin(f.angle),nz=Math.cos(f.angle);
-    this.camera.position.set(f.x+nx*60,90,f.z+nz*60);this.camera.lookAt(f.x,0,f.z);
+    const f=this.follow=stepCamera(this.follow,frame,cars,aspect,dt),pose=cameraPose(f);
+    // The former 1,400m far plane drew much of the circuit from this low angle.
+    // Retain the pack and upcoming bends, extending range when the pack spreads.
+    const far=f.far;
+    if(this.camera.aspect!==aspect||this.camera.far!==far){this.camera.aspect=aspect;this.camera.far=far;this.camera.updateProjectionMatrix();}
+    this.camera.position.set(pose.x,pose.y,pose.z);this.camera.lookAt(pose.targetX,pose.targetY,pose.targetZ);this.camera.updateMatrixWorld();
     this.sun.position.set(f.x-45,75,f.z-38);this.sun.target.position.set(f.x,0,f.z);this.sun.target.updateMatrixWorld();
   }
   createCar(color){
@@ -240,7 +241,7 @@ export class World{
     const sync=(map,list,create,move)=>{const ids=new Set();for(const item of list){ids.add(item.id);let g=map.get(item.id);if(!g){g=create(item);map.set(item.id,g);this.scene.add(g);}move(g,item);}for(const[id,g]of map)if(!ids.has(id)){this.scene.remove(g);g.traverse(o=>{if(o.isMesh){o.geometry.dispose();if(o.userData.ownedMaterial)o.material.dispose();}});map.delete(id);}};
     sync(this.rockets,state?.projectiles||[],r=>{const g=new THREE.Group();const mesh=new THREE.Mesh(r.kind==='plasma'?new THREE.IcosahedronGeometry(.65,1):new THREE.ConeGeometry(r.kind==='rocket'?.32:.08,r.kind==='rocket'?1.8:1.5,7),new THREE.MeshBasicMaterial({color:r.kind==='plasma'?0x7feaff:0xffc257}));mesh.rotation.z=-Math.PI/2;mesh.userData.ownedMaterial=true;g.add(mesh);return g;},(g,r)=>{g.position.set(r.x,r.y||.7,r.z);g.rotation.y=-r.angle;if(r.kind==='rocket'&&this.emitParticles)this.particle(r.x,.8,r.z,'smoke');});
     sync(this.mines,state?.mines||[],()=>{const g=new THREE.Group();this.cylinder(0,.2,0,.7,.9,.35,0x243541,10,g);this.mesh(new THREE.SphereGeometry(.22,6,4),new THREE.MeshBasicMaterial({color:0xff5446}),0,.5,0,g).userData.ownedMaterial=true;return g;},(g,m)=>{g.position.set(m.x,0,m.z);g.children[1].visible=Math.sin(now*.012)>-.2;});
-    sync(this.chains,state?.chains||[],()=>{const g=new THREE.Group();const ball=this.mesh(new THREE.IcosahedronGeometry(.95,1),0x4b5258,0,0,0,g);for(let i=0;i<8;i++)this.mesh(new THREE.TorusGeometry(.22,.07,4,6),0xa4a9ad,0,0,0,g);return g;},(g,b)=>{g.children[0].position.set(b.x,.75,b.z);g.children[0].rotation.z=now*.002;for(let i=1;i<9;i++){const t=i/9;g.children[i].position.set(b.x+((b.anchorX??b.x)-b.x)*t,.4,b.z+((b.anchorZ??b.z)-b.z)*t);g.children[i].rotation.set(i%2*Math.PI/2,-Math.atan2((b.anchorZ??b.z)-b.z,(b.anchorX??b.x)-b.x),0);}});
+    sync(this.chains,state?.chains||[],()=>{const g=new THREE.Group();const ball=this.mesh(new THREE.IcosahedronGeometry(.95,1),0x4b5258,0,0,0,g);for(let i=0;i<8;i++)this.mesh(new THREE.TorusGeometry(.22,.07,4,6),0xa4a9ad,0,0,0,g);return g;},(g,b)=>{const smooth=1-Math.exp(-dt*20);g.userData.x=(g.userData.x??b.x)+(b.x-(g.userData.x??b.x))*smooth;g.userData.z=(g.userData.z??b.z)+(b.z-(g.userData.z??b.z))*smooth;const x=g.userData.x,z=g.userData.z,owner=this.cars.get(b.owner),angle=owner?-owner.rotation.y:0,ax=owner?owner.position.x-Math.cos(angle)*CAR_LENGTH/2:b.anchorX??x,az=owner?owner.position.z-Math.sin(angle)*CAR_LENGTH/2:b.anchorZ??z;g.children[0].position.set(x,.75,z);g.children[0].rotation.z=now*.002;for(let i=1;i<9;i++){const t=i/9;g.children[i].position.set(x+(ax-x)*t,.4,z+(az-z)*t);g.children[i].rotation.set(i%2*Math.PI/2,-Math.atan2(az-z,ax-x),0);}});
     for(const e of state?.effects||[])if(!this.seenEffects.has(e.id)){
       this.seenEffects.add(e.id);const duration=e.duration||500;let mesh;const beam=e.toX!==undefined;
       if(beam){const length=Math.hypot(e.toX-e.x,e.toZ-e.z);mesh=new THREE.Mesh(new THREE.BoxGeometry(length,e.kind==='rail'?.18:.09,e.kind==='rail'?.4:.12),new THREE.MeshBasicMaterial({color:e.color,transparent:true,opacity:1,depthWrite:false}));mesh.position.set((e.x+e.toX)/2,.85,(e.z+e.toZ)/2);mesh.rotation.y=-Math.atan2(e.toZ-e.z,e.toX-e.x);}
@@ -262,15 +263,16 @@ export class World{
     const previewProgress=START_FRACTION+((now/1000*22)%TRACK_LENGTH)/TRACK_LENGTH;
     const previewChase=createChase([{progress:previewProgress-START_FRACTION}]);
     const mode=state?`${state.code}:${state.round||1}`:'preview';if(this.cameraMode!==mode){this.follow=null;this.cameraMode=mode;this.seenEffects.clear();}
-    this.followFrame(state?.camera||cameraFrame(previewChase),dt);
     this.deadline.visible=!!state&&state.phase!=='lobby';
     if(state?.chase){const d=state.chase;this.deadline.position.set(d.x,0,d.z);this.deadline.rotation.y=-d.angle;this.deadline.scale.z=((d.halfWidth||6)*2+2)/(ROAD_WIDTH+2);}
-    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const p=trackAt(previewProgress-i*5/TRACK_LENGTH);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;}});
+    const previewFleet=[];
+    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const p=trackAt(previewProgress-i*5/TRACK_LENGTH);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;previewFleet.push({...p,y:0,progress:previewProgress-i*5/TRACK_LENGTH-START_FRACTION});}});
     const present=new Set();
     if(state)for(const p of state.players){present.add(p.id);let g=this.cars.get(p.id);if(!g){g=this.createCar(p.color);this.scene.add(g);this.cars.set(p.id,g);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;}
       const car=p.id===localId&&localCar&&!p.wrecked?localCar:p;const a=g.userData.snap?1:1-Math.exp(-dt*18);g.userData.snap=false;
       g.position.x+=(car.x-g.position.x)*a;g.position.z+=(car.z-g.position.z)*a;g.rotation.y+=angleDelta(-car.angle,g.rotation.y)*a;
       g.position.y=(car.y||0)+(1-Math.cos(car.roll||0)*Math.cos(car.pitch||0))*.5;g.rotation.x=car.roll||0;g.rotation.z=car.pitch||0;g.visible=(!p.eliminated||p.wrecked)&&g.position.y>-15;
+      syncCarWeapon(g,p);
       g.userData.flame.visible=p.firing==='flame'&&!p.eliminated;
       g.userData.shield.visible=p.shield>0&&!p.eliminated;g.userData.shield.material.opacity=.16+Math.sin(now*.006)*.04;
       g.userData.paint.color.copy(g.userData.baseColor).multiplyScalar(p.wrecked?.22:1-(100-(p.health??100))*.004);
@@ -279,10 +281,11 @@ export class World{
       }
       if(!p.eliminated&&state.phase==='racing'&&this.frame%4===0&&Math.hypot(car.vx,car.vz)>9){const side=-car.vx*Math.sin(car.angle)+car.vz*Math.cos(car.angle);if(Math.abs(side)>2||car.boost>0)this.addTrail(car,car.boost>0?p.color:0x293c3c);}
     }
-    for(const [id,g]of this.cars)if(!present.has(id)){this.scene.remove(g);g.traverse(o=>{if(o.isMesh)o.geometry.dispose();});this.cars.delete(id);}
+    for(const [id,g]of this.cars)if(!present.has(id)){this.scene.remove(g);if(g.userData.weaponModel)g.remove(g.userData.weaponModel);g.traverse(o=>{if(o.isMesh)o.geometry.dispose();});this.cars.delete(id);}
     // Smoothing must never draw two solid chassis inside one another.
     const visibleCars=[...this.cars].filter(([id,g])=>g.visible).map(([id,g])=>{const p=state?.players.find(p=>p.id===id);return {...p,x:g.position.x,z:g.position.z,angle:-g.rotation.y,y:g.position.y,vx:0,vz:0,yawVelocity:0};});
     collideCars(visibleCars,{damage:false});for(const car of visibleCars){const g=this.cars.get(car.id);g.position.x=car.x;g.position.z=car.z;}
+    this.followFrame(state?.camera||cameraFrame(previewChase,previewFleet),dt,state?visibleCars:previewFleet);
     this.boxes.forEach((g,i)=>{const pickup=state?.pickups[i];g.visible=!state||pickup?.readyAt<=state.time;this.setPickupModel(g,pickup?.item||WEAPON_IDS[i%WEAPON_IDS.length]);g.userData.model.rotation.y=now*.00045+i;g.position.y=1.9+Math.sin(now*.0017+i)*.18;g.userData.halo.position.y=.08-g.position.y;g.userData.ring.position.y=.13-g.position.y;});
     this.combatObjects(state,dt,now);animateLandmarks(this,now);this.updateParticles(dt);
     for(let i=this.trails.length-1;i>=0;i--){const t=this.trails[i];t.life-=dt;t.mesh.material.opacity=Math.min(.3,t.life*.15);if(t.life<=0){this.scene.remove(t.mesh);t.mesh.geometry.dispose();t.mesh.material.dispose();this.trails.splice(i,1);}}

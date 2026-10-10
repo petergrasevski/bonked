@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {WEAPON_IDS} from '../shared/combat.js';
 export const PICKUP_COLORS={pulse:0xc329ff,rocket:0xff1834,machinegun:0xffdb00,shield:0x00cfff,railgun:0x3262ff,mine:0x8aff00,chain:0xfaf4dc,flame:0xff7200,plasma:0x00ed8a,shotgun:0xff36b5};
 const cache=new Map();
@@ -59,5 +60,12 @@ export function createPickupModel(kind){
   const bounds=new THREE.Box3().setFromObject(g),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   for(const child of g.children)child.position.sub(center);
   g.scale.setScalar(3.3/Math.max(size.x,size.y,size.z));g.userData.kind=kind;
-  cache.set(kind,g);return g.clone(true);
+  // Each material is one draw call, rather than one for every barrel, fin and ring.
+  g.updateMatrixWorld(true);const parts=new Map(),batched=new THREE.Group();batched.name=g.name;batched.userData.kind=kind;
+  g.traverse(mesh=>{if(!mesh.isMesh)return;let geometry=mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);if(geometry.index){const flat=geometry.toNonIndexed();geometry.dispose();geometry=flat;}if(!parts.has(mesh.material))parts.set(mesh.material,[]);parts.get(mesh.material).push(geometry);});
+  for(const [material,geometries] of parts){const mesh=new THREE.Mesh(mergeGeometries(geometries),material);mesh.castShadow=!material.transparent;mesh.receiveShadow=true;batched.add(mesh);for(const geometry of geometries)geometry.dispose();}
+  g.traverse(mesh=>{if(mesh.isMesh)mesh.geometry.dispose();});
+  // Baked rotations tighten bounding boxes; keep the canonical pickup size.
+  const mergedSize=new THREE.Box3().setFromObject(batched).getSize(new THREE.Vector3());batched.scale.setScalar(3.3/Math.max(mergedSize.x,mergedSize.y,mergedSize.z));
+  cache.set(kind,batched);return batched.clone(true);
 }

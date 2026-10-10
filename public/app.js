@@ -1,18 +1,19 @@
+import { initDisplayGuide } from './display.js';
 import { engineAudible } from './audio.js';
 import { World } from './world.js';
-import { NEUTRAL, STEP, clamp, angleDelta, brakeMode, REVERSE_HOLD_MS, TRACK_LENGTH, damageLevel } from '/shared/game.js';
+import { NEUTRAL, STEP, clamp, angleDelta, brakeMode, REVERSE_HOLD_MS, damageLevel } from '/shared/game.js';
 import { predictFleet } from '/shared/prediction.js';
 import { WEAPONS } from '/shared/combat.js';
 import { raceOrder } from '/shared/chase.js';
 const $=id=>document.getElementById(id);
-let world;
+let world,displayGuide=null;
 try{world=new World($('scene'));}catch(error){console.error(error);$('dialog').hidden=false;$('dialog-body').innerHTML='<h2>WebGL 2 required.</h2><p>This game needs WebGL 2. Try a recent Safari or Chrome browser with hardware acceleration enabled.</p>';}
 let ws,state=null,myId=null,predicted=null,predictedOthers=[],sequence=0,pending=[],history=[],clockOffset=0,rtt=0,lastState=0,lastFrame=performance.now(),accumulator=0,uiAt=0,retries=0,intent=null,session=null,rosterKey='',phase=null;
 let resuming=false;
 let savedName='';try{savedName=localStorage.getItem('drift-name')||'';session=JSON.parse(sessionStorage.getItem('drift-room')||'null');}catch{}
 $('name').value=savedName;
-const inviteCode=new URLSearchParams(location.search).get('room');if(inviteCode)$('code').value=inviteCode.toUpperCase().slice(0,5);
-const input={...NEUTRAL},keys=new Set();let joyPointer=null,joySteer=0,gasHeld=false,brakeHeld=false,brakeSince=null,fireHeld=false,firePulseUntil=0,accelPressedAt=null;
+const inviteCode=new URLSearchParams(location.search).get('room');if(inviteCode)$('code').value=inviteCode.toUpperCase().slice(0,3);
+const input={...NEUTRAL},keys=new Set();let leftHeld=false,rightHeld=false,gasHeld=false,brakeHeld=false,brakeSince=null,fireHeld=false,firePulseUntil=0,accelPressedAt=null,nudgeDirection=0,nudgeUntil=0;
 const holdResets=[];
 const portrait=matchMedia('(orientation: portrait)');
 let toastTimer;function toast(message){$('toast').textContent=message;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500);}
@@ -43,8 +44,8 @@ function connect(){
 connect();
 setInterval(()=>send({type:'ping',sent:Date.now()}),2000);
 function setBusy(busy){$('create').disabled=busy;$('join').disabled=busy;}
-function enter(type){const name=$('name').value.trim()||'Driver';try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z2-9]{5}$/.test($('code').value.toUpperCase()))return toast('Enter the five-character room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
-$('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z2-9]/g,'');});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
+function enter(type){const name=$('name').value.trim()||'Driver';try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
+$('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
 function clearRoom(){state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 $('leave').onclick=leave;$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('add-bot').onclick=()=>send({type:'bot'});$('remove-bots').onclick=()=>send({type:'remove-bots'});$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
@@ -53,7 +54,6 @@ $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.c
 const itemMeta=WEAPONS;
 function onPhaseChange(previousPhase){
   const playing=state&&state.phase!=='lobby';document.body.classList.toggle('playing',playing);$('race-ui').hidden=!playing;$('entry-panel').hidden=!!state;$('room-panel').hidden=!state;$('results').hidden=state?.phase!=='finished';if(!(previousPhase==='countdown'&&state?.phase==='racing'))releaseControls();pending=[];
-  if(previousPhase==='countdown'&&state?.phase==='racing'){const result=state.players.find(p=>p.id===myId)?.launchResult;if(result==='boost')toast('Launch boost');if(result==='spinout')toast('Early start: spinout');}
   if(state?.phase==='countdown'){history=[];world?.resetRound();$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
   if(state?.phase==='finished')renderResults();
 }
@@ -71,10 +71,14 @@ function renderResults(){
   $('next-round').textContent=complete?`First to ${state.targetScore}`:`${humans.filter(p=>p.ready).length}/${humans.length} ready · Next round in ${seconds}s`;
 }
 let scoreKey='';
-function renderScores(){const key=JSON.stringify([state.round,state.players.map(p=>[p.id,p.score,p.eliminated])]);if(key===scoreKey)return;scoreKey=key;
+function renderScores(){const key=JSON.stringify([state.round,state.targetScore,state.players.map(p=>[p.id,p.score,p.eliminated])]);if(key===scoreKey)return;scoreKey=key;
+  $('hud-round').textContent='ROUND '+state.round;$('hud-target').textContent=state.targetScore+' TO WIN';
   const board=$('tournament-scores');board.replaceChildren();
-  const label=node('div','score-goal');label.append(node('small','','ROUND '+state.round),node('strong','',`${state.targetScore} TO WIN`));board.append(label);
-  for(const p of state.players){const cell=node('div','score-player');cell.classList.toggle('me',p.id===myId);cell.classList.toggle('out',p.eliminated);cell.style.setProperty('--car',p.color);cell.append(chip(p.color),node('span','score-name',p.name),node('strong','score-total',String(p.score||0)));board.append(cell);}
+  for(const p of state.players){const score=p.score||0,heat=clamp(score/state.targetScore,0,1),cell=node('div','score-player');cell.classList.toggle('me',p.id===myId);cell.classList.toggle('out',p.eliminated);cell.style.setProperty('--car',p.color);cell.style.setProperty('--glow',(2+heat*8)+'px');cell.title=p.name+': '+score+' / '+state.targetScore;
+    const meter=node('div','score-meter');meter.setAttribute('role','meter');meter.setAttribute('aria-label',p.name+' score');meter.setAttribute('aria-valuemin',Math.min(0,score));meter.setAttribute('aria-valuemax',state.targetScore);meter.setAttribute('aria-valuenow',score);
+    for(let i=0;i<state.targetScore;i++)meter.append(node('i',i<score?'lit':''));
+    cell.append(meter,node('strong','score-total',String(score)),node('span','score-name',p.name));board.append(cell);
+  }
 }
 function updateUI(now){
   if(!state)return;
@@ -85,9 +89,8 @@ function updateUI(now){
   if(state.phase==='lobby')return;
   renderScores();const serverNow=Date.now()+clockOffset;
   $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);
-  const remainingDistance=state.chase?Math.max(0,(me.progress-state.chase.progress)*TRACK_LENGTH):90;
-  $('gap').textContent=me.eliminated?'OUT':`${Math.round(remainingDistance)} m`; $('chase-warning').classList.toggle('danger',!me.eliminated&&remainingDistance<25);
-  const item=itemMeta[me.item];$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SIDE SHOT',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[me.item]||'—';$('item-count').textContent=item?(me.item==='flame'?me.ammo.toFixed(1)+'s':me.ammo>1?'×'+me.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
+  const item=itemMeta[me.item];$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[me.item]||'—';$('item-count').textContent=item?(me.item==='flame'?me.ammo.toFixed(1)+'s':me.ammo>1?'×'+me.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
+  for(const id of ['nudge-left','nudge-right']){$(id).classList.toggle('cooling',(me.nudgeCooldown||0)>0);$(id).setAttribute('aria-disabled',String(me.eliminated||(me.nudgeCooldown||0)>0));}
   const damage=damageLevel(me.health);$('health-number').textContent=Math.ceil(me.health);$('health-status').textContent=me.overturned&&!me.wrecked?'FLIPPED':'';$('health-ui').dataset.level=String(damage);[...$('health-bars').children].forEach((bar,i)=>bar.classList.toggle('lit',i<Math.ceil(me.health/20)));$('shield-time').textContent=me.shield>0?'SHIELD '+me.shield.toFixed(1)+'s':'';
   const remaining=(state.startAt-serverNow)/1000;$('countdown').textContent=state.phase==='countdown'?String(Math.max(1,Math.ceil(remaining))):state.phase==='racing'&&remaining>-.8?'GO!':'';
   if(state.phase==='countdown'&&$('countdown').dataset.value!==$('countdown').textContent){$('countdown').dataset.value=$('countdown').textContent;beep(480,.08,.04);}
@@ -96,22 +99,22 @@ function updateUI(now){
 }
 function controls(){
   if(portrait.matches){Object.assign(input,NEUTRAL);return;}
-  input.steer=clamp(joySteer+(keys.has('ArrowRight')||keys.has('KeyD')?1:0)-(keys.has('ArrowLeft')||keys.has('KeyA')?1:0),-1,1);
+  input.steer=clamp((rightHeld||keys.has('ArrowRight')||keys.has('KeyD')?1:0)-(leftHeld||keys.has('ArrowLeft')||keys.has('KeyA')?1:0),-1,1);
+  $('steer-left').classList.toggle('held',leftHeld||keys.has('ArrowLeft')||keys.has('KeyA'));$('steer-right').classList.toggle('held',rightHeld||keys.has('ArrowRight')||keys.has('KeyD'));
   const held=brakeHeld||keys.has('Space');
   if(held&&brakeSince===null)brakeSince=performance.now();if(!held)brakeSince=null;
   const heldMs=brakeSince===null?-1:performance.now()-brakeSince,mode=brakeMode(heldMs);
   input.reverse=mode.reverse||keys.has('KeyS')||keys.has('ArrowDown');input.brake=mode.brake&&!input.reverse;
-  input.fire=fireHeld||keys.has('KeyE')||performance.now()<firePulseUntil;
+  input.fire=fireHeld||keys.has('KeyE')||performance.now()<firePulseUntil;input.nudge=performance.now()<nudgeUntil?nudgeDirection:0;
   const wasAccelerating=input.throttle>.1;input.throttle=input.reverse?0:gasHeld||keys.has('KeyW')||keys.has('ArrowUp')?1:0;
   if(input.throttle>.1&&!wasAccelerating)accelPressedAt=Date.now()+clockOffset;if(input.throttle<=.1)accelPressedAt=null;
   $('brake').style.setProperty('--hold',`${clamp(heldMs/REVERSE_HOLD_MS,0,1)*360}deg`);
-  $('brake').classList.toggle('reversing',mode.reverse);$('brake-label').textContent=mode.reverse?'REVERSE':held?'DRIFT':'DRIFT/R';
+  $('brake').classList.toggle('held',held);$('brake').classList.toggle('reversing',mode.reverse);$('brake-label').textContent=mode.reverse?'REVERSE':held?'DRIFT':'DRIFT/R';
 }
 function releaseControls(){
-  keys.clear();gasHeld=false;brakeHeld=false;brakeSince=null;fireHeld=false;firePulseUntil=0;accelPressedAt=null;
+  keys.clear();nudgeUntil=0;nudgeDirection=0;leftHeld=false;rightHeld=false;gasHeld=false;brakeHeld=false;brakeSince=null;fireHeld=false;firePulseUntil=0;accelPressedAt=null;
   for(const reset of holdResets)reset();
-  if(joyPointer!==null&&$('joystick').hasPointerCapture(joyPointer))$('joystick').releasePointerCapture(joyPointer);
-  joyPointer=null;joySteer=0;Object.assign(input,NEUTRAL);$('stick').style.transform='';$('joystick').setAttribute('aria-valuenow','0');$('gas').classList.remove('held');$('brake').classList.remove('held','reversing');$('brake').style.setProperty('--hold','0deg');$('brake-label').textContent='DRIFT/R';if(state)send({type:'input',seq:++sequence,...NEUTRAL});
+  Object.assign(input,NEUTRAL);$('steer-left').classList.remove('held');$('steer-right').classList.remove('held');$('gas').classList.remove('held');$('brake').classList.remove('held','reversing');$('brake').style.setProperty('--hold','0deg');$('brake-label').textContent='DRIFT/R';if(state)send({type:'input',seq:++sequence,...NEUTRAL});
 }
 function holdButton(id,set){
   const el=$(id);let pointer=null;
@@ -121,13 +124,12 @@ function holdButton(id,set){
 }
 function flushControls(){controls();if(state?.phase==='countdown'||state?.phase==='racing')send({type:'input',seq:++sequence,...input,accelPressedAt});}
 holdButton('gas',v=>{gasHeld=v;flushControls();});holdButton('brake',v=>{brakeHeld=v;brakeSince=v?performance.now():null;});
-const joystick=$('joystick');
-function moveJoy(e){if(e.pointerId!==joyPointer)return;const rect=joystick.getBoundingClientRect(),dx=(e.clientX-rect.left-rect.width/2)/(rect.width*.42);joySteer=clamp(dx,-1,1);if(Math.abs(joySteer)<.13)joySteer=0;$('stick').style.transform=`translateX(${joySteer*rect.width*.28}px)`;joystick.setAttribute('aria-valuenow',String(joySteer.toFixed(2)));}
-joystick.addEventListener('pointerdown',e=>{e.preventDefault();if(joyPointer!==null||portrait.matches)return;joyPointer=e.pointerId;joystick.setPointerCapture(e.pointerId);moveJoy(e);unlockAudio();});joystick.addEventListener('pointermove',moveJoy);
-function releaseJoy(e){if(e.pointerId!==joyPointer)return;joyPointer=null;joySteer=0;$('stick').style.transform='';joystick.setAttribute('aria-valuenow','0');}for(const event of ['pointerup','pointercancel','lostpointercapture'])joystick.addEventListener(event,releaseJoy);
+holdButton('steer-left',v=>{leftHeld=v;flushControls();});holdButton('steer-right',v=>{rightHeld=v;flushControls();});
 function fire(){if(state?.phase==='racing'&&!portrait.matches&&!state.players.find(p=>p.id===myId)?.eliminated){firePulseUntil=performance.now()+70;send({type:'input',seq:++sequence,...input,fire:true});beep(200,.03,.012);}}
 holdButton('item',held=>{fireHeld=held;if(held)fire();});
-window.addEventListener('keydown',e=>{if(e.target instanceof HTMLInputElement||!state||state.phase==='lobby'||portrait.matches||!$('settings').hidden||!$('dialog').hidden)return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyS','KeyA','KeyD','KeyE'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if(e.code==='KeyE'&&!e.repeat)fire();unlockAudio();}});
+function nudge(direction){if(state?.phase!=='racing'||portrait.matches||predicted?.eliminated||predicted?.nudgeCooldown>0)return;nudgeDirection=direction;nudgeUntil=performance.now()+120;flushControls();}
+holdButton('nudge-left',held=>{if(held)nudge(-1);});holdButton('nudge-right',held=>{if(held)nudge(1);});
+window.addEventListener('keydown',e=>{if(e.target instanceof HTMLInputElement||!state||state.phase==='lobby'||portrait.matches||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen())return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyS','KeyA','KeyD','KeyE','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if(e.code==='KeyE'&&!e.repeat)fire();if(e.code==='KeyQ'&&!e.repeat)nudge(-1);if(e.code==='KeyR'&&!e.repeat)nudge(1);unlockAudio();}});
 window.addEventListener('keyup',e=>{keys.delete(e.code);flushControls();});window.addEventListener('blur',releaseControls);
 document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){accumulator=0;if(gain&&audio){gain.gain.cancelScheduledValues(audio.currentTime);gain.gain.setValueAtTime(0,audio.currentTime);}}});
 portrait.addEventListener('change',()=>{releaseControls();world?.resize();});
@@ -137,12 +139,13 @@ const editable=target=>target instanceof Element&&!!target.closest('input,textar
 for(const event of ['contextmenu','selectstart','dragstart'])document.addEventListener(event,e=>{if(!editable(e.target))e.preventDefault();});
 for(const event of ['touchstart','touchmove','touchend'])document.addEventListener(event,e=>{if(e.target instanceof Element&&e.target.closest('.controls,#scene')&&e.cancelable)e.preventDefault();},{passive:false});
 for(const event of ['gesturestart','gesturechange','gestureend','dblclick'])document.addEventListener(event,e=>{if(document.body.classList.contains('playing')&&!editable(e.target)&&e.cancelable)e.preventDefault();},{passive:false});
-$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{toast('Use your browser’s full-screen or Add to Home Screen option.');}};
-$('howto').onclick=()=>{$('settings').hidden=true;releaseControls();$('dialog-body').innerHTML='<h2>Controls</h2><p>Hold GAS to accelerate. Move the left stick sideways to steer.</p><p>Hold DRIFT/R briefly to slide, or for 0.7 seconds to reverse.</p><p>Drive through a floating weapon to collect it. Tap the item button to use it. Hold for machine gun, plasma or flamethrower.</p><p>Start holding GAS at 1 second remaining (±20 ms) for a boost. Holding from more than 2 seconds early causes a spinout.</p><p>Stay ahead of the red cutoff line. Last car standing wins the round; otherwise finish three laps. Earn 3 points for first, 2 for second, and −2 for last. First to 15 wins with up to four cars; first to 10 with five or six. Tap Ready between rounds, or wait five seconds. The next grid starts where the winner finished. Water is fatal.</p><p>Keyboard: W/↑ gas · A/D or ←/→ steer · S/↓ reverse · Space drift · E item.</p>';$('dialog').hidden=false;};
+$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{displayGuide.show();}};
+$('howto').onclick=()=>{$('settings').hidden=true;releaseControls();$('dialog-body').innerHTML='<h2>Controls</h2><p>Hold GO to accelerate. Hold LEFT or RIGHT to steer. Holding both keeps the steering centred.</p><p>Hold DRIFT/R briefly to slide, or for 0.35 seconds to reverse.</p><p>Tap a top corner to NUDGE left or right. Shove nearby cars sideways and deal 8 damage; each nudge has a short cooldown.</p><p>Drive through a floating weapon to collect it. Tap WEAPON to use it. Hold for machine gun, plasma or flamethrower.</p><p>Start holding GO at 1 second remaining (±20 ms) for a boost. Holding from more than 2 seconds early causes a spinout.</p><p>Stay ahead of the red cutoff line. Last car standing wins the round; otherwise finish three laps. Earn 3 points for first, 2 for second, and −2 for last. First to 15 wins with up to four cars; first to 10 with five or six. Tap Ready between rounds, or wait five seconds. The next grid starts where the winner finished. Water is fatal.</p><p>Keyboard: W/↑ go · A/D or ←/→ steer · S/↓ reverse · Space drift · E weapon · Q/R nudge left/right.</p>';$('dialog').hidden=false;};
 $('phone').onclick=async()=>{$('settings').hidden=true;releaseControls();const url=await getShareURL();const isPublic=new URL(url).protocol==='https:';const content=$('dialog-body');content.replaceChildren(node('h2','','Open on your phone'),node('p','',isPublic?'Scan the code on your phone, or share the link with your friends. It works over Wi-Fi or mobile data.':'Connect your phone to the same Wi-Fi as this laptop, then scan the code. Keep the laptop awake and the server running.'));const img=node('img','qr');img.alt='QR code to open the game on your phone';img.src=`/api/qr?url=${encodeURIComponent(url)}`;const link=node('a','phone-link',url);link.href=url;content.append(img,link,node('p','',location.hostname.endsWith('.trycloudflare.com')?'This preview runs on the laptop. Keep it awake.':isPublic?'Share this link to join from another device.':'Keep the laptop awake while playing on this local address.'));$('dialog').hidden=false;};
 $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>{if(e.target===$('dialog'))$('dialog').hidden=true;};
 $('settings-open').onclick=()=>{releaseControls();$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;$('settings-close').focus();};
-function closeSettings(){$('settings').hidden=true;$('settings-open').focus();}
+function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('race-settings'):$('settings-open')).focus();}
+$('race-settings').onclick=$('settings-open').onclick;
 $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target===$('settings'))closeSettings();};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
 let audio=null,osc=null,gain=null,soundEnabled=false;function unlockAudio(){if(!soundEnabled)return;if(!audio){audio=new(window.AudioContext||window.webkitAudioContext)();osc=audio.createOscillator();gain=audio.createGain();osc.type='sawtooth';gain.gain.value=0;const filter=audio.createBiquadFilter();filter.frequency.value=350;osc.connect(filter);filter.connect(gain);gain.connect(audio.destination);osc.start();}if(audio.state==='suspended')audio.resume();}
@@ -154,15 +157,16 @@ function interpolatedState(now){
   const t=clamp((target-a.time)/Math.max(1,b.time-a.time),0,1);
   const ca=a.state.camera,cb=b.state.camera;const da=a.state.chase,db=b.state.chase;
   const mix=(x,y)=>x+(y-x)*t;
-  const camera=ca&&cb?{x:mix(ca.x,cb.x),z:mix(ca.z,cb.z),angle:ca.angle+angleDelta(cb.angle,ca.angle)*t,halfWidth:mix(ca.halfWidth,cb.halfWidth),halfHeight:mix(ca.halfHeight,cb.halfHeight)}:state.camera;
+  const camera=ca&&cb?{x:mix(ca.x,cb.x),z:mix(ca.z,cb.z),angle:ca.angle+angleDelta(cb.angle,ca.angle)*t,pitch:mix(ca.pitch,cb.pitch),spread:mix(ca.spread,cb.spread),from:mix(ca.from,cb.from),to:mix(ca.to,cb.to)}:state.camera;
   const chase=da&&db?{...state.chase,x:mix(da.x,db.x),z:mix(da.z,db.z),angle:da.angle+angleDelta(db.angle,da.angle)*t}:state.chase;
   return {...state,camera,chase,players:state.players.map(p=>{if(p.id===myId)return p;const live=predicted&&!predicted.eliminated&&now-lastState<250?predictedOthers.find(q=>q.id===p.id):null;if(live)return {...p,x:live.x,z:live.z,angle:live.angle,y:live.y,roll:live.roll,pitch:live.pitch,vx:live.vx,vz:live.vz};const p0=a.state.players.find(q=>q.id===p.id),p1=b.state.players.find(q=>q.id===p.id);if(!p0||!p1)return p;return {...p,y:mix(p0.y||0,p1.y||0),roll:mix(p0.roll||0,p1.roll||0),pitch:mix(p0.pitch||0,p1.pitch||0),x:p0.x+(p1.x-p0.x)*t,z:p0.z+(p1.z-p0.z)*t,angle:p0.angle+angleDelta(p1.angle,p0.angle)*t};})};
 }
 function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-lastFrame)/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
-  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<1000&&!portrait.matches&&$('settings').hidden&&$('dialog').hidden&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(active&&state.phase==='racing'&&predicted){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
+  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<1000&&!portrait.matches&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(active&&state.phase==='racing'&&predicted){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
   world?.update(interpolatedState(now),myId,predicted,dt,now);
-  if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.left=`${pos.x}px`;$('you-label').style.top=`${pos.y}px`;}}
+  if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(now-uiAt>100){uiAt=now;updateUI(now);}
   if(audio&&soundEnabled&&gain){const moving=engineAudible(state?.phase,predicted,ws?.readyState===WebSocket.OPEN,!document.hidden,now-lastState<1000);if(moving)gain.gain.setTargetAtTime(.018,audio.currentTime,.1);else{gain.gain.cancelScheduledValues(audio.currentTime);gain.gain.setValueAtTime(0,audio.currentTime);}osc.frequency.setTargetAtTime(45+Math.hypot(predicted?.vx||0,predicted?.vz||0)*5,audio.currentTime,.05);}
 }
+displayGuide=initDisplayGuide({onOpen:()=>{releaseControls();$('settings').hidden=true;},onClose:()=>{accumulator=0;world?.resize();}});
 requestAnimationFrame(frame);

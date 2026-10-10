@@ -1,0 +1,52 @@
+import {START_FRACTION, trackAt, angleDelta, CAR_LENGTH, CAR_WIDTH} from './game.js';
+
+export const CAMERA_FOV = 58;
+const TARGET_HEIGHT = 1.5;
+
+// Solve the perspective frustum directly: no scene raycasts or collision work.
+// Positive along points down the road; positive up points toward the screen top.
+export function cameraDistance(frame,cars,aspect){
+  const c=Math.cos(frame.angle),s=Math.sin(frame.angle),sp=Math.sin(frame.pitch),cp=Math.cos(frame.pitch);
+  const tanY=Math.tan(CAMERA_FOV*Math.PI/360),tanX=tanY*Math.max(.35,aspect);
+  let distance=16;
+  const include=(x,y,z,sideMargin,topMargin,bottomMargin)=>{
+    const dx=x-frame.x,dz=z-frame.z,dy=y-TARGET_HEIGHT;
+    const along=dx*c+dz*s,right=-dx*s+dz*c,up=along*sp+dy*cp,depth=along*cp-dy*sp;
+    distance=Math.max(distance,Math.abs(right)/(tanX*sideMargin)-depth,Math.abs(up)/(tanY*(up>=0?topMargin:bottomMargin))-depth,2-depth);
+  };
+  // The rear strip exposes the death line as it gets close, without following it.
+  for(let i=0;i<=16;i++){
+    const p=trackAt(START_FRACTION+frame.from+(frame.to-frame.from)*i/16);
+    for(const side of [-1,1])include(p.x+p.nx*(p.halfWidth+1)*side,0,p.z+p.nz*(p.halfWidth+1)*side,.92,.86,.86);
+  }
+  for(const car of cars){
+    if(car.eliminated)continue;
+    // A conservative box includes the chassis, airborne cars and roof weapons.
+    const ca=Math.cos(car.angle),sa=Math.sin(car.angle);
+    for(const x of [-CAR_LENGTH/2-.65,CAR_LENGTH/2+.65])for(const z of [-CAR_WIDTH/2-.65,CAR_WIDTH/2+.65])for(const y of [-1,4]){
+      include(car.x+x*ca-z*sa,(car.y||0)+y,car.z+x*sa+z*ca,.84,.76,.6);
+    }
+  }
+  return distance;
+}
+
+export function stepCamera(previous,target,cars,aspect,dt){
+  const frame=previous?{...previous}:{...target};
+  const move=1-Math.exp(-dt*7),turn=1-Math.exp(-dt*2.8),tilt=1-Math.exp(-dt*1.8);
+  frame.x+=(target.x-frame.x)*move;frame.z+=(target.z-frame.z)*move;
+  frame.angle+=angleDelta(target.angle,frame.angle)*turn;frame.pitch+=(target.pitch-frame.pitch)*tilt;
+  frame.from=target.from;frame.to=target.to;frame.spread=target.spread;
+  const required=cameraDistance(frame,cars,aspect);
+  // Ease the normal dolly motion; retain a hard containment floor on rapid impacts.
+  const desired=required*1.02,old=previous?.distance??desired;
+  frame.distance=Math.max(required,old+(desired-old)*(1-Math.exp(-dt*(desired>old?5:1.7))));
+  frame.far=Math.max(240,frame.distance+160);
+  const c=Math.cos(frame.angle),s=Math.sin(frame.angle),cp=Math.cos(frame.pitch),sp=Math.sin(frame.pitch);
+  for(const car of cars)if(!car.eliminated){const depth=frame.distance+((car.x-frame.x)*c+(car.z-frame.z)*s)*cp-((car.y||0)-TARGET_HEIGHT)*sp;frame.far=Math.max(frame.far,depth+12);}
+  return frame;
+}
+
+export function cameraPose(frame){
+  const behind=frame.distance*Math.cos(frame.pitch);
+  return {x:frame.x-Math.cos(frame.angle)*behind,y:TARGET_HEIGHT+frame.distance*Math.sin(frame.pitch),z:frame.z-Math.sin(frame.angle)*behind,targetX:frame.x,targetY:TARGET_HEIGHT,targetZ:frame.z};
+}

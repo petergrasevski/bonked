@@ -6,7 +6,7 @@ export const TOP_SPEED = 36;
 export const SURFACE_HALF_WIDTH = ROAD_WIDTH / 2 + .6;
 export const START_BOOST_SECONDS = .8;
 export const START_SPIN_SECONDS = 1.1;
-export const healthSpeedFactor = health => .6 + .4 * (Math.max(1, Math.min(100, health)) - 1) / 99;
+export const healthSpeedFactor = health => .8 + .2 * (Math.max(1, Math.min(100, health)) - 1) / 99;
 export function launchResult(pressedAt,startAt){
   if(!Number.isFinite(pressedAt))return 'normal';
   const lead=startAt-pressedAt;
@@ -29,14 +29,14 @@ export const CAR_LENGTH = 4.9;
 export const CAR_WIDTH = 2.1;
 export const TARGET_TRACK_LENGTH = 3466.9092022732743 * .7;
 export const START_FRACTION = .012;
-export const REVERSE_HOLD_MS = 700;
+export const REVERSE_HOLD_MS = 350;
 export const brakeMode = heldMs => ({ brake: heldMs >= 0 && heldMs < REVERSE_HOLD_MS, reverse: heldMs >= REVERSE_HOLD_MS });
 export const COLORS = ['#ff514f', '#388bff', '#ffd139', '#44db89', '#b681ff', '#ff893e'];
 export const COLOR_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'];
-export const NEUTRAL = Object.freeze({ steer: 0, throttle: 0, reverse: false, brake: false, fire: false });
+export const NEUTRAL = Object.freeze({ steer: 0, throttle: 0, reverse: false, brake: false, fire: false, nudge: 0 });
 export const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 export function angleDelta(a, b) { return Math.atan2(Math.sin(a - b), Math.cos(a - b)); }
-const anchors = [[-260,150],[-210,150],[-175,115],[-140,160],[-95,165],[-60,110],[-15,115],[25,165],[85,165],[110,120],[70,70],[100,40],[160,50],[200,120],[245,150],[280,105],[270,35],[225,5],[250,-45],[295,-80],[275,-140],[200,-165],[145,-135],[170,-85],[120,-60],[85,-105],[60,-170],[-10,-170],[-45,-115],[-85,-105],[-125,-165],[-200,-155],[-235,-110],[-195,-65],[-225,-25],[-280,-60],[-305,0],[-260,50],[-285,100]];
+const anchors = [[-260,150],[-130,150],[0,150],[85,150],[110,110],[80,65],[110,40],[180,55],[245,150],[280,105],[270,35],[240,-30],[280,-90],[275,-140],[200,-165],[80,-165],[-40,-165],[-160,-165],[-230,-140],[-235,-100],[-195,-65],[-225,-25],[-280,-60],[-305,0],[-260,50],[-285,100]];
 function spline(p0, p1, p2, p3, t) {
   return p1 + .5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
 }
@@ -93,7 +93,7 @@ export function constrainObstacles(car){
   if(car.falling||car.y>1.5)return;
   const c=Math.cos(car.angle),s=Math.sin(car.angle);
   for(const o of OBSTACLES){
-    if(Math.hypot(car.x-o.x,car.z-o.z)>o.radius+CAR_LENGTH)return;
+    if(Math.hypot(car.x-o.x,car.z-o.z)>o.radius+CAR_LENGTH)continue;
     const ox=(o.x-car.x)*c+(o.z-car.z)*s,oz=-(o.x-car.x)*s+(o.z-car.z)*c;
     const qx=clamp(ox,-CAR_LENGTH/2,CAR_LENGTH/2),qz=clamp(oz,-CAR_WIDTH/2,CAR_WIDTH/2);
     let dx=qx-ox,dz=qz-oz,d=Math.hypot(dx,dz),depth=o.radius-d;
@@ -108,12 +108,38 @@ export function constrainObstacles(car){
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
   const p=trackAt(fraction), side=slot%2===0?-2.3:2.3;
-  return { x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,y:0,vy:0,roll:0,pitch:0,rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
+  return { gridSlot:slot,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[],shoveTime:0, x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,y:0,vy:0,roll:0,pitch:0,rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
-  return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true };
+  return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
 }
 export function damageLevel(health){return clamp(Math.floor((100-health)/20),0,4);}
+export const healthHandlingFactor=health=>.4+.6*(clamp(health,1,100)-1)/99;
+export function advanceShoves(car,dt){
+  if(car.eliminated||car.finished||car.overturned||car.falling||car.y>.05){car.nudgeTime=0;car.shoveTime=0;return;}
+  if(car.nudgeTime>0){
+    const step=Math.min(dt,car.nudgeTime),distance=CAR_WIDTH*step/.2;
+    car.x-=Math.sin(car.nudgeAngle)*car.nudgeDirection*distance;car.z+=Math.cos(car.nudgeAngle)*car.nudgeDirection*distance;
+    car.nudgeTime=Math.max(0,car.nudgeTime-step);car.nudgeMoved=true;
+  }
+  if(car.shoveTime>0){
+    const step=Math.min(dt,car.shoveTime),distance=CAR_WIDTH*1.75*step/.2;
+    car.x+=car.shoveNX*distance;car.z+=car.shoveNZ*distance;car.shoveTime=Math.max(0,car.shoveTime-step);
+  }
+}
+// Only active nudges check contacts; each target can be hit once per press.
+export function resolveNudges(cars,{damage=true}={}){
+  for(const a of cars){
+    if(!a.nudgeMoved||a.eliminated||a.y>.05)continue;
+    const nx=-Math.sin(a.nudgeAngle)*a.nudgeDirection,nz=Math.cos(a.nudgeAngle)*a.nudgeDirection;
+    for(const b of cars){
+      if(a===b||b.eliminated||b.finished||b.falling||b.y>.05||b.shield>0||a.nudgeHits.includes(b.gridSlot))continue;
+      if((b.x-a.x)*nx+(b.z-a.z)*nz<=0||!carContact(a,b))continue;
+      a.nudgeHits=[...a.nudgeHits,b.gridSlot];if(damage)damageCar(b,8);
+      if(!b.eliminated){b.shoveTime=.2;b.shoveNX=nx;b.shoveNZ=nz;b.yawVelocity+=Math.sign(angleDelta(Math.atan2(nz,nx),b.angle))*1.1;}
+    }
+  }
+}
 export function damageCar(car,amount){
   if(car.wrecked||car.eliminated||car.finished||car.shield>0)return false;
   car.health=Math.max(0,car.health-Math.max(0,amount));
@@ -165,9 +191,13 @@ export function constrainRoad(car){
 }
 export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
-  for(const key of ['boost','stun','shield','impactTime','wallCooldown','contactCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
+  for(const key of ['boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
   verticalStep(car,dt);
   if(car.falling&&car.y< -20){car.vx=0;car.vz=0;return;}
+  car.nudgeMoved=false;
+  const direction=input.nudge===-1?-1:input.nudge===1?1:0;
+  if(direction&&!car.nudgeHeld&&car.nudgeCooldown<=0&&!car.finished&&!car.eliminated&&!car.overturned&&!car.falling&&car.y<.05){car.nudgeTime=.2;car.nudgeCooldown=.8;car.nudgeDirection=direction;car.nudgeAngle=car.angle;car.nudgeHits=[];}
+  car.nudgeHeld=direction;
   const spinStep=Math.min(car.spinout||0,dt);car.spinout=Math.max(0,(car.spinout||0)-dt);
   if(spinStep)car.angle+=Math.PI*2*spinStep/START_SPIN_SECONDS;
   const uncontrolled=spinStep>0||car.wrecked||car.overturned||car.y>.05||car.falling;
@@ -183,14 +213,16 @@ export function stepCar(car, input, dt=STEP) {
     forward+=force*dt;forward*=Math.exp(-(input.brake?1.7:Math.abs(force)>0?.64:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
-    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:9.5)*dt);
-    const turn=input.steer*(input.brake?2.9:2.05)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
+    const handling=healthHandlingFactor(car.health);
+    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:9.5*handling)*dt);
+    const turn=input.steer*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
-    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=input.brake?.2:.65;
+    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:.65)*handling;
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
+  advanceShoves(car,dt);
   const track=constrainRoad(car);
   let diff=track.fraction-car.trackFraction;if(diff>.5)diff-=1;if(diff<-.5)diff+=1;
   if(track.distance<track.halfWidth+5&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
@@ -248,10 +280,13 @@ export function rayCar(x,z,dx,dz,car,padding=0){
   }
   return lo;
 }
-export const PICKUP_LOCATIONS = Array.from({length:48},(_,i)=>{
-  const p=trackAt(START_FRACTION+(30+i*TRACK_LENGTH/48)/TRACK_LENGTH);
-  if(OBSTACLES.some(o=>Math.hypot(o.x-p.x,o.z-p.z)<7)){p.x+=p.nx*5;p.z+=p.nz*5;}return p;
-});
+export const PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
+export const PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
+  let fraction=START_FRACTION+(90+row*TRACK_LENGTH/PICKUP_ROW_COUNT)/TRACK_LENGTH,p=trackAt(fraction);
+  if(OBSTACLES.some(o=>Math.hypot(o.x-p.x,o.z-p.z)<14)){fraction+=20/TRACK_LENGTH;p=trackAt(fraction);}
+  const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
+  return Array.from({length:count},(_,lane)=>{const offset=-edge+2*edge*lane/(count-1);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
+}).flat();
 export function botInput(car){
   const p=trackAt(car.trackFraction+Math.max(7,Math.hypot(car.vx,car.vz)*.35)/TRACK_LENGTH);
   for(const f of PLAZAS){const d=arcDistance(car.trackFraction,f);if(d<48){const side=car.botLane||1,offset=side*5*Math.min(1,(48-d)/18);p.x+=p.nx*offset;p.z+=p.nz*offset;}}

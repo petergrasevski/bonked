@@ -19,10 +19,10 @@ try{
   const host=await connect();host.send({type:'create',name:'Connection check 1'});await until(()=>host.id&&host.state);
   for(let i=1;i<6;i++){const c=await connect();c.send({type:'join',code:host.state.code,name:`Connection check ${i+1}`});await until(()=>c.id||c.error);if(c.error)throw c.error;}
   await until(()=>clients.every(c=>c.state?.players.length===6));
-  assert.equal(new Set(host.state.players.map(p=>p.color)).size,6);assert.ok(host.state.players.every(p=>p.health===100));assert.ok(Array.isArray(host.state.mines)&&Array.isArray(host.state.chains));assert.ok(host.state.pickups.every(p=>typeof p.item==='string'));assert.equal((await fetch(new URL('/pickups.js',url))).status,200);assert.equal((await fetch(new URL('/vendor/RoundedBoxGeometry.js',url))).status,200);assert.equal((await fetch(new URL('/shared/combat.js',url))).status,200);
+  assert.equal(new Set(host.state.players.map(p=>p.color)).size,6);assert.ok(host.state.players.every(p=>p.health===100));assert.ok(Array.isArray(host.state.mines)&&Array.isArray(host.state.chains));assert.ok(host.state.pickups.every(p=>typeof p.item==='string'));assert.equal((await fetch(new URL('/pickups.js',url))).status,200);assert.equal((await fetch(new URL('/vendor/RoundedBoxGeometry.js',url))).status,200);assert.equal((await fetch(new URL('/shared/combat.js',url))).status,200);assert.equal((await fetch(new URL('/shared/camera.js',url))).status,200);
   for(let i=0;i<5;i++){for(const c of clients)c.send({type:'ping',sent:Date.now()});await pause(150);}
   host.send({type:'start'});await until(()=>clients.every(c=>c.state.phase==='racing'));
-  assert.ok(host.state.camera.halfWidth<82);assert.ok(host.state.chase.active);assert.ok(Math.abs((host.state.chase.leaderProgress-host.state.chase.progress)*TRACK_LENGTH-CHASE_DISTANCE)<.001);
+  assert.ok(host.state.camera.pitch>=26*Math.PI/180&&host.state.camera.pitch<=70*Math.PI/180);assert.ok(Number.isFinite(host.state.camera.from)&&host.state.camera.to>host.state.camera.from);assert.ok(host.state.chase.active);assert.ok(Math.abs((host.state.chase.leaderProgress-host.state.chase.progress)*TRACK_LENGTH-CHASE_DISTANCE)<.001);
   const before=host.state.players.find(p=>p.id===host.id);
   for(let i=0;i<30;i++){host.send({type:'input',seq:++host.seq,throttle:1,steer:0});await pause(33);}
   await until(()=>Math.hypot(host.state.players.find(p=>p.id===host.id).vx,host.state.players.find(p=>p.id===host.id).vz)>5);

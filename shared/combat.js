@@ -7,9 +7,9 @@ export const WEAPONS = {
   railgun:{name:'Railgun',icon:'↗',ammo:1,hint:'one piercing shot straight ahead'},
   mine:{name:'Mines',icon:'✹',ammo:3,hint:'tap to drop · three mines'},
   chain:{name:'Ball & chain',icon:'●',ammo:1,hint:'swing it into another car'},
-  flame:{name:'Flamethrower',icon:'♨',ammo:5,continuous:true,hint:'hold to burn · five seconds of fuel'},
+  flame:{name:'Flamethrower',icon:'♨',ammo:3,continuous:true,hint:'hold to burn · three seconds of fuel'},
   plasma:{name:'Plasma cannon',icon:'◉',ammo:12,continuous:true,hint:'hold to fire · 12 plasma rounds'},
-  shotgun:{name:'Side shotgun',icon:'↔',ammo:4,hint:'fires from both sides · four shells'},
+  shotgun:{name:'Shotgun',icon:'↔',ammo:4,hint:'fires from both sides · four shells'},
 };
 export const WEAPON_IDS=Object.keys(WEAPONS);
 export const DAMAGE={pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:12,plasma:8,shotgunPellet:7};
@@ -19,7 +19,7 @@ const randomWeapon=random=>WEAPON_IDS[Math.floor(random()*WEAPON_IDS.length)];
 export function createPickups(random=Math.random){return PICKUP_LOCATIONS.map((p,id)=>({id,x:p.x,z:p.z,item:randomWeapon(random),readyAt:0}));}
 export function collectPickup(car,pickups,now,random=Math.random){
   if(car.item||car.finished||car.eliminated||car.y>=1||car.overturned||car.falling)return null;
-  const pickup=pickups.find(p=>now>=p.readyAt&&Math.hypot(car.x-p.x,car.z-p.z)<3);
+  const pickup=pickups.filter(p=>now>=p.readyAt&&Math.hypot(car.x-p.x,car.z-p.z)<3).sort((a,b)=>Math.hypot(car.x-a.x,car.z-a.z)-Math.hypot(car.x-b.x,car.z-b.z))[0];
   if(!pickup)return null;
   giveWeapon(car,pickup.item);pickup.readyAt=now+6000;pickup.item=randomWeapon(random);
   return pickup;
@@ -60,11 +60,11 @@ export function pressWeapon(room,p,now){
   if(id==='shield'){c.shield=8;effect(room,'shield-hit',c.x,c.z,now,{color:'#66dcff'});}
   if(['rocket','machinegun','plasma'].includes(id))projectile(room,p,id,c.angle,now);
   if(id==='railgun'){
-    for(const {target}of rayHits(room,p,c.angle,150,.25))hit(room,target,DAMAGE.railgun,now,{x:Math.cos(c.angle)*8,z:Math.sin(c.angle)*8});
+    for(const {target}of rayHits(room,p,c.angle,150,.25))hit(room,target,DAMAGE.railgun,now,{x:Math.cos(c.angle)*8,z:Math.sin(c.angle)*8,up:7,fore:.12});
     effect(room,'rail',c.x,c.z,now,{toX:c.x+Math.cos(c.angle)*150,toZ:c.z+Math.sin(c.angle)*150,color:'#98ecff',duration:1800});
   }
   if(id==='mine'){
-    room.mines.push({id:++room.serial,owner:p.id,x:c.x-Math.cos(c.angle)*3.5,z:c.z-Math.sin(c.angle)*3.5,armAt:now+650,until:now+180000});
+    room.mines.push({id:++room.serial,owner:p.id,x:c.x-Math.cos(c.angle)*3.5,z:c.z-Math.sin(c.angle)*3.5,armAt:now+100,until:now+180000});
     if(room.mines.length>90)room.mines.shift();
   }
   if(id==='chain'){
@@ -80,7 +80,7 @@ export function pressWeapon(room,p,now){
     }
     for(const [target,amount]of hits){const dx=target.car.x-c.x,dz=target.car.z-c.z,d=Math.hypot(dx,dz)||1;hit(room,target,amount,now,{x:dx/d*18,z:dz/d*18});}
   }
-  c.ammo--;c.fireCooldown=id==='machinegun'?.075:id==='plasma'?.23:id==='shotgun'?.6:.2;
+  c.ammo--;c.fireCooldown=id==='machinegun'?.075:id==='plasma'?.23:id==='shotgun'?.3:.2;
   if(c.ammo<=0){c.item=null;c.ammo=0;}
   return true;
 }

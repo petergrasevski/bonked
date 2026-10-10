@@ -13,8 +13,8 @@ test('six real socket clients: lobby, authority, reconnect, elimination, shared 
   const clients=[];let driving; t.after(()=>{clearInterval(driving);for(const c of clients)c.ws.terminate();proc.kill('SIGTERM');});
   await Promise.race([once(proc.stdout,'data'),once(proc,'exit').then(()=>{throw Error('test server failed to start');})]);
   assert.equal((await fetch(`${base}/health`).then(r=>r.json())).status,'ok');
-  assert.equal((await fetch(`${base}/`)).status,200);assert.equal((await fetch(`${base}/vendor/three.module.js`)).status,200);assert.equal((await fetch(`${base}/server.js`)).status,404);
-  const host=await client();clients.push(host);host.send({type:'create',name:'Host'});await until(()=>host.welcome);const code=host.welcome.code;
+  assert.equal((await fetch(`${base}/`)).status,200);assert.equal((await fetch(`${base}/vendor/three.module.js`)).status,200);assert.equal((await fetch(`${base}/server.js`)).status,404);assert.equal((await fetch(`${base}/shared/camera.js`)).status,200);
+  const host=await client();clients.push(host);host.send({type:'create',name:'Host'});await until(()=>host.welcome);const code=host.welcome.code;assert.match(code,/^[A-Z]{3}$/);
   for(let i=1;i<7;i++){const c=await client();clients.push(c);c.send({type:'join',code,name:`Driver ${i}`});await until(()=>c.welcome||c.messages.some(m=>m.type==='error'));}
   assert.match(clients[6].messages.find(m=>m.type==='error').message,/six drivers/);
   await until(()=>host.state?.players.length===6);assert.equal(new Set(host.state.players.map(p=>p.color)).size,6);
@@ -30,7 +30,7 @@ test('six real socket clients: lobby, authority, reconnect, elimination, shared 
   let snapshots=0,lastTime=0,pickups=0;const driveUntil=Date.now()+6000;
   driving=setInterval(()=>{for(const c of racers){const p=c.state?.players.find(p=>p.id===c.welcome.id);if(!p)continue;if(c!==host&&Date.now()>driveUntil)continue;c.seq=Math.max(c.seq,p.seq)+1;c.send({type:'input',seq:c.seq,...botInput(p)});if(p.item){pickups++;if(c===host)c.send({type:'item'});}}if(host.state.time!==lastTime){snapshots++;lastTime=host.state.time;}},1000/60);
   await until(()=>host.state.phase==='finished',55000);clearInterval(driving);
-  assert.ok(snapshots>100,'server should continuously send snapshots');assert.ok(pickups>0,'drivers collect and use items');assert.equal(host.state.players.filter(p=>p.eliminated).length,5);assert.equal(host.state.winnerId,host.welcome.id);assert.ok(host.state.players.find(p=>p.id===host.welcome.id).finished);assert.ok(host.state.camera.halfWidth<82);assert.ok(host.state.chase.active);
+  assert.ok(snapshots>100,'server should continuously send snapshots');assert.ok(pickups>0,'drivers collect and use items');assert.equal(host.state.players.filter(p=>p.eliminated).length,5);assert.equal(host.state.winnerId,host.welcome.id);assert.ok(host.state.players.find(p=>p.id===host.welcome.id).finished);assert.ok(host.state.camera.pitch>=26*Math.PI/180&&host.state.camera.pitch<=70*Math.PI/180);assert.ok(Number.isFinite(host.state.camera.from)&&host.state.camera.to>host.state.camera.from);assert.ok(host.state.chase.active);
   assert.ok(host.state.players.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.z)));
   assert.ok(host.state.players.find(p=>p.id===host.welcome.id).finishTime>3000);
   assert.equal(host.state.players.find(p=>p.id===host.welcome.id).score,3);assert.equal(host.state.roundResults.length,6);const checkpoint=host.state.players.find(p=>p.id===host.welcome.id).trackFraction;

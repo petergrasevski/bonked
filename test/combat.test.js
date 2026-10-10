@@ -32,10 +32,12 @@ test('shield blocks damage and launches for eight seconds',()=>{
   const p=trackAt(.01);Object.assign(a.car,{x:p.x,z:p.z,angle:p.angle});for(let i=0;i<479;i++)stepCar(a.car,NEUTRAL);assert.ok(a.car.shield>0);damageCar(a.car,10);assert.equal(a.car.health,100);stepCar(a.car,NEUTRAL);stepCar(a.car,NEUTRAL);damageCar(a.car,10);assert.equal(a.car.health,90);
 });
 test('railgun instantly pierces multiple aligned cars and leaves a lingering trail',()=>{
-  const a=player('a'),b=player('b',20),c=player('c',40),side=player('side',20,6),r=room(a,b,c,side);fire(r,a,'railgun');assert.equal(b.car.health,25);assert.equal(c.car.health,25);assert.equal(side.car.health,100);assert.equal(r.projectiles.length,0);assert.equal(r.effects.find(e=>e.kind==='rail').until,1800);assert.equal(a.car.item,null);
+  const a=player('a'),b=player('b',20),c=player('c',40),side=player('side',20,6),r=room(a,b,c,side);fire(r,a,'railgun');assert.equal(b.car.health,25);assert.equal(c.car.health,25);assert.ok(b.car.vy>0&&b.car.vy<15);assert.ok(c.car.vy>0&&c.car.vy<15);assert.equal(side.car.health,100);assert.equal(r.projectiles.length,0);assert.equal(r.effects.find(e=>e.kind==='rail').until,1800);assert.equal(a.car.item,null);
 });
-test('three separate mine presses, delayed arming, damage and ballistic launch',()=>{
-  const a=player('a'),b=player('b',-3.5,1),r=room(a,b);giveWeapon(a.car,'mine');a.input.fire=true;run(r,.3);assert.equal(r.mines.length,1);assert.equal(a.car.ammo,2);a.input.fire=false;updateCombat(r,STEP,310);a.input.fire=true;updateCombat(r,STEP,330);assert.equal(a.car.ammo,1);a.input.fire=false;run(r,.3,330);a.input.fire=true;updateCombat(r,STEP,640);assert.equal(a.car.item,null);assert.equal(b.car.health,100);updateCombat(r,STEP,700);assert.equal(b.car.health,72);assert.ok(b.car.vy>=15);assert.notEqual(b.car.rollVelocity,0);
+test('three separate mine presses, near-immediate arming and ballistic launch',()=>{
+  const a=player('a'),b=player('b',-3.5,1),r=room(a,b);giveWeapon(a.car,'mine');assert.ok(pressWeapon(r,a,0));assert.equal(a.car.ammo,2);
+  updateCombat(r,STEP,99);assert.equal(b.car.health,100);updateCombat(r,STEP,100);assert.equal(b.car.health,72);assert.ok(b.car.vy>=15);assert.notEqual(b.car.rollVelocity,0);
+  r.players.delete('b');run(r,.25,100);assert.ok(pressWeapon(r,a,350));run(r,.25,350);assert.ok(pressWeapon(r,a,600));assert.equal(a.car.item,null);assert.equal(r.mines.length,2);
 });
 test('mine-like launches can land upright or stranded on their roof',()=>{
   const land=side=>{const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x,z:p.z,angle:p.angle});launchCar(c,15,side,0);for(let i=0;i<120;i++)stepCar(c,NEUTRAL);return c;};const upright=land(0),roof=land(.3);assert.equal(upright.overturned,false);assert.equal(roof.overturned,true);assert.equal(roof.health,100);const {x,z}=roof;for(let i=0;i<120;i++)stepCar(roof,{...NEUTRAL,throttle:1,steer:1});assert.equal(roof.x,x);assert.equal(roof.z,z);
@@ -44,8 +46,8 @@ test('ball and chain obeys its tether and transfers motion through turns',()=>{
   const a=player('a'),r=room(a);fire(r,a,'chain');const ball=r.chains[0];for(let i=1;i<600;i++){a.car.x+=.3;a.car.z=Math.sin(i*.02)*4;a.car.angle=Math.atan2(Math.cos(i*.02)*.08,.3);a.car.vx=18;a.car.vz=Math.cos(i*.02)*4.8;updateCombat(r,STEP,i*STEP*1000);assert.ok(Math.hypot(ball.x-ball.anchorX,ball.z-ball.anchorZ)<=ball.length+.001);assert.ok(Number.isFinite(ball.vx)&&Math.abs(ball.vx)<100);}assert.ok(Math.abs(ball.vz)>1);
   const b=player('b',ball.x+.5,ball.z);r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.ok(b.car.vy>0&&b.car.vy<15);assert.equal(r.chains.length,0);
 });
-test('flamethrower has five seconds of held fuel, limited forward reach and continuous damage',()=>{
-  const a=player('a'),b=player('b',7),c=player('c',15),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,5);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-3)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-40)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
+test('flamethrower has three seconds of held fuel, limited forward reach and continuous damage',()=>{
+  const a=player('a'),b=player('b',7),c=player('c',15),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-64)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
 });
 test('plasma travels straight at 1.5 times top speed with minor damage',()=>{
   const a=player('a'),b=player('b',30),r=room(a,b);fire(r,a,'plasma');const shot=r.projectiles[0],x=shot.x;updateCombat(r,STEP,17);assert.equal(shot.speed,54);assert.equal(shot.angle,0);assert.ok(Math.abs(shot.x-x-54*STEP)<1e-6);run(r,.6,17);assert.equal(b.car.health,92);
@@ -57,3 +59,5 @@ test('wall impacts damage chassis; zero health launches a persistent solid wreck
   const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x+p.nx*p.halfWidth,z:p.z+p.nz*p.halfWidth,angle:p.angle,vx:p.nx*20,vz:p.nz*20});constrainRoad(c);assert.ok(c.health<100&&c.health>94);assert.deepEqual([100,80,60,40,20,0].map(damageLevel),[0,1,2,3,4,4]);damageCar(c,100);assert.ok(c.wrecked&&c.eliminated&&c.vy>0&&c.rollVelocity>0);assert.equal(c.health,0);
   Object.assign(c,{x:0,z:0,angle:0,y:0,vx:0,vz:0,yawVelocity:0});const b=player('b',-4).car;b.vx=20;collideCars([b,c]);assert.ok(b.vx<20);assert.ok(c.vx>0);assert.equal(carContact(b,c),null);assert.ok(c.wrecked);
 });
+
+test('shotgun can fire again after 0.3 seconds, but not sooner',()=>{const a=player('a'),r=room(a);fire(r,a,'shotgun');run(r,.2);assert.equal(pressWeapon(r,a,200),false);run(r,.12,200);assert.equal(pressWeapon(r,a,320),true);assert.equal(a.car.ammo,2);});
