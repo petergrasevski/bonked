@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {WEAPON_IDS} from '../shared/combat.js';
-export const PICKUP_COLORS={pulse:0xc329ff,rocket:0xff1834,machinegun:0xffdb00,shield:0x00cfff,railgun:0x3262ff,mine:0x8aff00,chain:0xfaf4dc,flame:0xff7200,plasma:0x00ed8a,shotgun:0xff36b5};
+export const PICKUP_COLORS={pulse:0xc329ff,rocket:0xff1834,machinegun:0xffdb00,shield:0x00cfff,railgun:0x3262ff,mine:0x8aff00,chain:0xfaf4dc,flame:0xff7200,plasma:0x00ed8a,shotgun:0xff36b5,taser:0x93ceff};
 const cache=new Map();
 // Models share immutable geometry/materials across all pickups on the course.
 export function createPickupModel(kind){
@@ -37,14 +37,30 @@ export function createPickupModel(kind){
     sphere(.6,-.2,0,.65,metal);for(let i=0;i<8;i++){const a=i*Math.PI/4;const spike=add(new THREE.ConeGeometry(.13,.4,6),dark,.6+Math.cos(a)*.64,-.2+Math.sin(a)*.64,0);spike.rotation.z=a-Math.PI/2;}
     for(let i=0;i<6;i++){const link=add(new THREE.TorusGeometry(.15,.045,5,10),metal,-.15-i*.21,.05+i*.15,0);link.rotation.y=i%2*Math.PI/2;}
     box(-1.4,.94,0,.25,.4,.3,accent);
+  }else if(kind==='shotgun'){
+    // Car forward is +X. Three barrels on each side fire along ±Z.
+    box(0,-.15,0,1.25,.35,.8,dark);box(0,.08,0,1.35,.26,.65,brass);
+    for(const side of [-1,1])for(const x of [-.43,0,.43]){
+      const barrel=tube(x,.16,side*.92,.145,1.45,metal);barrel.rotation.set(Math.PI/2,0,0);
+      const muzzle=tube(x,.16,side*1.68,.19,.18,dark);muzzle.rotation.set(Math.PI/2,0,0);
+      const bore=tube(x,.16,side*1.78,.105,.025,glow);bore.rotation.set(Math.PI/2,0,0);
+      const collar=tube(x,.16,side*.49,.2,.16,brass);collar.rotation.set(Math.PI/2,0,0);
+    }
+    box(0,-.34,0,.8,.18,.7,metal);
+  }else if(kind==='taser'){
+    const steel=metal;steel.color.setHex(0xd9e3ea);steel.emissive.setHex(0x000000);steel.metalness=.98;steel.roughness=.16;steel.envMapIntensity=1.5;
+    add(new THREE.CylinderGeometry(.68,.82,.24,20),dark,0,-.9,0);
+    add(new THREE.CylinderGeometry(.14,.22,1.55,16),steel,0,-.03,0);
+    for(let i=0;i<5;i++)add(new THREE.TorusGeometry(.3,.075,8,24),brass,0,-.62+i*.17,0).rotation.x=Math.PI/2;
+    sphere(0,.86,0,.62,steel);sphere(0,.88,0,.22,accent);
+    add(new THREE.ConeGeometry(.12,.7,12),steel,0,1.55,0);
+    for(const side of [-1,1]){box(side*.47,-.6,0,.16,.5,.24,accent);sphere(side*.48,-.24,0,.1,glow);}
   }else{
     // Distinct silhouettes, not a generic crate or icon pretending to be a model.
     box(-.25,0,0,1.25,.48,.52);box(-.8,-.32,0,.3,.55,.35);box(-1.25,0,0,.65,.32,.44,kind==='shotgun'?brass:accent);
     if(kind==='machinegun'){
       tube(.9,.05,0,.14,1.3,dark);tube(1.62,.05,0,.22,.22,metal);box(-.15,-.5,0,.45,.7,.28,metal);box(-.2,.34,0,.7,.12,.25,accent);
       for(let i=0;i<5;i++)tube(-.55+i*.22,.08,.38,.08,.28,brass);
-    }else if(kind==='shotgun'){
-      for(const z of [-.17,.17]){tube(.82,.07,z,.135,1.6,metal);tube(1.63,.07,z,.11,.045,dark);}box(.35,-.18,0,.65,.22,.5,brass);
     }else if(kind==='railgun'){
       for(const z of [-.3,.3]){box(.85,.08,z,1.9,.17,.18,metal);box(.85,.19,z,1.7,.045,.08,glow);}
       for(let i=0;i<4;i++)ring(i*.3-.1,0,0,.4);sphere(-.65,.02,0,.24);

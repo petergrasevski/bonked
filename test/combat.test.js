@@ -7,7 +7,7 @@ function room(...ps){const r={phase:'racing',startAt:0,players:new Map(ps.map(p=
 function fire(r,p,id,now=0){giveWeapon(p.car,id);assert.ok(pressWeapon(r,p,now));}
 function run(r,seconds,start=0){for(let i=1;i<=Math.ceil(seconds/STEP);i++)updateCombat(r,STEP,start+i*STEP*1000);}
 test('shorter technical circuit has no crossings or overlapping distant road sections',()=>{
-  assert.ok(Math.abs(TRACK_LENGTH-3466.9092022732743*.7)<1e-7);assert.equal(TOP_SPEED,36);assert.equal(WEAPON_IDS.length,10);
+  assert.ok(Math.abs(TRACK_LENGTH-3466.9092022732743*.7)<1e-7);assert.equal(TOP_SPEED,36);assert.equal(WEAPON_IDS.length,11);
   // Samples separated by at least 35m of road must leave space for two 12m roads.
   for(let i=0;i<SEGMENTS.length;i+=4)for(let j=i+4;j<SEGMENTS.length;j+=4){const d=Math.abs(SEGMENTS[j].start-SEGMENTS[i].start);if(Math.min(d,TRACK_LENGTH-d)>35)assert.ok(Math.hypot(TRACK[i].x-TRACK[j].x,TRACK[i].z-TRACK[j].z)>14,`road overlap ${i}, ${j}`);}
 });

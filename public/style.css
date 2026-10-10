@@ -17,7 +17,7 @@ body.playing #scene{mask-image:none;transition:none}
 #brake.reversing{color:var(--lime);border-color:var(--lime);background:#d4f65e35}
 #rotate-hint{display:none;position:fixed;inset:0;z-index:100;background:#101c23;color:#edf1e7;align-items:center;justify-content:center;flex-direction:column;padding:30px;text-align:center;font-size:14px;letter-spacing:0}
 #rotate-hint .rotate-phone{font-size:76px;color:var(--lime);line-height:1.3}#rotate-hint h2{font-size:30px;margin:18px 0 8px}#rotate-hint p{font-size:14px;color:#a1b6b7;line-height:1.8}#rotate-hint small{font-size:10px;line-height:1.6;color:#6b888e;margin-top:30px}
-@media(orientation:portrait){#rotate-hint{display:flex}body>:not(#rotate-hint){visibility:hidden!important}}
+@media(orientation:portrait){body.mobile #rotate-hint{display:flex}body.mobile>:not(#rotate-hint){visibility:hidden!important}}
 @media(orientation:landscape) and (max-height:560px){.action small{font-size:6px}.join-row input{font-size:16px}.lobby-card input{padding:8px 10px}.topbar{padding-right:max(20px,env(safe-area-inset-right))}.race-top{left:max(20px,env(safe-area-inset-left));right:max(20px,env(safe-area-inset-right))}}
 
 .action small{white-space:nowrap}.spectating .controls{opacity:.35}.spectating .controls *{pointer-events:none}
@@ -122,3 +122,39 @@ body.playing .topbar{display:none}
 #you-label{left:0;top:0;will-change:transform;backface-visibility:hidden;contain:paint}
 #install-steps strong{font-weight:800;color:#f2f7e8}
 @media(max-width:650px){#race-hud{padding-left:5px;padding-right:5px}#tournament-scores{gap:4px}.score-player{width:29px;max-width:29px}.score-name{max-width:29px}.nudge{padding:8px 14px}.nudge strong{font-size:8px}}
+
+/* Desktop uses the same browser game, with a keyboard/controller HUD. */
+body:not(.mobile) .left-controls,body:not(.mobile) .right-controls,body:not(.mobile) .nudge{display:none}
+body:not(.mobile) .controls #health-ui{bottom:40px}
+#controller-status{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);font-size:12px;color:#dce9e5;background:#10202bcc;padding:8px 14px;border-radius:20px;z-index:4;white-space:nowrap;pointer-events:none}
+body:not(.playing) #controller-status,body.mobile:not(.controller-connected) #controller-status{display:none}
+body.mobile #controller-status{bottom:6px;font-size:9px;padding:4px 8px}
+.track-choice{grid-column:1/-1;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;align-items:center}
+.track-choice label{margin:0}.track-choice select{width:100%;background:#1a303b;color:#edf2e5;border:1px solid #ffffff35;border-radius:8px;padding:9px;font:inherit;min-height:40px}
+#track-detail{grid-column:2;font-size:11px;color:#b9cdcc}
+#party-bar{position:fixed;bottom:16px;left:max(18px,env(safe-area-inset-left));z-index:8}
+#party-bar[hidden]{display:none}
+#voice-toggle{display:grid;place-items:center;width:44px;height:44px;padding:10px;border:1px solid #ffffff40;background:#10202bea;color:#dce9e5;border-radius:50%}
+#voice-toggle svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#voice-toggle .mic-slash{paint-order:stroke;stroke-width:2.5}
+#voice-toggle[aria-pressed="true"]{color:#d4f65e;border-color:#d4f65e88}
+#voice-toggle[aria-pressed="true"] .mic-slash{display:none}
+body.playing.mobile #party-bar{bottom:auto;top:110px;left:14px}
+#lobby:has(#room-panel:not([hidden])){bottom:76px;overflow:auto;touch-action:pan-y}
+@media(orientation:portrait){body:not(.mobile) #room-panel{grid-template-columns:1fr}body:not(.mobile) #room-panel>*{grid-column:1;grid-row:auto}body:not(.mobile) #lobby{max-width:calc(100vw - 40px)}}
+
+
+
+.results-navigation{display:flex;justify-content:space-between;margin-top:8px}.results-navigation .text-button{font-size:12px;min-height:36px}
+
+@media(orientation:landscape) and (max-height:560px){
+body.mobile #lobby:has(#room-panel:not([hidden])){top:64px;bottom:58px}
+body.mobile #room-panel{gap:6px 16px;padding:0}
+body.mobile .lobby-card:has(#room-panel:not([hidden])){padding:10px}
+body.mobile #room-panel .card-heading{height:26px}body.mobile #room-panel .card-heading h2{font-size:18px}
+body.mobile #roster{max-height:144px}body.mobile .driver{height:24px;font-size:12px}body.mobile .driver .role{font-size:9px}
+body.mobile .track-choice{gap:3px 10px}body.mobile .track-choice select{padding:6px;min-height:34px;font-size:14px}body.mobile #track-detail{font-size:10px}
+body.mobile #party-bar{bottom:8px}
+}
+
+#desktop-weapon{position:absolute;right:20px;bottom:62px;background:#10202be0;padding:10px 14px;border-radius:10px;font-size:12px;color:#e2edda;pointer-events:none}body.mobile #desktop-weapon{display:none}#controller-status{max-width:90vw;white-space:normal;text-align:center}

@@ -1,13 +1,13 @@
 # Tounched
 
-A playable browser combat-racing prototype inspired by the shared overhead racing of Wrecked. Original procedural 3D artwork, one coastal circuit, distance-based elimination, three-lap races, and private rooms for up to six cars. The in-game title is “Tounched”.
+A playable browser combat-racing prototype inspired by the shared overhead racing of Wrecked. Original procedural 3D artwork, three selectable circuits, distance-based elimination, three-lap races, and private rooms for up to six cars. The in-game title is “Tounched”.
 
 ## Run on this laptop
 
 Requires Node.js 22 or newer.
 
 ```sh
-cd /Users/pgrasevski/src/atlassian/wrecked
+cd /Users/pgrasevski/src/tmp/tounched
 npm ci
 npm start
 ```
@@ -27,22 +27,41 @@ To use another port: `PORT=4000 npm start`. To bind only to this machine: `HOST=
 3. Add optional practice drivers to try it alone. Bots count toward the six-car limit.
 4. Keep ahead of the red elimination line. It stays **108 game metres of road distance behind the leader**, roughly three seconds at the normal maximum speed. It is not a timer: a stopped leader does not make the line creep forward. Crossing behind it eliminates your car; eliminated drivers spectate. In multiplayer, the last survivor wins. If more than one survives, the three-lap finish still applies. Round scores carry forward automatically. Every connected human can tap Ready; the next countdown starts as soon as everyone is ready or five seconds elapse. The next grid forms behind the previous winner’s finishing checkpoint.
 
-Landscape is required: portrait shows a full-screen rotate prompt, and controls are released when the device rotates. The circuit is approximately **2.43 km, 30% shorter than v0.2**, with two extended straights and fewer turns on a narrow island causeway. Both exposed edges drop into water and kill the car; scenery islands are separated from the road by water. There is no safe field runoff. Everyone shares a perspective camera behind the surviving pack. It anticipates bends, includes **20 metres ahead of the leader** and **10 metres behind the last car**, and rises gradually from a 26° chase view toward a 70° overhead view as the pack spreads out. The death line enters view when it approaches the last car. Viewport fitting keeps every surviving car and its roof weapon in frame, including during camera turns and local prediction.
+On phones, landscape is required: portrait shows a rotate prompt and releases controls. Desktop browsers work in either orientation and hide the touch buttons; a weapon indicator remains visible. The circuit is approximately **2.43 km, 30% shorter than v0.2**, with two extended straights and fewer turns on a narrow island causeway. Both exposed edges drop into water and kill the car; scenery islands are separated from the road by water. There is no safe field runoff. Everyone shares a perspective camera behind the surviving pack. It anticipates bends, includes **20 metres ahead of the leader** and **10 metres behind the last car**, and rises gradually from a 26° chase view toward a 70° overhead view as the pack spreads out. The death line enters view when it approaches the last car. Viewport fitting keeps every surviving car and its roof weapon in frame, including during camera turns and local prediction.
 
-| Control | Phone | Keyboard |
-| --- | --- | --- |
-| Accelerate | Hold GO, lower right | W / Up |
-| Steer | Hold LEFT or RIGHT | A/D or Left/Right |
-| Reverse | Hold DRIFT/R for at least 0.35 seconds; release to reset | Hold Space, or S / Down |
-| Handbrake / drift | Briefly hold DRIFT/R, above and right of GO | Briefly hold Space |
-| Nudge sideways | Top-left / top-right corner | Q / R |
-| Use pickup | WEAPON button above and right of GO | E |
+| Control | Phone | Computer | Standard controller / DualSense |
+| --- | --- | --- | --- |
+| Accelerate | GO | W | X (bottom face button) |
+| Steer | LEFT / RIGHT | A / D | Left stick, proportional with 14% deadzone |
+| Brake / reverse | DRIFT/R | S | Square (left face button) |
+| Weapon | WEAPON | Space | R1 |
+| Nudge | Top corners | Left / right arrows | L2 / R2 |
+
+Brake briefly to drift; hold for 350 ms to reverse. Release to reset. Controller buttons are polled every animation frame. On connection or after opening a menu, release the controls once to arm them again. On-screen touch controls remain available on phones even with a controller. Unmapped controllers are ignored to avoid incorrect button bindings.
+
+DualSense can pair to iPhone over Bluetooth: hold Create + PS until its light flashes, then select the controller in Settings → Bluetooth. Open the HTTPS game and press a controller button. See [Apple’s pairing guide](https://support.apple.com/en-au/111100). Real-device iPhone/controller validation remains recommended.
+
+### Circuits
+
+The host selects a circuit in the lobby; every room has its own selection. After a round, **Change circuit** returns everyone to the lobby and resets the tournament.
+
+- **Saltwater Circuit:** the original 2.43 km coastal course.
+- **Glacier Run:** a 2.03 km long, thin rectangular loop with 914m straights, broad square-ended turns, and low lateral grip. Each straight splits into two lanes around a crevasse halfway along, with alternating barriers and exposed edges. Elsewhere, only the U-turn bends have bumpers; their approaches stay exposed. Exposed edges drop off the ice shelf.
+- **Redrock Overpass:** a 1.86 km desert figure eight with a 20 m bridge above the other branch, hills, two marked jump ramps, rock mesas and cacti. Physics preserves the route at the crossing; collisions, pickups and weapons respect height. Ramps launch cars ballistically, retaining speed on upright landings.
+
+### Party voice
+
+Joining a room enables incoming party audio with the microphone off. Microphone permission is requested only when you press the circular mic button. A crossed-out mic means off; a plain mic means live. Every connected human in that room can hear the others in the lobby, during the race, while spectating and between rounds. Muting stops transmission while keeping incoming audio enabled. Joining or reconnecting starts with the microphone off. Leaving the room stops microphone tracks and clears playback. Hidden pages stop transmitting. Browser/iOS background suspension can interrupt reception until the game is foregrounded again.
+
+Voice requires HTTPS (the public tunnel provides it) or localhost. If audio playback is blocked, tap the page. Permission denial leaves the game playable and lets you listen; **Enable mic** retries. Audio uses the device’s selected speaker/headphone output. Echo cancellation and noise suppression are requested; headphones work best when several players share a room.
+
+A separate authenticated `/voice` WebSocket relays 16 kHz mono PCM in 20 ms packets, with per-speaker bounded jitter buffers. No voice account, TURN server or paid service is needed. The server relays audio only within the authenticated lobby and does not record it. Transport is encrypted on the public HTTPS/WSS link; this is not end-to-end encrypted. Each unmuted mic uploads about 32 KB/s, and a listener receives up to 160 KB/s with five other speakers, plus transport overhead. A slow connection may drop audio instead of accumulating seconds of delay.
 
 Holding GO through the countdown continues driving at GO. Start holding it with **1,000 ms remaining, within ±20 ms**, for a 0.8-second launch boost (35% extra acceleration, 10% extra speed ceiling). Hold continuously from **more than 2,000 ms before GO** and the car spins for 1.1 seconds before accelerating. Releasing GO resets the attempt. Controls carry their original press timestamp in the synchronized server clock; the server bounds timestamp compensation to 250 ms and owns the outcome. Countdown numbers update at animation-frame frequency.
 
-Tap a corner nudge to shift one car width sideways over 0.2 seconds, with a 0.8-second cooldown. Contact deals 8 damage once per target, pushes the other car about 1.75 widths and turns it away. Barriers and shields still apply.
+Tap a corner nudge to shift one car width sideways over 0.1 seconds, with a 0.8-second cooldown. Contact deals 8 damage once per target, applies a physical sideways impulse with half-strength recoil and spin on the initiating car. Off-center hits also spin the other car according to the contact point; reduced grip briefly lets it skid. Barriers and shields still apply.
 
-Cars reach 36 game metres/second (20% faster than v0.2) at full health. Damage reduces engine acceleration and the speed ceiling linearly: `0.8 + 0.2 × (health − 1) / 99`, giving 100% speed at 100 HP and 80% speed at 1 HP. Damage also reduces lateral grip and steering response, making battered cars drift more. External crash/weapon impulses can temporarily exceed the engine limit.
+Cars reach 36 game metres/second at full health after roughly four seconds of straight acceleration. Turning adds drag, so sustained corners reduce speed and straightening up gradually restores it. Damage reduces engine acceleration and the speed ceiling linearly: `0.8 + 0.2 × (health − 1) / 99`, giving 100% speed at 100 HP and 80% speed at 1 HP. Damage also reduces lateral grip and steering response, making battered cars drift more. External crash/weapon impulses can temporarily exceed the engine limit.
 
 The long, low chassis is fitted directly to the shared **4.9 × 2.1m** oriented collision box, including bumpers and wheels. Contacts use the overlap of bumper/door faces, friction, and six solver passes with road constraints. Impulses transfer momentum and rotation, so contact can push cars into barriers or off unprotected outer edges. Cars have 100 HP, five damage states, increasing smoke and fire, and an eight-second shield. Hard barrier impacts and car crashes also cause damage. Zero HP creates an airborne, tumbling wreck that remains a physical obstacle until the round ends.
 
@@ -57,9 +76,10 @@ The long, low chassis is fitted directly to the shared **4.9 × 2.1m** oriented 
 | Ball & chain | Momentum-driven tether about two car lengths behind; detonates on contact | 45 |
 | Flamethrower | Hold for up to 3 seconds of fuel; forward cone about two car lengths | 12/second |
 | Plasma cannon | 12 straight shots at 54m/s; hold to continue | 8 per shot |
+| Taser | Hold for up to 5 seconds; arcs to every unshielded rival within 8.575m (1.75 car lengths), with poor grip and oscillating steering while in range | 15/second |
 | Shotgun | Four shells with a 0.3s cooldown; five pellets out each side with outward knockback | Up to 35 per side |
 
-Weapon pickups form rows of three or four across the road, spaced about ten seconds apart at full speed. These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its six-second respawn. Sound is opt-in. The physics is a lightweight arcade simulation: planar rigid-body impulses, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or is stranded on its roof until the elimination line catches it; it is not a full suspension or general-purpose 3D rigid-body engine.
+Weapon pickups form rows of three or four across the road, spaced about ten seconds apart at full speed. These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its six-second respawn. Sound is opt-in in **Settings → Engine & effects**. Each weapon has a distinct synthesized sound: shots and impacts play once from server events, while the flamethrower and taser loop only while firing. Nearby opponents are audible with distance attenuation and stereo positioning; muting, leaving, hiding the page or losing connection stops effects. The physics is a lightweight arcade simulation: planar rigid-body impulses, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or is stranded on its roof until the elimination line catches it; it is not a full suspension or general-purpose 3D rigid-body engine.
 
 The race uses the full screen, with Settings, round count and segmented score thermometers centred at the top. Score segments glow more as players approach the winning total. Rendering uses worn asphalt and concrete, rounded chassis, softer billboard smoke, muted coastal colours, water highlights, and a light vignette. All textures and models are generated locally; no remote art assets or image processing passes are required.
 
@@ -68,7 +88,7 @@ The race uses the full screen, with Settings, round count and segmented score th
 - One Node process serves the assets and a same-origin WebSocket endpoint at `/ws`.
 - Server-authoritative physics at 60 Hz; snapshots at 20 Hz. Clients send input, never authoritative positions, lap counts, item ownership, or finish times.
 - The server owns elimination and broadcasts the common chase/camera frame. The cutoff uses unwrapped race distance, including across the lap seam.
-- Shared physics powers immediate local prediction. Unacknowledged inputs are replayed with nearby body contact; all opponents extrapolate on the same ticks while driving so delayed remote cars do not overlap the predicted local car. Authoritative snapshots continually correct this short prediction. Render smoothing also resolves body overlap. Spectators and the shared camera retain roughly 90 ms of interpolation. This is a prototype reconciliation model, not a deterministic lockstep engine.
+- Shared physics predicts all cars on a common timeline using replicated steering inputs, so opponents follow turns instead of repeatedly extrapolating straight and snapping back. Snapshots acknowledge input only after a simulation tick has consumed it. Visual correction offsets decay independently of physics, and fractional-tick motion supports high-refresh displays. Rendering never runs another collision solver. These changes address the original repeated car vibration; prediction remains approximate under packet stalls and collisions.
 - Fixed simulation steps with bounded catch-up avoid runaway work after an event-loop pause.
 - Input goes neutral after 250 ms without a fresh command. Touch release/cancel, visibility changes, and window blur also clear controls.
 - Exponential reconnect backoff, WebSocket heartbeats, and a 20-second disconnected-seat reservation. A private resume token restores the same driver; it is held in sessionStorage and is never broadcast. Active rooms survive a short connection interruption, but not a server restart.
@@ -117,7 +137,7 @@ Rooms live in process memory. This first version is **not highly available**: a 
 npm test
 ```
 
-The tests start a separate server on localhost:33211 and use six real WebSocket connections to verify unique colours, capacity rejection, host-only start, authoritative positions, countdown, token reconnection, pickups, elimination, a last-survivor finish, shared camera bounds, tournament readiness, score retention, advancing start grids, and host handover. Physics and combat tests cover road clearance, full-course navigation, steering validation, reverse, drift, solid collisions, wall damage, persistent wrecks, upside-down landings, and the damage, ammo, timing and targeting rules of all ten weapons. Network tests also reject client-supplied health and weapons. Launch tests cover the exact ±20ms boundaries, release/reset, held GO across GO, and all three start outcomes using live sockets. Regression checks cover health-speed endpoints, both fatal road edges, camera lookahead, bumper/door impulses, and peer collision prediction.
+The tests start a separate server on localhost:33211 and use six real WebSocket connections to verify unique colours, capacity rejection, host-only start, authoritative positions, countdown, token reconnection, pickups, elimination, a last-survivor finish, shared camera bounds, tournament readiness, score retention, advancing start grids, and host handover. Physics and combat tests cover road clearance, full-course navigation, steering validation, reverse, drift, solid collisions, wall damage, persistent wrecks, upside-down landings, and the damage, ammo, timing and targeting rules of all eleven weapons. Network tests also reject client-supplied health and weapons. Launch tests cover the exact ±20ms boundaries, release/reset, held GO across GO, and all three start outcomes using live sockets. Regression checks cover health-speed endpoints, both fatal road edges, camera lookahead, bumper/door impulses, and peer collision prediction.
 
 Browser QA uses landscape phone emulation in Chrome: multi-touch, long holds, double taps, release/reset, reverse timing, and rotation to portrait. CSS touch-action, user-select and -webkit-touch-callout plus non-passive game-surface touch handlers suppress browser gestures while keeping lobby inputs editable. Input text is at least 16px to avoid iPhone focus zoom. Actual iPhone Safari verification is still needed: emulation cannot reproduce every iOS callout or OS edge gesture. Add to Home Screen can reduce browser chrome; it does not remove system gestures. A native wrapper is a possible later option, not required for these normal touch controls.
 
@@ -128,20 +148,20 @@ Browser QA uses landscape phone emulation in Chrome: multi-touch, long holds, do
 - `shared/combat.js`: weapon definitions, server-owned damage, projectiles, mines, and tether physics.
 - `shared/prediction.js`: client prediction of the local car and peer contact on a common timeline.
 - `shared/chase.js`: fixed-distance elimination, shared camera framing and result ordering.
-- `public/pickups.js`: ten reusable 3D weapon models with distinct silhouettes.
+- `public/pickups.js`: eleven reusable 3D weapon models with distinct silhouettes.
 - `public/world.js`: Three.js scene, procedural models, lighting, camera and effects.
 - `public/app.js`: networking, prediction, lobby, results, touch/keyboard input and audio.
 - `public/style.css`: responsive lobby and racing interface.
 - `test/`: deterministic physics checks and end-to-end server protocol tests.
 
-A track is currently authored in `shared/game.js`, with its scenery in `public/world.js`. A track registry and map selection can be introduced when a second circuit is added.
+The cached track registry lives in `shared/game.js`; `selectTrack(room.trackId)` selects live geometry before synchronous room simulation and snapshots. New courses share physics, camera, pickups and bots. Scenery is in `public/world.js`. Do not insert asynchronous work between selecting a room’s track and simulating it. Voice transport is in `public/voice.js` and its AudioWorklet in `public/voice-worklet.js`.
 
 
 ### October visual / phone update
 
 The road widens smoothly around bends (up to 18m) and three passing plazas (24m). Raised red/concrete walls with dark caps protect the edge; yellow paint alone marks unprotected drops. Six yellow/black solid traffic islands divide the plazas. The server, local prediction, camera, pickups and bots use the same road widths and obstacle positions.
 
-Settings contains engine audio, controls, fullscreen and the phone QR link. Music has been removed. Engine audio mutes immediately on elimination, falling, finish, stale state or disconnection.
+Settings contains engine audio, controls, fullscreen and the phone QR link. Music has been removed. Each car’s engine stops on elimination, falling or finish. Opponent engines and weapons remain audible while spectating; the listening position follows the shared camera instead of the eliminated car. All game audio stops on mute, stale state, disconnection, hiding the page, or leaving the room.
 
 ### Tournament and landmarks
 
@@ -154,3 +174,21 @@ Eight landmarks are spaced about 303 road metres apart (roughly ten seconds at r
 `render.yaml` configures one **Free** Node web service in Singapore, with `/health` checks and manual deployments. Connect the game's private repository in Render, select Node, `npm ci --omit=dev`, `node server.js`, Singapore, and **Free ($0)**. No database, disk or paid compute is required. This account was prompted for card verification even on Free; deployment was stopped at the user’s request and no cloud service exists yet. Keep paid upgrades off; without a payment method, exceeding included bandwidth suspends the free service rather than charging. Render's free service sleeps after 15 minutes of no incoming HTTP/WebSocket traffic and takes roughly one minute to wake. Active games send input and ping messages. Free services may also restart, so this is hobby hosting, not guaranteed uptime; rooms and scores are in memory and reset on a restart. [Official free-tier limits](https://render.com/docs/free).
 
 WebSocket snapshots use low-level compression to reduce free-tier bandwidth. A public smoke test accepts any deployed origin: `node scripts/check-public.mjs https://YOUR-SERVICE.onrender.com`.
+
+### October tracks, inputs, smooth movement and party chat
+
+Regression coverage now also includes ice geometry and grip, a full bot lap on each new track, both jumps, stacked bridge contacts and pickups, independent room tracks, host-only track changes, DualSense mapping, correction continuity and fractional ticks, audio packet timing and mixing, voice authentication, room isolation and cleanup. Browser QA covers desktop rendering and keyboard input. Physical iPhone Bluetooth mapping, speaker echo cancellation and mobile background behavior need verification on the actual devices.
+
+### October feedback update
+
+Glacier Run's two long straight centre lines are each 914.4m, exactly 60% of their former 1,524m. Each has a tapered 230m split around its midpoint, with two 10m lanes separated by an 8m crevasse at the widest point. Inner and outer edges alternate guarded and exposed sections. End barriers start only on the U-turn bends; their straight approaches stay exposed. Pickups, bots, rematch grids, collision checks and visible surfaces all account for the split.
+
+Projectiles now advance at display-frame frequency using velocity, with soft corrections when 20Hz snapshots arrive and a 150ms extrapolation limit during stalls. Damage/hits remain authoritative. Shotguns mount three barrels pointing out each side. The taser uses a polished steel bulb and rod, animated lightning, a visible range ring, and a blue hit glow.
+
+Lighting uses a prefiltered HDR sky environment generated once at scene creation, warm sunlight, cool fill, ACES tone mapping, reflective clearcoat paint and ice, material roughness/bump maps, fine cracks and grain, longer fogged sightlines, clustered ice crystals and layered desert rock formations. Geometry remains batched and there are no additional full-screen rendering passes. Physical phone performance and speaker/controller behaviour still require device testing.
+
+### Spectator audio and coastal water
+
+Engine audio is now mixed for every nearby live car, including bots, using stereo placement and distance attenuation from the camera’s ground target. A rounded combustion waveform, low rumble and filtered intake noise respond to throttle/load and engine RPM. Five automatic gears have hysteresis and a brief shift dip; revs and volumes ease smoothly. One shared compressor controls the combined engine mix. Sources are released when inaudible, eliminated or muted. The local driver dying does not mute the remaining race.
+
+Coastal water uses displaced swells, irregular fine ripple normals, Fresnel sky reflection, sunlight glints, a generated shallow-water colour map, subtle whitecaps and animated foam along the causeway. It uses two scene draws, with no mirror-camera renders or screen-space reflection passes. Fog blends the water into the existing atmosphere. Regression tests cover spectator listening position, engines for other drivers, rev/gear behaviour, throttle response and audio lifecycle; browser QA exercises a real elimination with opponent engines still active and real Web Audio offline rendering.

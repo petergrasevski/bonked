@@ -35,7 +35,7 @@ export function cameraFrame(chase,cars=[]){
   const ahead=trackAt(START_FRACTION+middle+20/TRACK_LENGTH);
   const angle=Math.hypot(ahead.x-behind.x,ahead.z-behind.z)>1?Math.atan2(ahead.z-behind.z,ahead.x-behind.x):target.angle;
   const t=Math.max(0,Math.min(1,(spread-18)/70)),rise=t*t*(3-2*t);
-  return {x:target.x,z:target.z,angle,pitch:(26+44*rise)*Math.PI/180,spread,from:rear-CAMERA_REAR_SPACE/TRACK_LENGTH,to:leader+CAMERA_LOOKAHEAD/TRACK_LENGTH};
+  return {y:target.y,x:target.x,z:target.z,angle,pitch:(26+44*rise)*Math.PI/180,spread,from:rear-CAMERA_REAR_SPACE/TRACK_LENGTH,to:leader+CAMERA_LOOKAHEAD/TRACK_LENGTH};
 }
 export function raceOrder(a,b){
   const ca=a.car||a,cb=b.car||b;

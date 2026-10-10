@@ -27,6 +27,7 @@ export function recordLaunchInput(player,input,at,now,startAt){
 }
 export const CAR_LENGTH = 4.9;
 export const CAR_WIDTH = 2.1;
+export const NUDGE_DURATION = .1;
 export const TARGET_TRACK_LENGTH = 3466.9092022732743 * .7;
 export const START_FRACTION = .012;
 export const REVERSE_HOLD_MS = 350;
@@ -40,24 +41,73 @@ const anchors = [[-260,150],[-130,150],[0,150],[85,150],[110,110],[80,65],[110,4
 function spline(p0, p1, p2, p3, t) {
   return p1 + .5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
 }
-export const TRACK = Array.from({ length: 1500 }, (_, i) => {
+export const TRACKS = Object.freeze({
+  coast:{id:'coast',name:'Saltwater Circuit',description:'Coastal causeways · technical turns',grip:1},
+  ice:{id:'ice',name:'Glacier Run',description:'2.03 km of ice · split lanes · exposed straights',grip:.12},
+  desert:{id:'desert',name:'Redrock Overpass',description:'Desert figure eight · elevated bridge · two jumps',grip:.85},
+});
+export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
+const trackCache=new Map();
+const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
+function icePoints(){
+  // Each straight is 914.4m: exactly 60% of the former 1,524m.
+  const corners=[[-475.2,-40],[475.2,-40],[475.2,40],[-475.2,40]],points=[];
+  for(let i=0;i<4;i++){
+    const prev=corners[(i+3)%4],p=corners[i],next=corners[(i+1)%4];
+    const before=Math.hypot(prev[0]-p[0],prev[1]-p[1]),after=Math.hypot(next[0]-p[0],next[1]-p[1]);
+    const a=[p[0]+(prev[0]-p[0])*18/before,p[1]+(prev[1]-p[1])*18/before],b=[p[0]+(next[0]-p[0])*18/after,p[1]+(next[1]-p[1])*18/after];
+    for(let j=0;j<18;j++){const t=j/18;points.push({x:(1-t)**2*a[0]+2*(1-t)*t*p[0]+t*t*b[0],z:(1-t)**2*a[1]+2*(1-t)*t*p[1]+t*t*b[1]});}
+    const q=next,len=Math.hypot(q[0]-p[0],q[1]-p[1]),end=[q[0]-(q[0]-p[0])*18/len,q[1]-(q[1]-p[1])*18/len],n=Math.ceil((len-36)/2);
+    for(let j=0;j<n;j++)points.push({x:b[0]+(end[0]-b[0])*j/n,z:b[1]+(end[1]-b[1])*j/n});
+  }
+  return points;
+}
+function desertPoints(){
+  // Crossing at t=0 is a 20m bridge; crossing at pi is the road beneath it.
+  return Array.from({length:1500},(_,i)=>{const t=i/1500*Math.PI*2;return {x:270*Math.sin(t),z:170*Math.sin(2*t),y:20*Math.max(0,Math.cos(t))**4};});
+}
+export function iceSplit(x){
+  if(activeTrack.id!=='ice')return 0;
+  const t=clamp((115-Math.abs(x))/35,0,1);return 4*t*t*(3-2*t);
+}
+// Each side can independently be guarded; inner refers to the split's gap edge.
+export function hasBarrier(fraction,side=0,inner=false){
+  if(activeTrack.id==='ice'){
+    const p=trackAt(fraction);
+    if(inner)return iceSplit(p.x)>.3&&(side<0?p.x>-55&&p.x<30:p.x>-30&&p.x<55);
+    if(Math.abs(p.x)>457.2+1e-6)return true; // only the curved/square U-turn itself
+    if(!side)return hasBarrier(fraction,-1)||hasBarrier(fraction,1);
+    return side<0?p.x>-100&&p.x<-40:p.x>40&&p.x<100;
+  }
+  if(inner)return false;
+  if(activeTrack.id==='desert')return true;
+  const section=Math.floor(((fraction%1+1)%1)*24);return ![3,8,14,19].includes(section);
+}
+export function selectTrack(id='coast'){
+  if(!Object.hasOwn(TRACKS,id))throw new Error('Unknown track');
+  activeTrack=TRACKS[id];
+  if(trackCache.has(id)){
+    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS}=trackCache.get(id));return activeTrack;
+  }
+TRACK = Array.from({ length: 1500 }, (_, i) => {
   const f = i / 1500 * anchors.length, j = Math.floor(f), t = f - j, n = anchors.length;
   return { x: spline(anchors[(j+n-1)%n][0], anchors[j][0], anchors[(j+1)%n][0], anchors[(j+2)%n][0], t), z: spline(anchors[(j+n-1)%n][1], anchors[j][1], anchors[(j+1)%n][1], anchors[(j+2)%n][1], t) };
 });
 // Preserve the requested 30% length reduction while authoring turns independently.
+if(activeTrack.id==='ice')TRACK=icePoints();
+if(activeTrack.id==='desert')TRACK=desertPoints();
 const rawLength=TRACK.reduce((sum,p,i)=>sum+Math.hypot(p.x-TRACK[(i+1)%TRACK.length].x,p.z-TRACK[(i+1)%TRACK.length].z),0);
-for(const p of TRACK){p.x*=TARGET_TRACK_LENGTH/rawLength;p.z*=TARGET_TRACK_LENGTH/rawLength;}
-export function hasBarrier(fraction){const section=Math.floor(((fraction%1+1)%1)*24);return ![3,8,14,19].includes(section);}
+if(activeTrack.id==='coast')for(const p of TRACK){p.x*=TARGET_TRACK_LENGTH/rawLength;p.z*=TARGET_TRACK_LENGTH/rawLength;}
 let length = 0;
-export const SEGMENTS = TRACK.map((p, i) => {
+SEGMENTS = TRACK.map((p, i) => {
   const q = TRACK[(i + 1) % TRACK.length], dx = q.x-p.x, dz = q.z-p.z, len = Math.hypot(dx,dz);
-  const s = { ...p, dx, dz, len, start: length, nx: -dz/len, nz: dx/len };
+  const s = { y:0, ...p, dy:(q.y||0)-(p.y||0), dx, dz, len, start: length, nx: -dz/len, nz: dx/len };
   length += len; return s;
 });
-export const TRACK_LENGTH = length;
+TRACK_LENGTH = length;
 // Smooth widening around bends and three passing plazas, shared by rendering and physics.
-export const PLAZAS=[.10,.30,.70];
-const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
+PLAZAS=activeTrack.id==='coast'?[.10,.30,.70]:[];
+
 for(let i=0;i<SEGMENTS.length;i++){
   const s=SEGMENTS[i],before=SEGMENTS[(i+SEGMENTS.length-10)%SEGMENTS.length],after=SEGMENTS[(i+10)%SEGMENTS.length];
   const bend=Math.abs(angleDelta(Math.atan2(after.dz,after.dx),Math.atan2(before.dz,before.dx)));
@@ -65,32 +115,45 @@ for(let i=0;i<SEGMENTS.length;i++){
   for(const f of PLAZAS){const d=arcDistance(s.start/TRACK_LENGTH,f);if(d<65)halfWidth=Math.max(halfWidth,6+6*(1+Math.cos(Math.PI*d/65))/2);}
   let clearance=Infinity;
   for(let j=0;j<SEGMENTS.length;j+=3){const q=SEGMENTS[j];if(arcDistance(s.start/TRACK_LENGTH,q.start/TRACK_LENGTH)>45)clearance=Math.min(clearance,Math.hypot(s.x-q.x,s.z-q.z));}
-  s.halfWidth=Math.max(6,Math.min(halfWidth,(clearance-3)/2));
+  s.halfWidth=activeTrack.id==='ice'?(9+Math.max(6*clamp((Math.abs(s.x)-420)/40,0,1),5*clamp((155-Math.abs(s.x))/50,0,1))):activeTrack.id==='desert'?9:Math.max(6,Math.min(halfWidth,(clearance-3)/2));
 }
 for(let i=0;i<SEGMENTS.length;i++)SEGMENTS[i].nextHalfWidth=SEGMENTS[(i+1)%SEGMENTS.length].halfWidth;
+OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
+  const f=fraction+offset/TRACK_LENGTH,p=trackAt(f);
+  return {id:`island-${index}-${i}`,fraction:f,x:p.x,z:p.z,radius:1.65,height:1.5};
+}));
+PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
+PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
+  let fraction=START_FRACTION+(90+row*TRACK_LENGTH/PICKUP_ROW_COUNT)/TRACK_LENGTH,p=trackAt(fraction);
+  if(OBSTACLES.some(o=>Math.hypot(o.x-p.x,o.z-p.z)<14)){fraction+=20/TRACK_LENGTH;p=trackAt(fraction);}
+  const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
+  return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
+}).flat();
+  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS});
+  return activeTrack;
+}
 export function trackAt(fraction) {
   const d = ((fraction % 1 + 1) % 1) * TRACK_LENGTH;
   const s = SEGMENTS.find(s => s.start+s.len >= d) || SEGMENTS.at(-1);
   const t = (d-s.start)/s.len;
-  return { x:s.x+s.dx*t, z:s.z+s.dz*t, angle:Math.atan2(s.dz,s.dx), nx:s.nx, nz:s.nz, halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t };
+  return { y:s.y+s.dy*t, grade:s.dy/s.len, x:s.x+s.dx*t, z:s.z+s.dz*t, angle:Math.atan2(s.dz,s.dx), nx:s.nx, nz:s.nz, halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t };
 }
-export function nearestTrack(x,z) {
+export function nearestTrack(x,z,hint=null) {
+  let bestScore=Infinity;
   let best = { distance: Infinity };
   for (const s of SEGMENTS) {
     const t = clamp(((x-s.x)*s.dx+(z-s.z)*s.dz)/(s.len*s.len),0,1);
     const px=s.x+s.dx*t, pz=s.z+s.dz*t, d=Math.hypot(x-px,z-pz);
-    if(d<best.distance) best={x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};
+    const fraction=(s.start+s.len*t)/TRACK_LENGTH;
+    const routePenalty=activeTrack.id==='desert'&&hint!==null?Math.max(0,arcDistance(fraction,hint)-50)*2:0;
+    if(d+routePenalty<bestScore){let rampLift=0;if(activeTrack.id==='desert')for(const ramp of [.23,.73]){const distance=(ramp-fraction)*TRACK_LENGTH;if(distance>=0&&distance<7)rampLift=1-distance/7;}bestScore=d+routePenalty;best={y:s.y+s.dy*t+rampLift,grade:s.dy/s.len,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
   }
   return best;
 }
 export const roadHalfWidth=fraction=>trackAt(fraction).halfWidth;
 export const surfaceHalfWidth=fraction=>roadHalfWidth(fraction)+.6;
-export const OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
-  const f=fraction+offset/TRACK_LENGTH,p=trackAt(f);
-  return {id:`island-${index}-${i}`,fraction:f,x:p.x,z:p.z,radius:1.65,height:1.5};
-}));
 export function constrainObstacles(car){
-  if(car.falling||car.y>1.5)return;
+  if(car.falling||car.y-(car.groundY||0)>1.5)return;
   const c=Math.cos(car.angle),s=Math.sin(car.angle);
   for(const o of OBSTACLES){
     if(Math.hypot(car.x-o.x,car.z-o.z)>o.radius+CAR_LENGTH)continue;
@@ -107,36 +170,47 @@ export function constrainObstacles(car){
 }
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
-  const p=trackAt(fraction), side=slot%2===0?-2.3:2.3;
-  return { gridSlot:slot,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[],shoveTime:0, x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,y:0,vy:0,roll:0,pitch:0,rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
+  const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
+  return { gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:0,rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
   return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
 }
 export function damageLevel(health){return clamp(Math.floor((100-health)/20),0,4);}
 export const healthHandlingFactor=health=>.4+.6*(clamp(health,1,100)-1)/99;
-export function advanceShoves(car,dt){
-  if(car.eliminated||car.finished||car.overturned||car.falling||car.y>.05){car.nudgeTime=0;car.shoveTime=0;return;}
+export function advanceNudge(car,dt){
+  if(car.eliminated||car.finished||car.overturned||car.falling||car.y-(car.groundY||0)>.05){car.nudgeTime=0;return;}
   if(car.nudgeTime>0){
-    const step=Math.min(dt,car.nudgeTime),distance=CAR_WIDTH*step/.2;
+    const step=Math.min(dt,car.nudgeTime),distance=CAR_WIDTH*step/NUDGE_DURATION;
     car.x-=Math.sin(car.nudgeAngle)*car.nudgeDirection*distance;car.z+=Math.cos(car.nudgeAngle)*car.nudgeDirection*distance;
     car.nudgeTime=Math.max(0,car.nudgeTime-step);car.nudgeMoved=true;
   }
-  if(car.shoveTime>0){
-    const step=Math.min(dt,car.shoveTime),distance=CAR_WIDTH*1.75*step/.2;
-    car.x+=car.shoveNX*distance;car.z+=car.shoveNZ*distance;car.shoveTime=Math.max(0,car.shoveTime-step);
-  }
+
 }
 // Only active nudges check contacts; each target can be hit once per press.
 export function resolveNudges(cars,{damage=true}={}){
   for(const a of cars){
-    if(!a.nudgeMoved||a.eliminated||a.y>.05)continue;
+    if(!a.nudgeMoved||a.eliminated||a.y-(a.groundY||0)>.05)continue;
     const nx=-Math.sin(a.nudgeAngle)*a.nudgeDirection,nz=Math.cos(a.nudgeAngle)*a.nudgeDirection;
     for(const b of cars){
-      if(a===b||b.eliminated||b.finished||b.falling||b.y>.05||b.shield>0||a.nudgeHits.includes(b.gridSlot))continue;
-      if((b.x-a.x)*nx+(b.z-a.z)*nz<=0||!carContact(a,b))continue;
+      if(a===b||Math.abs(a.y-b.y)>1.3||b.eliminated||b.finished||b.falling||b.y-(b.groundY||0)>.05||b.shield>0||a.nudgeHits.includes(b.gridSlot))continue;
+      const contact=carContact(a,b);if((b.x-a.x)*nx+(b.z-a.z)*nz<=0||!contact)continue;
       a.nudgeHits=[...a.nudgeHits,b.gridSlot];if(damage)damageCar(b,8);
-      if(!b.eliminated){b.shoveTime=.2;b.shoveNX=nx;b.shoveNZ=nz;b.yawVelocity+=Math.sign(angleDelta(Math.atan2(nz,nx),b.angle))*1.1;}
+      if(!b.eliminated){
+        // The powered sidestep contributes contact velocity. Apply a rigid-body
+        // impulse at the contact patch: quarter hits turn a car, door hits slide it.
+        const inertia=(CAR_LENGTH**2+CAR_WIDTH**2)/12;
+        const ax=contact.x-a.x,az=contact.z-a.z,bx=contact.x-b.x,bz=contact.z-b.z;
+        const ta=ax*nz-az*nx,tb=bx*nz-bz*nx;
+        const va=(a.vx-a.yawVelocity*az)*nx+(a.vz+a.yawVelocity*ax)*nz+CAR_WIDTH/NUDGE_DURATION;
+        const vb=(b.vx-b.yawVelocity*bz)*nx+(b.vz+b.yawVelocity*bx)*nz;
+        const impulse=clamp((va-vb)*1.12/(2+(ta*ta+tb*tb)/inertia),0,13);
+        // Powered shove stability absorbs half the initiating car's recoil.
+        a.vx-=nx*impulse*.5;a.vz-=nz*impulse*.5;b.vx+=nx*impulse;b.vz+=nz*impulse;
+        a.yawVelocity+=(clamp(a.yawVelocity-ta*impulse/inertia,-3,3)-a.yawVelocity)*.5;b.yawVelocity=clamp(b.yawVelocity+tb*impulse/inertia,-3,3);
+        a.impactTime=Math.max(a.impactTime,.11);b.impactTime=Math.max(b.impactTime,.65);
+        a.contactCooldown=b.contactCooldown=.2;
+      }
     }
   }
 }
@@ -145,40 +219,59 @@ export function damageCar(car,amount){
   car.health=Math.max(0,car.health-Math.max(0,amount));
   if(car.health<=0){
     car.wrecked=true;car.eliminated=true;car.item=null;car.ammo=0;car.firing=null;car.shield=0;
-    if(!car.falling){car.vy=Math.max(car.vy,10);car.y=Math.max(car.y,.1);}car.rollVelocity+=5;car.pitchVelocity+=6;
+    if(!car.falling){car.vy=Math.max(car.vy,10);car.y=Math.max(car.y,(car.groundY||0)+.1);}car.rollVelocity+=5;car.pitchVelocity+=6;
     car.vx+=Math.cos(car.angle)*12;car.vz+=Math.sin(car.angle)*12;car.impactTime=2;
   }
   return true;
 }
 export function launchCar(car,up,side=0,fore=0){
   if(car.shield>0||car.wrecked||car.eliminated)return;
-  car.y=Math.max(car.y,.08);car.vy=Math.max(car.vy,up);
+  car.y=Math.max(car.y,(car.groundY||0)+.08);car.vy=Math.max(car.vy,up);
   car.rollVelocity=clamp(car.rollVelocity+side*up*.65,-10,10);
   car.pitchVelocity=clamp(car.pitchVelocity+fore*up*.45,-10,10);
   car.yawVelocity+=side*.8;car.impactTime=1.5;
 }
 function verticalStep(car,dt){
-  if(car.y>0||car.vy>0||car.falling){
+  const floor=car.groundY||0;
+  if(car.y>floor+.001||car.vy>0||car.falling){
     car.vy-=22*dt;car.y+=car.vy*dt;car.roll+=car.rollVelocity*dt;car.pitch+=car.pitchVelocity*dt;
     car.rollVelocity*=Math.exp(-.22*dt);car.pitchVelocity*=Math.exp(-.22*dt);
     if(car.falling){if(car.y< -2.1&&!car.wrecked){car.shield=0;damageCar(car,100);}return;}
-    if(car.y<=0){
-      car.y=0;car.vy=0;
+    if(car.y<=floor){
+      car.y=floor;car.vy=0;
       const upsideDown=Math.cos(car.roll)*Math.cos(car.pitch)<-.15;
       car.overturned=upsideDown;car.roll=upsideDown?Math.PI:0;car.pitch=0;car.rollVelocity=0;car.pitchVelocity=0;
-      car.vx*=car.wrecked?.5:.18;car.vz*=car.wrecked?.5:.18;car.impactTime=.8;
+      const landingDrag=car.rampFlight&&!upsideDown?.98:car.wrecked?.5:.18;
+      car.vx*=landingDrag;car.vz*=landingDrag;car.rampFlight=false;car.impactTime=.8;
     }
   }
 }
 export function wallDamage(speedBefore,speedAfter){return Math.max(0,speedBefore-speedAfter-1.5)*.3;}
 export function constrainRoad(car){
-  const t=nearestTrack(car.x,car.z);
+  const t=nearestTrack(car.x,car.z,car.trackFraction);
+  const oldFloor=car.groundY||0;car.groundY=t.y;
+  if(!car.falling&&car.y<=oldFloor+.001&&car.vy<=0)car.y=t.y;
   // Only the road causeway supports cars. Both exposed edges drop into water.
   if(car.falling)return t;
-  if(t.distance>t.halfWidth+.6){if(car.y<.5)car.falling=true;return t;}
+  if(activeTrack.id==='ice'){
+    const lateral=(car.x-t.x)*t.nx+(car.z-t.z)*t.nz,side=lateral<0?-1:1,gap=iceSplit(t.x);
+    const extent=Math.abs(Math.cos(car.angle)*t.nx+Math.sin(car.angle)*t.nz)*CAR_LENGTH/2+Math.abs(-Math.sin(car.angle)*t.nx+Math.cos(car.angle)*t.nz)*CAR_WIDTH/2;
+    let corrected=Math.abs(lateral),normal=0;
+    if(corrected>t.halfWidth+.6||(gap>.6&&corrected<gap-.6)){if(car.y-t.y<.5)car.falling=true;return t;}
+    if(car.y-t.y<1.4){
+      if(hasBarrier(t.fraction,side)&&corrected>t.halfWidth-extent){corrected=t.halfWidth-extent;normal=-side;}
+      if(gap>.3&&hasBarrier(t.fraction,side,true)&&corrected<gap+extent){corrected=gap+extent;normal=side;}
+      if(normal){car.x+=t.nx*(side*corrected-lateral);car.z+=t.nz*(side*corrected-lateral);
+        const impact=-(car.vx*t.nx+car.vz*t.nz)*normal;if(impact>0){const speed=Math.hypot(car.vx,car.vz);car.vx+=t.nx*normal*impact*1.12;car.vz+=t.nz*normal*impact*1.12;car.impactTime=.3;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speed,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
+      }
+    }
+    if(car.y-t.y<.5&&(corrected>t.halfWidth+.6||corrected<gap))car.falling=true;
+    return t;
+  }
+  if(t.distance>t.halfWidth+.6){if(car.y-t.y<.5)car.falling=true;return t;}
   const extent=Math.abs(Math.cos(car.angle)*t.nx+Math.sin(car.angle)*t.nz)*CAR_LENGTH/2+Math.abs(-Math.sin(car.angle)*t.nx+Math.cos(car.angle)*t.nz)*CAR_WIDTH/2;
   const limit=t.halfWidth-extent;
-  if(car.y<1.4&&hasBarrier(t.fraction)&&t.distance>limit){
+  if(car.y-t.y<1.4&&hasBarrier(t.fraction)&&t.distance>limit){
     const nx=(car.x-t.x)/(t.distance||1),nz=(car.z-t.z)/(t.distance||1);
     car.x=t.x+nx*limit;car.z=t.z+nz*limit;
     const impact=car.vx*nx+car.vz*nz;
@@ -191,41 +284,48 @@ export function constrainRoad(car){
 }
 export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
-  for(const key of ['boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
+  for(const key of ['tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
+  car.tasePhase=(car.tasePhase||0)+dt;
   verticalStep(car,dt);
   if(car.falling&&car.y< -20){car.vx=0;car.vz=0;return;}
   car.nudgeMoved=false;
   const direction=input.nudge===-1?-1:input.nudge===1?1:0;
-  if(direction&&!car.nudgeHeld&&car.nudgeCooldown<=0&&!car.finished&&!car.eliminated&&!car.overturned&&!car.falling&&car.y<.05){car.nudgeTime=.2;car.nudgeCooldown=.8;car.nudgeDirection=direction;car.nudgeAngle=car.angle;car.nudgeHits=[];}
+  if(direction&&!car.nudgeHeld&&car.nudgeCooldown<=0&&!car.finished&&!car.eliminated&&!car.overturned&&!car.falling&&car.y-(car.groundY||0)<.05){car.nudgeTime=NUDGE_DURATION;car.nudgeCooldown=.8;car.nudgeDirection=direction;car.nudgeAngle=car.angle;car.nudgeHits=[];}
   car.nudgeHeld=direction;
   const spinStep=Math.min(car.spinout||0,dt);car.spinout=Math.max(0,(car.spinout||0)-dt);
   if(spinStep)car.angle+=Math.PI*2*spinStep/START_SPIN_SECONDS;
-  const uncontrolled=spinStep>0||car.wrecked||car.overturned||car.y>.05||car.falling;
+  const uncontrolled=spinStep>0||car.wrecked||car.overturned||car.y-(car.groundY||0)>.05||car.falling;
   if(uncontrolled){
-    const drag=car.y>.05||car.falling?.15:car.wrecked?2.4:3;
+    const drag=car.y-(car.groundY||0)>.05||car.falling?.15:car.wrecked?2.4:3;
     car.vx*=Math.exp(-drag*dt);car.vz*=Math.exp(-drag*dt);car.angle+=car.yawVelocity*dt;
   }else{
     if(car.finished)input=NEUTRAL;
     let c=Math.cos(car.angle),s=Math.sin(car.angle);
     let forward=car.vx*c+car.vz*s,lateral=-car.vx*s+car.vz*c;
     const speedFactor=healthSpeedFactor(car.health),maxSpeed=TOP_SPEED*speedFactor*(car.boost>0?1.1:1);
-    const force=car.stun>0?0:input.reverse?-24*speedFactor:forward>=maxSpeed&&car.impactTime>0?0:input.throttle*37.2*speedFactor*(car.boost>0?1.35:1);
-    forward+=force*dt;forward*=Math.exp(-(input.brake?1.7:Math.abs(force)>0?.64:1.5)*dt);
+    const force=car.stun>0?0:input.reverse?-24*speedFactor:forward>=maxSpeed&&car.impactTime>0?0:input.throttle*25.2*speedFactor*(car.boost>0?1.35:1);
+    const steering=clamp(input.steer+(car.tased>0?(Math.sin(car.tasePhase*19)+.5*Math.sin(car.tasePhase*31))*.3:0),-1,1);
+    forward+=force*dt;forward*=Math.exp(-(input.brake?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
-    const handling=healthHandlingFactor(car.health);
-    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:9.5*handling)*dt);
-    const turn=input.steer*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
+    const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1);
+    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:9.5*handling*activeTrack.grip)*dt);
+    const turn=steering*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
-    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:.65)*handling;
+    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:.65)*handling*activeTrack.grip;
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
-  advanceShoves(car,dt);
+  advanceNudge(car,dt);
   const track=constrainRoad(car);
   let diff=track.fraction-car.trackFraction;if(diff>.5)diff-=1;if(diff<-.5)diff+=1;
   if(track.distance<track.halfWidth+5&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
+  if(activeTrack.id==='desert'&&!uncontrolled&&Math.hypot(car.vx,car.vz)>12){
+    for(const ramp of [.23,.73])if(car.trackFraction<ramp&&track.fraction>=ramp&&diff>0&&diff<.01){
+      car.y=track.y+1.08;car.vy=8+Math.hypot(car.vx,car.vz)*.15;car.rampFlight=true;
+    }
+  }
   car.trackFraction=track.fraction;car.lap=clamp(Math.floor(Math.max(0,car.progress))+1,1,LAPS);
 }
 export function carContact(a,b){
@@ -280,18 +380,16 @@ export function rayCar(x,z,dx,dz,car,padding=0){
   }
   return lo;
 }
-export const PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
-export const PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
-  let fraction=START_FRACTION+(90+row*TRACK_LENGTH/PICKUP_ROW_COUNT)/TRACK_LENGTH,p=trackAt(fraction);
-  if(OBSTACLES.some(o=>Math.hypot(o.x-p.x,o.z-p.z)<14)){fraction+=20/TRACK_LENGTH;p=trackAt(fraction);}
-  const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
-  return Array.from({length:count},(_,lane)=>{const offset=-edge+2*edge*lane/(count-1);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
-}).flat();
 export function botInput(car){
   const p=trackAt(car.trackFraction+Math.max(7,Math.hypot(car.vx,car.vz)*.35)/TRACK_LENGTH);
   for(const f of PLAZAS){const d=arcDistance(car.trackFraction,f);if(d<48){const side=car.botLane||1,offset=side*5*Math.min(1,(48-d)/18);p.x+=p.nx*offset;p.z+=p.nz*offset;}}
+  if(activeTrack.id==='ice'&&Math.abs(p.x)<175){
+    const side=car.botLane||(car.gridSlot%2?-1:1),offset=side*8*clamp((175-Math.abs(p.x))/45,0,1);p.x+=p.nx*offset;p.z+=p.nz*offset;
+  }
   const target=Math.atan2(p.z-car.z,p.x-car.x);
   const error=angleDelta(target,car.angle);
-  const ahead=trackAt(car.trackFraction+24/TRACK_LENGTH),bend=Math.abs(angleDelta(ahead.angle,car.angle));const desired=clamp(36-bend*20,13,36);
+  const ahead=trackAt(car.trackFraction+24/TRACK_LENGTH),bend=Math.abs(angleDelta(ahead.angle,car.angle));const desired=clamp(36-bend*(activeTrack.id==='ice'?65:20),activeTrack.id==='ice'?8:13,36);
   return {steer:clamp(error*2.5,-1,1),throttle:Math.hypot(car.vx,car.vz)>desired?0:1,reverse:false,brake:Math.abs(error)>1.1,fire:false};
 }
+
+selectTrack();

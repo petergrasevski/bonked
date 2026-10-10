@@ -9,17 +9,19 @@ export const WEAPONS = {
   chain:{name:'Ball & chain',icon:'●',ammo:1,hint:'swing it into another car'},
   flame:{name:'Flamethrower',icon:'♨',ammo:3,continuous:true,hint:'hold to burn · three seconds of fuel'},
   plasma:{name:'Plasma cannon',icon:'◉',ammo:12,continuous:true,hint:'hold to fire · 12 plasma rounds'},
+  taser:{name:'Taser',icon:'ϟ',ammo:5,continuous:true,hint:'hold to arc · 5 seconds · nearby cars'},
   shotgun:{name:'Shotgun',icon:'↔',ammo:4,hint:'fires from both sides · four shells'},
 };
 export const WEAPON_IDS=Object.keys(WEAPONS);
-export const DAMAGE={pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:12,plasma:8,shotgunPellet:7};
-export function initCombat(room){room.serial??=0;room.projectiles=[];room.effects=[];room.mines=[];room.chains=[];room.pulses=[];}
+export const TASER_RADIUS=CAR_LENGTH*1.75;
+export const DAMAGE={taser:15,pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:12,plasma:8,shotgunPellet:7};
+export function initCombat(room){room.serial??=0;room.arcs=[];room.sounds=[];room.projectiles=[];room.effects=[];room.mines=[];room.chains=[];room.pulses=[];}
 export function giveWeapon(car,id){if(!WEAPONS[id])throw Error('Unknown weapon');car.item=id;car.ammo=WEAPONS[id].ammo;car.fireCooldown=0;}
 const randomWeapon=random=>WEAPON_IDS[Math.floor(random()*WEAPON_IDS.length)];
-export function createPickups(random=Math.random){return PICKUP_LOCATIONS.map((p,id)=>({id,x:p.x,z:p.z,item:randomWeapon(random),readyAt:0}));}
+export function createPickups(random=Math.random){return PICKUP_LOCATIONS.map((p,id)=>({id,x:p.x,y:p.y,z:p.z,item:randomWeapon(random),readyAt:0}));}
 export function collectPickup(car,pickups,now,random=Math.random){
-  if(car.item||car.finished||car.eliminated||car.y>=1||car.overturned||car.falling)return null;
-  const pickup=pickups.filter(p=>now>=p.readyAt&&Math.hypot(car.x-p.x,car.z-p.z)<3).sort((a,b)=>Math.hypot(car.x-a.x,car.z-a.z)-Math.hypot(car.x-b.x,car.z-b.z))[0];
+  if(car.item||car.finished||car.eliminated||car.y-(car.groundY||0)>=1||car.overturned||car.falling)return null;
+  const pickup=pickups.filter(p=>now>=p.readyAt&&Math.abs(car.y-(p.y||0))<1&&Math.hypot(car.x-p.x,car.z-p.z)<3).sort((a,b)=>Math.hypot(car.x-a.x,car.z-a.z)-Math.hypot(car.x-b.x,car.z-b.z))[0];
   if(!pickup)return null;
   giveWeapon(car,pickup.item);pickup.readyAt=now+6000;pickup.item=randomWeapon(random);
   return pickup;
@@ -27,6 +29,7 @@ export function collectPickup(car,pickups,now,random=Math.random){
 const players=room=>[...room.players.values()];
 const targets=(room,owner)=>players(room).filter(p=>p.id!==owner&&!p.car.finished&&(!p.car.eliminated||p.car.wrecked)&&!p.car.falling);
 function effect(room,kind,x,z,now,extra={}){room.effects.push({id:++room.serial,kind,x,z,until:now+(extra.duration||500),color:extra.color||'#ff993d',...extra});if(room.effects.length>160)room.effects.shift();}
+function sound(room,kind,car,now){room.sounds??=[];room.sounds.push({id:++room.serial,kind,x:car.x,y:car.y||0,z:car.z,at:now});if(room.sounds.length>96)room.sounds.shift();}
 function hit(room,p,amount,now,kick={}){
   const c=p.car,protectedByShield=c.shield>0,wasWreck=c.wrecked;
   const damaged=damageCar(c,amount);
@@ -41,7 +44,7 @@ function hit(room,p,amount,now,kick={}){
 function pulse(room,owner,now){
   const c=room.players.get(owner)?.car;if(!c||c.eliminated)return;
   effect(room,'pulse',c.x,c.z,now,{duration:650,color:'#b681ff',radius:16});
-  for(const p of targets(room,owner)){const dx=p.car.x-c.x,dz=p.car.z-c.z,d=Math.hypot(dx,dz);if(d<16&&p.car.y<3){const k=22*(1-d/16)+8;hit(room,p,DAMAGE.pulse,now,{x:dx/(d||1)*k,z:dz/(d||1)*k});}}
+  for(const p of targets(room,owner)){const dx=p.car.x-c.x,dz=p.car.z-c.z,d=Math.hypot(dx,dz);if(d<16&&Math.abs(p.car.y-c.y)<3){const k=22*(1-d/16)+8;hit(room,p,DAMAGE.pulse,now,{x:dx/(d||1)*k,z:dz/(d||1)*k});}}
 }
 function projectile(room,p,kind,angle,now){
   const c=p.car,speed=kind==='plasma'?TOP_SPEED*1.5:kind==='machinegun'?350:65;
@@ -55,7 +58,8 @@ function rayHits(room,p,angle,range,padding=0){
 export function pressWeapon(room,p,now){
   const c=p.car,id=c.item;
   if(room.phase!=='racing'||!id||c.eliminated||c.finished||c.overturned||c.fireCooldown>0)return false;
-  if(id==='flame')return false; // Fuel and damage are integrated only while held.
+  if(id==='flame'||id==='taser')return false; // Fuel and damage are integrated only while held.
+  sound(room,id,c,now);
   if(id==='pulse'){pulse(room,p.id,now);room.pulses.push({owner:p.id,at:now+1000});}
   if(id==='shield'){c.shield=8;effect(room,'shield-hit',c.x,c.z,now,{color:'#66dcff'});}
   if(['rocket','machinegun','plasma'].includes(id))projectile(room,p,id,c.angle,now);
@@ -64,12 +68,12 @@ export function pressWeapon(room,p,now){
     effect(room,'rail',c.x,c.z,now,{toX:c.x+Math.cos(c.angle)*150,toZ:c.z+Math.sin(c.angle)*150,color:'#98ecff',duration:1800});
   }
   if(id==='mine'){
-    room.mines.push({id:++room.serial,owner:p.id,x:c.x-Math.cos(c.angle)*3.5,z:c.z-Math.sin(c.angle)*3.5,armAt:now+100,until:now+180000});
+    room.mines.push({id:++room.serial,owner:p.id,y:c.y,x:c.x-Math.cos(c.angle)*3.5,z:c.z-Math.sin(c.angle)*3.5,armAt:now+100,until:now+180000});
     if(room.mines.length>90)room.mines.shift();
   }
   if(id==='chain'){
     room.chains=room.chains.filter(b=>b.owner!==p.id);
-    room.chains.push({id:++room.serial,owner:p.id,x:c.x-Math.cos(c.angle)*CAR_LENGTH*2,z:c.z-Math.sin(c.angle)*CAR_LENGTH*2,vx:c.vx,vz:c.vz,length:CAR_LENGTH*1.5});
+    room.chains.push({id:++room.serial,owner:p.id,y:c.y,x:c.x-Math.cos(c.angle)*CAR_LENGTH*2,z:c.z-Math.sin(c.angle)*CAR_LENGTH*2,vx:c.vx,vz:c.vz,length:CAR_LENGTH*1.5});
   }
   if(id==='shotgun'){
     const hits=new Map();
@@ -85,12 +89,22 @@ export function pressWeapon(room,p,now){
   return true;
 }
 export function updateCombat(room,dt,now){
+  room.arcs=[];room.sounds=(room.sounds||[]).filter(s=>now-s.at<1500);
+  for(const p of room.players.values())p.car.tased=0;
   for(const p of room.players.values()){
     const c=p.car;c.firing=null;c.fireCooldown=Math.max(0,c.fireCooldown-dt);
     const held=!!(p.simInput||p.input).fire&&!c.eliminated&&!c.finished&&!c.overturned;
     const pressed=held&&!p.fireLatch;p.fireLatch=held;
     if(!c.item)continue;
-    if(c.item==='flame'&&held){
+    if(c.item==='taser'&&held){
+      const used=Math.min(dt,c.ammo);c.ammo=Math.max(0,c.ammo-used);c.firing='taser';
+      for(const q of targets(room,p.id)){
+        if(q.car.eliminated||q.car.shield>0||Math.abs(q.car.y-c.y)>2.5||Math.hypot(q.car.x-c.x,q.car.z-c.z)>TASER_RADIUS)continue;
+        hit(room,q,DAMAGE.taser*used,now);if(!q.car.eliminated)q.car.tased=.08;
+        room.arcs.push({owner:p.id,target:q.id});
+      }
+      if(c.ammo<=.00001){c.item=null;c.ammo=0;}
+    }else if(c.item==='flame'&&held){
       const used=Math.min(dt,c.ammo);c.ammo-=used;c.firing='flame';
       for(const q of targets(room,p.id)){
         const dx=q.car.x-c.x,dz=q.car.z-c.z,along=dx*Math.cos(c.angle)+dz*Math.sin(c.angle),side=Math.abs(-dx*Math.sin(c.angle)+dz*Math.cos(c.angle));
@@ -99,7 +113,7 @@ export function updateCombat(room,dt,now){
       if(c.ammo<=.00001){c.item=null;c.ammo=0;}
     }else if(pressed||(held&&WEAPONS[c.item]?.continuous))pressWeapon(room,p,now);
   }
-  for(const scheduled of room.pulses)if(now>=scheduled.at){pulse(room,scheduled.owner,now);scheduled.done=true;}
+  for(const scheduled of room.pulses)if(now>=scheduled.at){pulse(room,scheduled.owner,now);const c=room.players.get(scheduled.owner)?.car;if(c&&!c.eliminated)sound(room,'pulse',c,now);scheduled.done=true;}
   room.pulses=room.pulses.filter(p=>!p.done);
   for(const shot of room.projectiles){
     if(shot.kind==='rocket'&&shot.target){const target=room.players.get(shot.target)?.car;if(target&&!target.eliminated){const desired=Math.atan2(target.z+target.vz*.1-shot.z,target.x+target.vx*.1-shot.x);shot.angle+=clamp(angleDelta(desired,shot.angle),-3.8*dt,3.8*dt);}}
@@ -107,13 +121,13 @@ export function updateCombat(room,dt,now){
     const hits=targets(room,shot.owner).filter(p=>Math.abs(p.car.y+.6-shot.y)<1.4).map(p=>({p,t:rayCar(shot.x,shot.z,dx,dz,p.car,shot.kind==='plasma'?.55:.1)})).filter(h=>h.t!==null).sort((a,b)=>a.t-b.t);
     const target=hits[0];const oldX=shot.x,oldZ=shot.z;shot.x+=dx*(target?.t??1);shot.z+=dz*(target?.t??1);
     if(shot.kind==='machinegun')effect(room,'tracer',oldX,oldZ,now,{toX:shot.x,toZ:shot.z,duration:80,color:'#ffe7a3'});
-    if(target){hit(room,target.p,DAMAGE[shot.kind],now,{x:Math.cos(shot.angle)*(shot.kind==='rocket'?12:1),z:Math.sin(shot.angle)*(shot.kind==='rocket'?12:1)});shot.until=0;if(shot.kind==='rocket')effect(room,'explosion',shot.x,shot.z,now,{duration:650});}
+    if(target){sound(room,shot.kind==='rocket'?'explosion':'impact',shot,now);hit(room,target.p,DAMAGE[shot.kind],now,{x:Math.cos(shot.angle)*(shot.kind==='rocket'?12:1),z:Math.sin(shot.angle)*(shot.kind==='rocket'?12:1)});shot.until=0;if(shot.kind==='rocket')effect(room,'explosion',shot.x,shot.z,now,{duration:650});}
   }
   room.projectiles=room.projectiles.filter(p=>p.until>now).slice(-180);
   for(const mine of room.mines){if(now<mine.armAt)continue;for(const p of targets(room,null)){
-    const c=p.car;if(c.y>1.4||c.eliminated||Math.hypot(c.x-mine.x,c.z-mine.z)>3)continue;
+    const c=p.car;if(Math.abs(c.y-(mine.y||0))>1.4||c.eliminated||Math.hypot(c.x-mine.x,c.z-mine.z)>3)continue;
     const dx=mine.x-c.x,dz=mine.z-c.z,side=-dx*Math.sin(c.angle)+dz*Math.cos(c.angle),fore=dx*Math.cos(c.angle)+dz*Math.sin(c.angle);
-    hit(room,p,DAMAGE.mine,now,{up:15,side:side+.35*Math.sin(c.angle),fore:fore+Math.hypot(c.vx,c.vz)*.09,x:-dx*3,z:-dz*3});mine.until=0;effect(room,'explosion',mine.x,mine.z,now,{duration:850});break;
+    hit(room,p,DAMAGE.mine,now,{up:15,side:side+.35*Math.sin(c.angle),fore:fore+Math.hypot(c.vx,c.vz)*.09,x:-dx*3,z:-dz*3});mine.until=0;sound(room,'explosion',mine,now);effect(room,'explosion',mine.x,mine.z,now,{duration:850});break;
   }}room.mines=room.mines.filter(m=>m.until>now);
   for(const ball of room.chains){
     const owner=room.players.get(ball.owner),c=owner?.car;if(!c||c.eliminated){ball.dead=true;continue;}
@@ -127,10 +141,10 @@ export function updateCombat(room,dt,now){
       if(separating>0){ball.vx-=nx*separating;ball.vz-=nz*separating;c.vx+=nx*separating*.12;c.vz+=nz*separating*.12;}
       ball.vx-=nx*correction/dt*.5;ball.vz-=nz*correction/dt*.5;
     }
-    ball.anchorX=anchorX;ball.anchorZ=anchorZ;
-    for(const p of targets(room,ball.owner)){if(p.car.y>1.7)continue;if(rayCar(previousX,previousZ,ball.x-previousX,ball.z-previousZ,p.car,.8)!==null){
+    ball.y=c.y;ball.anchorX=anchorX;ball.anchorZ=anchorZ;
+    for(const p of targets(room,ball.owner)){if(Math.abs(p.car.y-c.y)>1.7)continue;if(rayCar(previousX,previousZ,ball.x-previousX,ball.z-previousZ,p.car,.8)!==null){
       const dx=p.car.x-ball.x,dz=p.car.z-ball.z,d=Math.hypot(dx,dz)||1,side=-dx*Math.sin(p.car.angle)+dz*Math.cos(p.car.angle);
-      hit(room,p,DAMAGE.chain,now,{x:dx/d*16,z:dz/d*16,up:7,side:side*.4,fore:.4});ball.dead=true;effect(room,'explosion',ball.x,ball.z,now,{duration:700});break;
+      hit(room,p,DAMAGE.chain,now,{x:dx/d*16,z:dz/d*16,up:7,side:side*.4,fore:.4});ball.dead=true;sound(room,'explosion',ball,now);effect(room,'explosion',ball.x,ball.z,now,{duration:700});break;
     }}
   }room.chains=room.chains.filter(b=>!b.dead);
   room.effects=room.effects.filter(e=>e.until>now);
