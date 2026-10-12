@@ -1,3 +1,7 @@
+import {createScoreMeter} from './score-meter.js';
+import {RoundResults} from './round-results.js';
+import {WeaponHUD} from './weapon-hud.js';
+import {updateControlLegend,DESKTOP_CONTROLS_HTML} from './control-legend.js';
 import {initMetalInteractions} from './metal-ui.js';
 import {createTrackPicker} from './track-picker.js';
 import {readController} from './controller.js';
@@ -19,6 +23,8 @@ const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
 function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();history=[];pending=[];accumulator=0;}
 let world,displayGuide=null;
+const weaponHud=new WeaponHUD($('desktop-weapon'),()=>world);
+const resultsScreen=new RoundResults($('results'));
 const trackPicker=createTrackPicker($('track-picker'),()=>world,id=>send({type:'track',trackId:id}));
 try{world=new World($('scene'));}catch(error){console.error(error);$('dialog').hidden=false;$('dialog-body').innerHTML='<h2>WebGL 2 required.</h2><p>This game needs WebGL 2. Try a recent Safari or Chrome browser with hardware acceleration enabled.</p>';}
 let ws,state=null,myId=null,predicted=null,predictedOthers=[],sequence=0,pending=[],history=[],clockOffset=0,rtt=0,lastState=0,lastFrame=performance.now(),accumulator=0,uiAt=0,retries=0,intent=null,session=null,rosterKey='',phase=null;
@@ -62,7 +68,7 @@ function enter(type){voice.prepare();const name=$('name').value.trim()||'Driver'
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
 function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
-$('leave').onclick=leave;$('results-leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
+$('leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
 async function getShareURL(){let origin=location.origin;if(['localhost','127.0.0.1'].includes(location.hostname)){try{const config=await fetch('/api/config').then(r=>r.json());origin=config.lanURLs[0]||origin;}catch{}}return origin+(session?`/?room=${session.code}`:'/');}
 $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.clipboard.writeText(link);toast('Invite copied.');}catch{const t=document.createElement('textarea');t.value=link;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Invite link copied.':`Invite: ${link}`);}};
 const itemMeta=WEAPONS;
@@ -74,24 +80,13 @@ function onPhaseChange(previousPhase){
 function node(tag,className,text){const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;}
 function chip(color){const el=node('span','car-chip');el.style.setProperty('--car',color);return el;}
 function sortedPlayers(){return [...state.players].sort(raceOrder);}
-function renderResults(){
-  const me=state.players.find(p=>p.id===myId),complete=state.tournamentComplete,champion=state.players.find(p=>p.id===state.tournamentWinnerId);
-  $('results-title').textContent=complete?`${champion?.name||'Winner'} wins!`:'Round results';$('round-label').textContent=`ROUND ${state.round}`;
-  const list=$('standings');list.replaceChildren();
-  for(const result of state.roundResults||[]){const row=node('div','result-row');row.classList.toggle('me',result.id===myId);row.append(node('span','result-rank',String(result.rank)),chip(result.color),node('span','result-name',result.name+(result.id===myId?' (you)':'')),node('span','result-delta',result.delta>0?'+'+result.delta:String(result.delta)),node('strong','result-total',String(result.total)));list.append(row);}
-  $('results-lobby').hidden=state.host!==myId;
-  $('ready').hidden=complete;$('ready').disabled=!!me?.ready;$('ready').textContent=me?.ready?'Ready ✓':'Ready';
-  $('rematch').hidden=!complete||state.host!==myId;$('rematch-hint').textContent=complete&&state.host!==myId?'Waiting for host.':'';
-  const seconds=Math.max(0,Math.ceil((state.nextRoundAt-Date.now()-clockOffset)/1000));const humans=state.players.filter(p=>!p.bot&&p.connected);
-  $('next-round').textContent=complete?`First to ${state.targetScore}`:`${humans.filter(p=>p.ready).length}/${humans.length} ready · Next round in ${seconds}s`;
-}
+function renderResults(){resultsScreen.render(state,myId,Date.now()+clockOffset);}
 let scoreKey='';
 function renderScores(){const key=JSON.stringify([state.round,state.targetScore,state.players.map(p=>[p.id,p.score,p.eliminated])]);if(key===scoreKey)return;scoreKey=key;
-  $('hud-round').textContent='ROUND '+state.round;$('hud-target').textContent=state.targetScore+' TO WIN';
+  $('hud-target').textContent=state.targetScore+' TO WIN';
   const board=$('tournament-scores');board.replaceChildren();
   for(const p of state.players){const score=p.score||0,heat=clamp(score/state.targetScore,0,1),cell=node('div','score-player');cell.classList.toggle('me',p.id===myId);cell.classList.toggle('out',p.eliminated);cell.style.setProperty('--car',p.color);cell.style.setProperty('--glow',(2+heat*8)+'px');cell.title=p.name+': '+score+' / '+state.targetScore;
-    const meter=node('div','score-meter');meter.setAttribute('role','meter');meter.setAttribute('aria-label',p.name+' score');meter.setAttribute('aria-valuemin',Math.min(0,score));meter.setAttribute('aria-valuemax',state.targetScore);meter.setAttribute('aria-valuenow',score);
-    for(let i=0;i<state.targetScore;i++)meter.append(node('i',i<score?'lit':''));
+    const meter=createScoreMeter(p.name,score,state.targetScore);
     cell.append(meter,node('strong','score-total',String(score)),node('span','score-name',p.name));board.append(cell);
   }
 }
@@ -105,7 +100,7 @@ function updateUI(now){
   if(state.phase==='lobby')return;
   renderScores();const serverNow=Date.now()+clockOffset;
   $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);
-  const item=itemMeta[me.item];$('desktop-weapon').textContent=item?`${item.name} · ${['flame','taser'].includes(me.item)?me.ammo.toFixed(1)+'s':me.ammo} · Space to fire`:'No weapon · collect a pickup';$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',taser:'TASER',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[me.item]||'—';$('item-count').textContent=item?(['flame','taser'].includes(me.item)?me.ammo.toFixed(1)+'s':me.ammo>1?'×'+me.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
+  const item=itemMeta[me.item];weaponHud.update(me,{visible:!device.mobile,controller:document.body.classList.contains('controller-connected')});$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',taser:'TASER',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[me.item]||'—';$('item-count').textContent=item?(['flame','taser'].includes(me.item)?me.ammo.toFixed(1)+'s':me.ammo>1?'×'+me.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
   for(const id of ['nudge-left','nudge-right']){$(id).classList.toggle('cooling',(me.nudgeCooldown||0)>0);$(id).setAttribute('aria-disabled',String(me.eliminated||(me.nudgeCooldown||0)>0));}
   const damage=damageLevel(me.health);$('health-number').textContent=Math.ceil(me.health);$('health-status').textContent=me.overturned&&!me.wrecked?'FLIPPED':'';$('health-ui').dataset.level=String(damage);[...$('health-bars').children].forEach((bar,i)=>bar.classList.toggle('lit',i<Math.ceil(me.health/20)));$('shield-time').textContent=me.shield>0?'SHIELD '+me.shield.toFixed(1)+'s':'';
   const remaining=(state.startAt-serverNow)/1000;$('countdown').textContent=state.phase==='countdown'?String(Math.max(1,Math.ceil(remaining))):state.phase==='racing'&&remaining>-.8?'GO!':'';
@@ -115,7 +110,7 @@ function updateUI(now){
 }
 function controls(){
   const pad=readController(navigator.getGamepads?.());
-  $('controller-status').textContent=pad.connected?'Controller connected · left stick · X go · □ brake · R1 fire · L2/R2 nudge':'WASD drive · Space fire · ← / → nudge';
+  updateControlLegend($('controller-status'),pad.connected);
   document.body.classList.toggle('controller-connected',pad.connected);
   if(!pad.throttle&&!pad.brake&&!pad.fire&&!pad.left&&!pad.right&&Math.abs(pad.steer)<.1)controllerBlocked=false;
   if(rotationBlocked()||document.hidden||!document.hasFocus()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()){Object.assign(input,NEUTRAL);controllerBlocked=true;return;}
@@ -127,7 +122,7 @@ function controls(){
   if(held&&brakeSince===null)brakeSince=performance.now();if(!held)brakeSince=null;
   const heldMs=brakeSince===null?-1:performance.now()-brakeSince,mode=brakeMode(heldMs);
   input.reverse=mode.reverse;input.brake=mode.brake;
-  input.fire=fireHeld||gamepad.fire||keys.has('Space')||performance.now()<firePulseUntil;
+  input.fire=fireHeld||gamepad.fire||(keys.has('Enter')||keys.has('NumpadEnter'))||performance.now()<firePulseUntil;
   if(gamepad.left&&!controllerLeft)triggerNudge(-1);if(gamepad.right&&!controllerRight)triggerNudge(1);
   controllerLeft=gamepad.left;controllerRight=gamepad.right;
   input.nudge=performance.now()<nudgeUntil?nudgeDirection:0;
@@ -155,7 +150,7 @@ holdButton('item',held=>{fireHeld=held;if(held)fire();});
 function triggerNudge(direction){if(state?.phase!=='racing'||rotationBlocked()||predicted?.eliminated||predicted?.nudgeCooldown>0)return;nudgeDirection=direction;nudgeUntil=performance.now()+120;}
 function nudge(direction){triggerNudge(direction);flushControls();}
 holdButton('nudge-left',held=>{if(held)nudge(-1);});holdButton('nudge-right',held=>{if(held)nudge(1);});
-window.addEventListener('keydown',e=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||!state||state.phase==='lobby'||rotationBlocked()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen())return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','KeyW','KeyS','KeyA','KeyD','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if(e.code==='Space'&&!e.repeat)fire();if((e.code==='ArrowLeft'||e.code==='KeyQ')&&!e.repeat)nudge(-1);if((e.code==='ArrowRight'||e.code==='KeyR')&&!e.repeat)nudge(1);unlockAudio();}});
+window.addEventListener('keydown',e=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement||e.target.isContentEditable||((e.code==='Enter'||e.code==='NumpadEnter')&&e.target.closest?.('button,a'))||!state||state.phase==='lobby'||rotationBlocked()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen())return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','NumpadEnter','KeyW','KeyS','KeyA','KeyD','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if((e.code==='Enter'||e.code==='NumpadEnter')&&!e.repeat)fire();if((e.code==='ArrowLeft'||e.code==='KeyQ')&&!e.repeat)nudge(-1);if((e.code==='ArrowRight'||e.code==='KeyR')&&!e.repeat)nudge(1);unlockAudio();}});
 window.addEventListener('keyup',e=>{keys.delete(e.code);flushControls();});window.addEventListener('blur',releaseControls);
 document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){accumulator=0;engineAudio?.stop();weaponAudio?.stop();}});
 portrait.addEventListener('change',()=>{releaseControls();world?.resize();});
@@ -166,7 +161,7 @@ for(const event of ['contextmenu','selectstart','dragstart'])document.addEventLi
 for(const event of ['touchstart','touchmove','touchend'])document.addEventListener(event,e=>{if(e.target instanceof Element&&e.target.closest('.controls,#scene')&&e.cancelable)e.preventDefault();},{passive:false});
 for(const event of ['gesturestart','gesturechange','gestureend','dblclick'])document.addEventListener(event,e=>{if(document.body.classList.contains('playing')&&!editable(e.target)&&e.cancelable)e.preventDefault();},{passive:false});
 $('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{displayGuide.show();}};
-$('howto').onclick=()=>{$('settings').hidden=true;releaseControls();$('dialog-body').innerHTML='<h2>Controls</h2><p>Hold GO to accelerate. Hold LEFT or RIGHT to steer. Holding both keeps the steering centred.</p><p>Hold DRIFT/R briefly to slide, or for 0.35 seconds to reverse.</p><p>Tap a top corner to NUDGE left or right. Shove nearby cars sideways and deal 8 damage; each nudge has a short cooldown.</p><p>Drive through a floating weapon to collect it. Tap WEAPON to use it. Hold for machine gun, plasma, flamethrower or taser. The taser arcs to nearby cars, draining health and disrupting steering for up to five seconds.</p><p>Start holding GO at 1 second remaining (±20 ms) for a boost. Holding from more than 2 seconds early causes a spinout.</p><p>Stay ahead of the red cutoff line. Last car standing wins the round; otherwise finish three laps. Earn 3 points for first, 2 for second, and −2 for last. First to 15 wins with up to four cars; first to 10 with five or six. Tap Ready between rounds, or wait five seconds. The next grid starts where the winner finished. Water is fatal.</p><p>Computer: W accelerate · A/D steer · S brake, then reverse · Space weapon · ←/→ nudge left/right.</p><p>Controller: left stick steers · X accelerates · Square brakes/reverses · R1 fires · L2/R2 nudge. Pair a DualSense in your phone’s Bluetooth settings, then press a controller button.</p><p>Party chat is available when you join a lobby. Your mic starts off; tap the microphone button to enable it or mute it. You can hear others while your mic is off. Headphones help prevent speaker feedback.</p>';$('dialog').hidden=false;};
+$('howto').onclick=()=>{$('settings').hidden=true;releaseControls();$('dialog-body').innerHTML='<h2>Controls</h2><p>Hold GO to accelerate. Hold LEFT or RIGHT to steer. Holding both keeps the steering centred.</p><p>Hold DRIFT/R briefly to slide, or for 0.35 seconds to reverse.</p><p>Tap a top corner to NUDGE left or right. Shove nearby cars sideways and deal 8 damage; each nudge has a short cooldown.</p><p>Drive through a floating weapon to collect it. Tap WEAPON to use it. Hold for machine gun, plasma, flamethrower or taser. The taser arcs to nearby cars, draining health and disrupting steering for up to five seconds.</p><p>Start holding GO at 1 second remaining (±20 ms) for a boost. Holding from more than 2 seconds early causes a spinout.</p><p>Stay ahead of the red cutoff line. Last car standing wins the round; otherwise finish three laps. Earn 3 points for first, 2 for second, and −2 for last. First to 15 wins with up to four cars; first to 10 with five to eight. Tap Ready between rounds, or wait five seconds. The next grid starts where the winner finished. Water is fatal.</p><div class="computer-controls-guide">'+DESKTOP_CONTROLS_HTML+'</div><p><kbd>W</kbd> accelerates; <kbd>A</kbd> / <kbd>D</kbd> steer. <kbd>S</kbd> brakes, then reverses. Press <kbd>Enter ↵</kbd> to fire, or hold it for continuous weapons.</p><p>Controller: left stick steers · X accelerates · Square brakes/reverses · R1 fires · L2/R2 nudge. Pair a DualSense in your phone’s Bluetooth settings, then press a controller button.</p><p>Party chat is available when you join a lobby. Your mic starts off; tap the microphone button to enable it or mute it. You can hear others while your mic is off. Headphones help prevent speaker feedback.</p>';$('dialog').hidden=false;};
 $('phone').onclick=async()=>{$('settings').hidden=true;releaseControls();const url=await getShareURL();const isPublic=new URL(url).protocol==='https:';const content=$('dialog-body');content.replaceChildren(node('h2','','Open on your phone'),node('p','',isPublic?'Scan the code on your phone, or share the link with your friends. It works over Wi-Fi or mobile data.':'Connect your phone to the same Wi-Fi as this laptop, then scan the code. Keep the laptop awake and the server running.'));const img=node('img','qr');img.alt='QR code to open the game on your phone';img.src=`/api/qr?url=${encodeURIComponent(url)}`;const link=node('a','phone-link',url);link.href=url;content.append(img,link,node('p','',location.hostname.endsWith('.trycloudflare.com')?'This preview runs on the laptop. Keep it awake.':isPublic?'Share this link to join from another device.':'Keep the laptop awake while playing on this local address.'));$('dialog').hidden=false;};
 $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>{if(e.target===$('dialog'))$('dialog').hidden=true;};
 $('settings-open').onclick=()=>{releaseControls();$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;$('settings-close').focus();};
@@ -190,6 +185,7 @@ function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-last
   while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<250&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<250){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
   const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);trackPicker.tick(now);
   if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
+  if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
   if(now-uiAt>100){uiAt=now;updateUI(now);}
   const listening=raceListener(rendered,world?.follow),audible=soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible);engineAudio?.update(rendered,listening,audible);
