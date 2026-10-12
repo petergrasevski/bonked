@@ -24,7 +24,7 @@ export function collectPickup(car,pickups,now,random=Math.random){
   if(car.item||car.finished||car.eliminated||car.y-(car.groundY||0)>=1||car.overturned||car.falling)return null;
   const pickup=pickups.filter(p=>now>=p.readyAt&&Math.abs(car.y-(p.y||0))<1&&Math.hypot(car.x-p.x,car.z-p.z)<3).sort((a,b)=>Math.hypot(car.x-a.x,car.z-a.z)-Math.hypot(car.x-b.x,car.z-b.z))[0];
   if(!pickup)return null;
-  giveWeapon(car,pickup.item);pickup.readyAt=now+6000;pickup.item=randomWeapon(random);
+  giveWeapon(car,pickup.item);pickup.readyAt=now+4500;pickup.item=randomWeapon(random);
   return pickup;
 }
 const players=room=>[...room.players.values()];

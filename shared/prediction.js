@@ -1,9 +1,9 @@
-import {angleDelta,stepCar,collideDesertMoles,collideCars,resolveNudges,NEUTRAL} from './game.js';
+import {angleDelta,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,NEUTRAL} from './game.js';
 // All cars advance on one timeline, using the actual replicated steering input.
 // Linear extrapolation loses the turn rate and snaps back at every snapshot.
 export function predictFleet(local,others,input,dt){
   const fleet=[local,...others],before=fleet.map(car=>({x:car.x,y:car.y,z:car.z,angle:car.angle,pitch:car.pitch||0,roll:car.roll||0,progress:car.progress||0}));
-  for(const car of fleet){stepCar(car,car===local?input:car.input||NEUTRAL,dt);car.raceTime=(car.raceTime||0)+dt;collideDesertMoles(car,car.raceTime,{damage:false});}
+  for(const car of fleet){stepCar(car,car===local?input:car.input||NEUTRAL,dt);car.raceTime=(car.raceTime||0)+dt;collideDesertMoles(car,car.raceTime,{damage:false});collideCoastalCrabs(car,car.raceTime);}
   resolveNudges(fleet,{damage:false});
   collideCars(fleet,{road:true,damage:false});
   // Measure the final poses: nudges and contact resolution move the chassis too.

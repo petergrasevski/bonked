@@ -1,5 +1,5 @@
 // One deterministic weather clock per race, used by the server and prediction.
-export const STORM_DELAY=15,STORM_DURATION=20,STORM_CLEAR=60,STORM_PERIOD=80;
+export const STORM_DELAY=15,STORM_DURATION=28,STORM_CLEAR=45,STORM_PERIOD=STORM_DURATION+STORM_CLEAR;
 const clamp=v=>Math.max(0,Math.min(1,v));
 const smooth=v=>{v=clamp(v);return v*v*(3-2*v);};
 export function desertStormAt(seconds){

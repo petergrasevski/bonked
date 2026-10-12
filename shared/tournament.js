@@ -8,7 +8,7 @@ export function scoreRound(room,now){
   room.winnerId=order[0]?.id??null;
   room.nextStartFraction=order[0]?.car.trackFraction??room.roundStartFraction;
   room.roundResults=order.map((p,index)=>{
-    const delta=order.length>1&&index===order.length-1?-2:PLACE_POINTS[index]??0;p.score=(p.score||0)+delta;p.ready=!!p.bot;
+    const award=order.length>1&&index===order.length-1?-2:PLACE_POINTS[index]??0,previous=Math.max(0,p.score||0);p.score=Math.max(0,previous+award);const delta=p.score-previous;p.ready=!!p.bot;
     return {id:p.id,name:p.name,color:p.color,rank:index+1,delta,total:p.score};
   });
   const champion=order.filter(p=>p.score>=(room.targetScore??targetScoreForPlayers(room.players.size))).sort((a,b)=>b.score-a.score||raceOrder(a,b))[0];

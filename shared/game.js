@@ -1,3 +1,4 @@
+import {COAST_BEACH_SECTIONS,coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
 import {boostLayout,boostSpeed} from './boost-pads.js';
 import {wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
@@ -52,7 +53,7 @@ export const TRACKS = Object.freeze({
   desert:{id:'desert',name:'Redrock Overpass',description:'Mountain bridge · four jumps · mole flats',grip:.85},
 });
 export let BOOST_PADS;
-export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
+export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
 const trackCache=new Map(),landscapeCache=new Map();
 export function getLandscape(){if(!landscapeCache.has(activeTrack.id))landscapeCache.set(activeTrack.id,createLandscape({id:activeTrack.id,segments:SEGMENTS,trackLength:TRACK_LENGTH,trackAt,nearestTrack,hasBarrier}));return landscapeCache.get(activeTrack.id);}
 export function terrainAt(x,z,ceiling=Infinity){const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=-4?{y:-4,nx:0,ny:1,nz:0}:null);}
@@ -92,13 +93,13 @@ export function hasBarrier(fraction,side=0,inner=false){
   }
   if(inner)return false;
   if(activeTrack.id==='desert')return desertHasBarrier(fraction);
-  const section=Math.floor(((fraction%1+1)%1)*24);return ![3,8,14,19].includes(section);
+  const section=Math.floor(((fraction%1+1)%1)*24);return !COAST_BEACH_SECTIONS.includes(section);
 }
 export function selectTrack(id='coast'){
   if(!Object.hasOwn(TRACKS,id))throw new Error('Unknown track');
   activeTrack=TRACKS[id];
   if(trackCache.has(id)){
-    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS}=trackCache.get(id));return activeTrack;
+    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS}=trackCache.get(id));return activeTrack;
   }
 TRACK = Array.from({ length: 1500 }, (_, i) => {
   const f = i / 1500 * anchors.length, j = Math.floor(f), t = f - j, n = anchors.length;
@@ -135,6 +136,7 @@ OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
 }));
 if(activeTrack.id==='desert')OBSTACLES=DESERT_CACTI.map(({fraction,side},i)=>{const p=trackAt(fraction),lateral=side*(p.halfWidth-1.5);return {id:`cactus-${i}`,kind:'cactus',fraction,x:p.x+p.nx*lateral,z:p.z+p.nz*lateral,y:p.y,radius:.65,height:7,angle:p.angle};});
 MOLES=activeTrack.id==='desert'?desertMoles(TRACK_LENGTH).map(m=>{const p=trackAt(m.fraction);return {...m,x:p.x+p.nx*m.lateral,y:p.y,z:p.z+p.nz*m.lateral,angle:p.angle};}):[];
+CRABS=activeTrack.id==='coast'?coastalCrabs(trackAt):[];
 PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
 PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
   let fraction=START_FRACTION+(90+row*TRACK_LENGTH/PICKUP_ROW_COUNT)/TRACK_LENGTH,p=trackAt(fraction);
@@ -143,7 +145,7 @@ PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
 }).flat();
   BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:OBSTACLES});
-  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS});
+  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS});
   return activeTrack;
 }
 export function trackAt(fraction) {
@@ -205,6 +207,7 @@ export function collideDesertMoles(car,raceSeconds=car.raceTime||0,{damage=true}
   }
   return impacts;
 }
+export function collideCoastalCrabs(car,seconds=car.raceTime||0){collideCrabs(car,CRABS,seconds,{length:CAR_LENGTH,width:CAR_WIDTH});}
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
   const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
