@@ -112,6 +112,7 @@ wss.on('connection',(ws,req)=>{
     const now=Date.now();if(now-client.window>1000){client.window=now;client.budget=0;}if(++client.budget>150){ws.close(1008,'Too many messages');return;}
     let msg;try{msg=JSON.parse(data);}catch{return fail(ws,'Invalid message.');}if(!msg||typeof msg!=='object')return;
     if(msg.type==='ping')return send(ws,{type:'pong',sent:msg.sent,time:now,diagnostics:diagnostics.last});
+    if(msg.type==='server-pong'){if(msg.id===client.appPingId&&client.appPingAt){client.applicationRttMs=performance.now()-client.appPingAt;diagnostics.applicationPing.add(client.applicationRttMs);client.appPingAt=null;}return;}
     if(msg.type==='net-report'){diagnostics.client(client,msg.metrics,now);return;}
     if(msg.type==='create'||msg.type==='join'){
       if(client.room)return fail(ws,'Already in a room.');
@@ -199,7 +200,7 @@ const timer=setInterval(()=>{
   for(const room of publishRooms)if(rooms.has(room.code))publish(room);
 },8);
 const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),10000);
-const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
+const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
 for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();}selectTrack('coast');

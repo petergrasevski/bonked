@@ -52,6 +52,7 @@ function connect(){
   ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});});
   ws.addEventListener('message',event=>{
     let msg;try{msg=JSON.parse(event.data);}catch{return;}
+    if(msg.type==='server-ping'){send({type:'server-pong',id:msg.id});return;}
     if(msg.type==='pong'){rtt=Date.now()-msg.sent;const measuredOffset=msg.time+rtt/2-Date.now();clockOffset=network.ping===null?measuredOffset:clockOffset*.9+measuredOffset*.1;network.pong(rtt,msg.diagnostics);network.updatePing(true);return;}
     if(msg.type==='welcome'){resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();remoteSnapshots.reset();network.resetStream();voice.join(session);setBusy(false);return;}
     if(msg.type==='error'){toast(msg.message);setBusy(false);if(resuming){resuming=false;clearRoom();}return;}

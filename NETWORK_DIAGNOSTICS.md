@@ -30,14 +30,19 @@ Server metrics:
 - `tickMs`: simulation step cost across all rooms.
 - `inputGapMs`: spacing of incoming controls, normally about 16.7 ms. The first
   packet after an idle lobby or reconnect can have a large gap.
-- `transportRttMs`: WebSocket control-frame RTT, independently of the browser's JS.
+- `applicationRttMs`: server-initiated ping echoed by the browser, measuring the
+  full round trip without relying on synchronized clocks.
+- `transportHopRttMs`: native WebSocket control-frame RTT. A hosting proxy may
+  answer these itself, so this can measure only the server-to-proxy hop. Do not
+  interpret a low value as low player latency.
 - `droppedMs`: wall time discarded after stalls longer than 250 ms.
 - `staleInputs`: car-ticks where input was over one second old and neutralized.
 - `backpressure`: sends skipped because a socket had over 128 KiB queued.
 - `snapshotKBps`: uncompressed outgoing state bytes per millisecond (decimal KB/s).
 
-Interpretation: high application RTT with low transport RTT and high browser
-frame times points to client rendering/JS load. Low server tickHz or high event
+Interpretation: high browser frame times indicate client rendering/JS load.
+Application RTT includes network delay and stalls at either endpoint; the two
+application ping directions help correlate reports without clock assumptions. Low server tickHz or high event
 loop delay points to the server. Stable tickHz/frame times but irregular snapshot
 gaps points to delivery jitter. Large corrections despite stable timing indicate
 prediction mismatch rather than insufficient bandwidth.
