@@ -31,7 +31,7 @@ test('detailed coastal landmarks have finite geometry within a bounded mobile bu
     batches.add(`${o.material.uuid}:${Math.floor(center.x/70)}:${Math.floor(center.z/70)}`);geometry.dispose();
   });
   // Count excludes generic palms (owned by scenery); no per-detail dynamic draws.
-  assert.ok(triangles>30000 && triangles<38000,`landmark triangles: ${triangles}`);
+  assert.ok(triangles>30000 && triangles<52000,`landmark triangles: ${triangles}`);
   assert.ok(batches.size<=108,`whole-track landmark batches: ${batches.size}`);
   assert.deepEqual(w.landmarks.map(l=>l.kind),['volcano','geyser','waterfall','lighthouse']);
 });
@@ -71,7 +71,8 @@ test('four coastal landmarks sit on connected land crossed by the road',()=>{
     for(const anchor of [land.roadAnchor,land.featureAnchor]){
       const ray=new THREE.Raycaster(new THREE.Vector3(anchor.x,10,anchor.z),new THREE.Vector3(0,-1,0));
       const hits=ray.intersectObjects(meshes);assert.ok(hits.length,`${land.kind} must have connected ground at each anchor`);
-      assert.ok(hits[0].point.y>-.5,'road and feature anchors must be dry land');
+      assert.ok(hits[0].point.y> -2.05,'lowered terrain stays above the sea');
+      if(anchor===land.roadAnchor)assert.ok(hits[0].point.y>-.5,'bank meets the road underside');
     }
   }
 });

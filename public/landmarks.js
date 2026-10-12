@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {addConnectedLand,buildCoastalBeaches} from './coastal-terrain.js';
 import {createIslandBand} from './scenery.js';
-import {trackAt,nearestTrack,TRACK_LENGTH,hasBarrier} from '../shared/game.js';
+import {trackAt,nearestTrack,TRACK_LENGTH,hasBarrier,getLandscape} from '../shared/game.js';
 export const LANDMARKS=[
   {kind:'island',name:'Palm Island',fraction:.025},
   {kind:'volcano',name:'Ember Caldera',fraction:.15},
@@ -74,7 +74,7 @@ export function buildLandmarks(w){
       w.box(0,6,0,1.1,.8,(p.halfWidth+2)*2,0xbca97d,gate);
       continue;
     }
-    if(['volcano','geyser','ruins','waterfall'].includes(landmark.kind))addConnectedLand(w,landmark,x,z,radius);
+    if(['volcano','geyser','ruins','waterfall'].includes(landmark.kind)){addConnectedLand(w,landmark,x,z,radius);g.position.y=(getLandscape().surface.sample(x,z)?.y??-1.78)+.14;}
     else cylinder(0,-2,0,radius,radius+2,3.4,0x625c51,32);
     // Broken coastal edges catch the low sun without turning islands into round drums.
     for(let i=0;i<18;i++){const a=i*2.39996,r=radius-.3+(i%3)*.35;rock(Math.cos(a)*r,-.75,Math.sin(a)*r,1.2+(i%4)*.24,i%3?0x625c51:0x998778,i);}

@@ -1,3 +1,5 @@
+import {wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
+import {createLandscape} from './landscape.js';
 import {DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
 export const MAX_PLAYERS = 6;
 export const LAPS = 3;
@@ -48,7 +50,9 @@ export const TRACKS = Object.freeze({
   desert:{id:'desert',name:'Redrock Overpass',description:'Mountain bridge · four jumps · mole flats',grip:.85},
 });
 export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
-const trackCache=new Map();
+const trackCache=new Map(),landscapeCache=new Map();
+export function getLandscape(){if(!landscapeCache.has(activeTrack.id))landscapeCache.set(activeTrack.id,createLandscape({id:activeTrack.id,segments:SEGMENTS,trackLength:TRACK_LENGTH,trackAt,nearestTrack,hasBarrier}));return landscapeCache.get(activeTrack.id);}
+export function terrainAt(x,z,ceiling=Infinity){const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=-4?{y:-4,nx:0,ny:1,nz:0}:null);}
 const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
 function icePoints(){
   // Each straight is 914.4m: exactly 60% of the former 1,524m.
@@ -259,11 +263,12 @@ export function launchCar(car,up,side=0,fore=0){
   car.yawVelocity+=side*.8;car.impactTime=1.5;
 }
 function verticalStep(car,dt){
+  if(car.edgeBalance&&!car.falling)return;
   const floor=car.groundY||0;
   if(car.y>floor+.001||car.vy>0||car.falling){
     car.vy-=22*dt;car.y+=car.vy*dt;car.roll+=car.rollVelocity*dt;car.pitch+=car.pitchVelocity*dt;
     car.rollVelocity*=Math.exp(-.22*dt);car.pitchVelocity*=Math.exp(-.22*dt);
-    if(car.falling){if(car.y< -2.1&&!car.wrecked){car.shield=0;damageCar(car,100);}return;}
+    if(car.falling)return;
     if(car.y<=floor){
       car.y=floor;car.vy=0;
       const upsideDown=Math.cos(car.roll)*Math.cos(car.pitch)<-.15;
@@ -274,17 +279,36 @@ function verticalStep(car,dt){
   }
 }
 export function wallDamage(speedBefore,speedAfter){return Math.max(0,speedBefore-speedAfter-1.5)*.3;}
+export function roadSurfaceAt(x,z,hint){
+  const t=nearestTrack(x,z,hint),gap=iceSplit(t.x),lateral=Math.abs((x-t.x)*t.nx+(z-t.z)*t.nz);
+  return t.distance<=t.halfWidth+.6&&(gap<.01||lateral>=gap)?t:null;
+}
+function supportRoad(car,t){
+  if(car.falling||car.y>t.y+.5&&!car.edgeBalance)return;
+  // Interior driving retains the existing cheap path. Only edge contacts sample
+  // individual tyres, never the scenery mesh or a second physics engine.
+  const lateral=Math.abs((car.x-t.x)*t.nx+(car.z-t.z)*t.nz),gap=iceSplit(t.x),extent=CAR_LENGTH/2;
+  if(t.distance+extent<t.halfWidth+.6&&(gap<.01||lateral-extent>gap)){car.supportedWheels=4;car.edgeBalance=false;return;}
+  const support=wheelSupports(car,(x,z)=>roadSurfaceAt(x,z,car.trackFraction));car.supportedWheels=support.length;
+  car.edgeBalance=support.length>0&&support.length<4;
+  if(!support.length||car.edgeBalance&&car.y<t.y-.4){
+    car.falling=true;car.edgeBalance=false;car.offRoadTime=0;car.vy=Math.min(car.vy,car.edgeVy||0);
+    // Releasing the contact pivot carries its angular COM velocity into the fall.
+    car.vx+=(-Math.sin(car.angle)*car.rollVelocity-Math.cos(car.angle)*car.pitchVelocity)*.5;
+    car.vz+=(Math.cos(car.angle)*car.rollVelocity-Math.sin(car.angle)*car.pitchVelocity)*.5;
+  }
+}
 export function constrainRoad(car){
   const t=nearestTrack(car.x,car.z,car.trackFraction);
-  const oldFloor=car.groundY||0;car.groundY=t.y;
-  if(!car.falling&&car.y<=oldFloor+.001&&car.vy<=0)car.y=t.y;
-  // Only the road causeway supports cars. Both exposed edges drop into water.
   if(car.falling)return t;
+  const oldFloor=car.groundY||0;car.groundY=t.y;
+  if(!car.edgeBalance&&car.y<=oldFloor+.001&&car.vy<=0)car.y=t.y;
+  // Barriers still stop grounded cars; exposed edges use individual tyre support.
   if(activeTrack.id==='ice'){
     const lateral=(car.x-t.x)*t.nx+(car.z-t.z)*t.nz,side=lateral<0?-1:1,gap=iceSplit(t.x);
     const extent=Math.abs(Math.cos(car.angle)*t.nx+Math.sin(car.angle)*t.nz)*CAR_LENGTH/2+Math.abs(-Math.sin(car.angle)*t.nx+Math.cos(car.angle)*t.nz)*CAR_WIDTH/2;
     let corrected=Math.abs(lateral),normal=0;
-    if(corrected>t.halfWidth+.6||(gap>.6&&corrected<gap-.6)){if(car.y-t.y<.5)car.falling=true;return t;}
+    if(corrected>t.halfWidth+.6||(gap>.6&&corrected<gap-.6)){supportRoad(car,t);return t;}
     if(car.y-t.y<1.4){
       if(hasBarrier(t.fraction,side)&&corrected>t.halfWidth-extent){corrected=t.halfWidth-extent;normal=-side;}
       if(gap>.3&&hasBarrier(t.fraction,side,true)&&corrected<gap+extent){corrected=gap+extent;normal=side;}
@@ -292,10 +316,10 @@ export function constrainRoad(car){
         const impact=-(car.vx*t.nx+car.vz*t.nz)*normal;if(impact>0){const speed=Math.hypot(car.vx,car.vz);car.vx+=t.nx*normal*impact*1.12;car.vz+=t.nz*normal*impact*1.12;car.impactTime=.3;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speed,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
       }
     }
-    if(car.y-t.y<.5&&(corrected>t.halfWidth+.6||corrected<gap))car.falling=true;
+    supportRoad(car,t);
     return t;
   }
-  if(t.distance>t.halfWidth+.6){if(car.y-t.y<.5)car.falling=true;return t;}
+  if(t.distance>t.halfWidth+.6){supportRoad(car,t);return t;}
   const extent=Math.abs(Math.cos(car.angle)*t.nx+Math.sin(car.angle)*t.nz)*CAR_LENGTH/2+Math.abs(-Math.sin(car.angle)*t.nx+Math.cos(car.angle)*t.nz)*CAR_WIDTH/2;
   const limit=t.halfWidth-extent;
   if(car.y-t.y<1.4&&hasBarrier(t.fraction)&&t.distance>limit){
@@ -306,7 +330,7 @@ export function constrainRoad(car){
       if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}
     }
   }
-  constrainObstacles(car);
+  constrainObstacles(car);supportRoad(car,t);
   return t;
 }
 export function stepCar(car, input, dt=STEP) {
@@ -335,7 +359,7 @@ export function stepCar(car, input, dt=STEP) {
     forward+=force*dt;forward*=Math.exp(-(input.brake?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
-    const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1);
+    const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
     lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:9.5*handling*activeTrack.grip)*dt);
     const turn=steering*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
@@ -346,7 +370,13 @@ export function stepCar(car, input, dt=STEP) {
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
   advanceNudge(car,dt);
   const track=constrainRoad(car);
-  if(!car.falling&&!car.overturned&&!car.wrecked&&car.y<=car.groundY+.001&&car.vy<=0){
+  if(car.edgeBalance&&!car.falling){balanceOnWheels(car,wheelSupports(car,(x,z)=>roadSurfaceAt(x,z,car.trackFraction)),dt);supportRoad(car,nearestTrack(car.x,car.z,car.trackFraction));}
+  if(car.falling){
+    car.offRoadTime=(car.offRoadTime||0)+dt;collideTerrain(car,terrainAt,dt);
+    // A fall remains a lost race, but its wreck keeps colliding and tumbling.
+    if(!car.wrecked&&(car.offRoadTime>1.2||activeTrack.id==='coast'&&car.y< -2.1)){car.shield=0;damageCar(car,100);}
+  }
+  if(!car.edgeBalance&&!car.falling&&!car.overturned&&!car.wrecked&&car.y<=car.groundY+.001&&car.vy<=0){
     // Match the actual road normal in the same YXZ body basis as the renderer.
     // Airborne impact rotations remain entirely ballistic.
     const grade=track.grade||0,along=grade*(Math.cos(car.angle)*track.nz-Math.sin(car.angle)*track.nx),across=grade*(-Math.sin(car.angle)*track.nz-Math.cos(car.angle)*track.nx),blend=1-Math.exp(-dt*14);

@@ -7,7 +7,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, WebSocket } from 'ws';
 import QRCode from 'qrcode';
-import { TRACKS,selectTrack,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,botInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
+import { TRACKS,selectTrack,getLandscape,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,botInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
 import { createChase, updateChase, chaseSnapshot, cameraFrame } from './shared/chase.js';
 import { initCombat, createPickups, collectPickup, WEAPONS, pressWeapon, updateCombat } from './shared/combat.js';
 import { targetScoreForPlayers, scoreRound, nextRoundDue } from './shared/tournament.js';
@@ -28,7 +28,7 @@ const server=http.createServer(async(req,res)=>{
       if(!value||value.length>512||!/^https?:\/\//.test(value)){res.writeHead(400);return res.end();}
       res.setHeader('Content-Type','image/svg+xml');return res.end(await QRCode.toString(value,{type:'svg',margin:1,color:{dark:'#101d26',light:'#ffffff'}}));
     }
-    const routes={'/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
+    const routes={'/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
@@ -187,6 +187,8 @@ const timer=setInterval(()=>{
 },8);
 const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.ws.ping();if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
+// Prebuild contact meshes before accepting players, never on the first fall.
+for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();}selectTrack('coast');
 server.listen(PORT,HOST,()=>console.log(`\nTOUNCHED\nLocal: http://localhost:${PORT}\n${lanURLs().map(url=>`Wi-Fi: ${url}`).join('\n')}\n`));
 function shutdown(){for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

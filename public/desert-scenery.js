@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {trackAt,nearestTrack,TRACK_LENGTH} from '../shared/game.js';
+import {trackAt,nearestTrack,TRACK_LENGTH,getLandscape} from '../shared/game.js';
 import {DESERT_JUMPS,DESERT_MOUNTAIN,DESERT_MOLE_ZONE} from '../shared/desert-features.js';
 const PALETTE={sand:0xdcb76d,stone:0xa66542,light:0xe6b478,clay:0xb97c51,rust:0xd79760,steel:0x4b4440,dark:0x47392d,yellow:0xf9d366};
 const tri=(v,a,b,c)=>v.push(...a,...b,...c);
@@ -9,27 +9,9 @@ function taggedGroup(w,kind){const g=new THREE.Group();g.userData.sceneryKind=ki
 function segment(w,a,b,r,color,parent=w.static){const va=new THREE.Vector3(...a),vb=new THREE.Vector3(...b),mid=va.clone().add(vb).multiplyScalar(.5),m=w.mesh(new THREE.CylinderGeometry(r,r,va.distanceTo(vb),6),color,mid.x,mid.y,mid.z,parent);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),vb.sub(va).normalize());return m;}
 const along=(p,offset,y=p.y)=>[p.x+p.nx*offset,y,p.z+p.nz*offset];
 function mountainside(w,start,end,index){
-  const g=taggedGroup(w,'desert-mountain'),count=Math.ceil((end-start)*TRACK_LENGTH/4),bands=[[],[],[],[]],profiles=p=>[[p.halfWidth+.62,p.y-.20],[p.halfWidth+4,p.y-.75],[p.halfWidth+13,p.y*.72-1.3],[p.halfWidth+24,p.y*.3-3],[p.halfWidth+37,-4.12]];
-  const point=(p,j,side,f)=>{const [offset,y]=profiles(p)[j],jitter=j<2?0:Math.sin(f*121+j*1.7)*.9+Math.cos(f*173-j)*.6;return along(p,(offset+jitter)*side,y);};
-  for(let i=0;i<count;i++){
-    const f=start+(end-start)*i/count,nf=start+(end-start)*(i+1)/count,p=trackAt(f),q=trackAt(nf);
-    for(const side of [-1,1])for(let j=0;j<4;j++){const a=point(p,j,side,f),b=point(p,j+1,side,f),c=point(q,j+1,side,nf),d=point(q,j,side,nf);if(side===1)quad(bands[j],a,b,c,d);else quad(bands[j],a,d,c,b);}
-  }
-  // Canyon-facing cliff exposes layered strata under each end of the high bridge.
-  for(const [f,sign]of [[start,-1],[end,1]]){
-    const p=trackAt(f),cross=[...Array.from({length:5},(_,j)=>point(p,4-j,-1,f)),...Array.from({length:5},(_,j)=>point(p,j,1,f))];
-    for(let i=0;i<cross.length-1;i++){
-      const a=cross[i],b=cross[i+1];for(let k=0;k<4;k++){const t=k/4,nt=(k+1)/4,aa=[a[0],a[1]+(-4.12-a[1])*t,a[2]],bb=[b[0],b[1]+(-4.12-b[1])*t,b[2]],cc=[b[0],b[1]+(-4.12-b[1])*nt,b[2]],dd=[a[0],a[1]+(-4.12-a[1])*nt,a[2]];if(sign===1)quad(bands[k],aa,bb,cc,dd);else quad(bands[k],aa,dd,cc,bb);}
-    }
-  }
-  for(let j=0;j<4;j++)w.mesh(geometry(bands[j]),[PALETTE.light,PALETTE.stone,PALETTE.rust,PALETTE.clay][j],0,0,0,g);
-  // Tall stepped outcrops frame the climb without covering the road deck.
-  for(const [f,side]of [[start+(end-start)*.42,1],[start+(end-start)*.72,-1]]){
-    const p=trackAt(f),x=p.x+p.nx*(p.halfWidth+29)*side,z=p.z+p.nz*(p.halfWidth+29)*side,radius=22,height=Math.max(26,p.y+15),vertices=[[],[]],rings=[1,.82,.63,.46,.27,0],N=24;
-    const at=(r,j)=>{const a=j/N*Math.PI*2,fold=1+.07*Math.sin(a*5+index)+.045*Math.cos(a*7-index),px=x+Math.cos(a)*r*radius*fold,pz=z+Math.sin(a)*r*radius*fold;let y=-4+Math.pow(1-r,.85)*height;const road=nearestTrack(px,pz);if(road.distance<road.halfWidth+1.5)y=Math.min(y,road.y-.3);return [px,y,pz];};
-    for(let k=1;k<rings.length;k++)for(let j=0;j<N;j++)quad(vertices[k%2],at(rings[k-1],j),at(rings[k],j),at(rings[k],j+1),at(rings[k-1],j+1));
-    for(let j=0;j<2;j++)w.mesh(geometry(vertices[j]),j?PALETTE.light:PALETTE.stone,0,0,0,g);
-  }
+  const data=getLandscape().mountains[index-1],g=taggedGroup(w,'desert-mountain');
+  data.bands.forEach((v,j)=>w.mesh(geometry(v),[PALETTE.light,PALETTE.stone,PALETTE.rust,PALETTE.clay][j],0,0,0,g));
+  for(const outcrop of data.outcrops)outcrop.forEach((v,j)=>w.mesh(geometry(v),j?PALETTE.light:PALETTE.stone,0,0,0,g));
   return g;
 }
 function highBridge(w){
@@ -79,9 +61,7 @@ function jump(w,ramp){
   return g;
 }
 function moleGround(w){
-  const g=taggedGroup(w,'desert-mole-plateau'),start=DESERT_MOLE_ZONE.center-(DESERT_MOLE_ZONE.length/2+DESERT_MOLE_ZONE.transition)/TRACK_LENGTH,end=DESERT_MOLE_ZONE.center+(DESERT_MOLE_ZONE.length/2+DESERT_MOLE_ZONE.transition)/TRACK_LENGTH,N=100,v=[];
-  for(let i=0;i<N;i++){const p=trackAt(start+(end-start)*i/N),q=trackAt(start+(end-start)*(i+1)/N);for(const side of [-1,1]){const a=along(p,side*(p.halfWidth+.62),p.y-.20),b=along(p,side*(p.halfWidth+12),-4.1),c=along(q,side*(q.halfWidth+12),-4.1),d=along(q,side*(q.halfWidth+.62),q.y-.20);if(side===1)quad(v,a,b,c,d);else quad(v,a,d,c,b);}}
-  w.mesh(geometry(v),PALETTE.sand,0,0,0,g);return g;
+  const g=taggedGroup(w,'desert-mole-plateau');w.mesh(geometry(getLandscape().plateau),PALETTE.sand,0,0,0,g);return g;
 }
 export function buildDesertScenery(w){
   const a=mountainside(w,DESERT_MOUNTAIN.start,DESERT_MOUNTAIN.ascentEnd,1),b=mountainside(w,DESERT_MOUNTAIN.bridgeEnd,DESERT_MOUNTAIN.end,2),bridge=highBridge(w),jumps=DESERT_JUMPS.map(r=>jump(w,r)),plateau=moleGround(w);

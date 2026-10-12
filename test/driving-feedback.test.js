@@ -27,10 +27,10 @@ test('engine speed scales linearly from 100% at 100HP to 80% at 1HP',()=>{
   assert.equal(healthSpeedFactor(100),1);assert.equal(healthSpeedFactor(1),.8);assert.equal(healthSpeedFactor(50.5),.9);
   for(const health of [1,25,50,75,100]){const c=at();c.health=health;const p=trackAt(.01);for(let i=0;i<300;i++){c.x=p.x;c.z=p.z;c.angle=p.angle;stepCar(c,gas);}assert.ok(Math.abs(Math.hypot(c.vx,c.vz)-TOP_SPEED*healthSpeedFactor(health))<.01);}
 });
-test('every exposed edge drops into water on both sides; shielding cannot save a fall',()=>{
+test('every exposed edge eliminates a fallen car even when a visible bank catches it',()=>{
   for(const fraction of [.14,.35,.60,.81]){assert.equal(hasBarrier(fraction),false);for(const side of [-1,1]){
-    const c=at(fraction,side*(trackAt(fraction).halfWidth+1.6));c.shield=8;constrainRoad(c);assert.equal(c.falling,true);
-    for(let i=0;i<90;i++)stepCar(c,NEUTRAL);assert.ok(c.wrecked&&c.eliminated);assert.equal(c.health,0);assert.ok(c.y< -2.1);
+    const c=at(fraction,side*(trackAt(fraction).halfWidth+1.6));c.shield=8;constrainRoad(c);assert.ok(c.falling||c.edgeBalance);
+    for(let i=0;i<150;i++)stepCar(c,NEUTRAL);assert.ok(c.wrecked&&c.eliminated);assert.equal(c.health,0);assert.ok(Number.isFinite(c.y));
   }}
 });
 test('closed barriers stop grounded cars, but airborne cars cannot land in invisible fields',()=>{

@@ -18,7 +18,7 @@ test('both ice straights have two real lanes with guarded and exposed gap edges'
     const lane=make(0,side*9);constrainRoad(lane);assert.equal(lane.falling,false);
     const wall=make(0,side*4.2);constrainRoad(wall);assert.equal(wall.falling,false);assert.ok(nearestTrack(wall.x,wall.z).distance>4.9);
     const gap=make(side<0?65:-65,side*2);constrainRoad(gap);assert.equal(gap.falling,true,'unguarded gap is not drivable');
-    const exposed=make(side<0?65:-65,side*15);constrainRoad(exposed);assert.equal(exposed.falling,true);
+    const exposed=make(side<0?65:-65,side*15);constrainRoad(exposed);assert.ok(exposed.falling||exposed.edgeBalance);for(let i=0;i<60;i++)stepCar(exposed,NEUTRAL);assert.equal(exposed.falling,true);
     const guarded=make(side<0?-65:65,side*14.2);constrainRoad(guarded);assert.equal(guarded.falling,false);
   }
 });
