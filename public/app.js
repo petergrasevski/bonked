@@ -8,6 +8,7 @@ import {updateControlLegend} from './control-legend.js';
 import {initMetalInteractions} from './metal-ui.js';
 import {createTrackPicker} from './track-picker.js';
 import {readController} from './controller.js';
+import {bindTouchSteering,driveThrottle} from './touch-controls.js';
 import {PartyVoice} from './voice.js';
 import {RenderCorrections,renderFleet} from '/shared/netcode.js';
 import { detectDevice, initDisplayGuide } from './display.js';
@@ -132,7 +133,7 @@ function controls(){
   if(gamepad.left&&!controllerLeft)triggerNudge(-1);if(gamepad.right&&!controllerRight)triggerNudge(1);
   controllerLeft=gamepad.left;controllerRight=gamepad.right;
   input.nudge=performance.now()<nudgeUntil?nudgeDirection:0;
-  const wasAccelerating=input.throttle>.1;input.throttle=input.reverse?0:gasHeld||gamepad.throttle||keys.has('KeyW')||keys.has('ArrowUp')?1:0;
+  const wasAccelerating=input.throttle>.1;input.throttle=driveThrottle({mobile:device.mobile,controllerConnected:pad.connected,phase:state?.phase,reverse:input.reverse,accelerating:gasHeld||gamepad.throttle||keys.has('KeyW')||keys.has('ArrowUp')});
   if(input.throttle>.1&&!wasAccelerating)accelPressedAt=Date.now()+clockOffset;if(input.throttle<=.1)accelPressedAt=null;
   $('brake').classList.toggle('held',held);
 }
@@ -149,7 +150,15 @@ function holdButton(id,set){
 }
 function flushControls(){controls();if(state?.phase==='countdown'||state?.phase==='racing')send({type:'input',seq:++sequence,...input,accelPressedAt});}
 holdButton('gas',v=>{gasHeld=v;flushControls();});holdButton('brake',v=>{brakeHeld=v;flushControls();});
-holdButton('steer-left',v=>{leftHeld=v;flushControls();});holdButton('steer-right',v=>{rightHeld=v;flushControls();});
+if(device.mobile){
+  holdResets.push(bindTouchSteering(document.querySelector('.left-controls'),{
+    enabled:()=>['countdown','racing'].includes(state?.phase)&&!rotationBlocked()&&!document.hidden&&document.hasFocus()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated&&!predicted?.finished,
+    steer:direction=>{leftHeld=direction<0;rightHeld=direction>0;flushControls();},
+    nudge,activate:unlockAudio,
+  }));
+}else{
+  holdButton('steer-left',v=>{leftHeld=v;flushControls();});holdButton('steer-right',v=>{rightHeld=v;flushControls();});
+}
 function fire(){if(state?.phase==='racing'&&!rotationBlocked()&&!state.players.find(p=>p.id===myId)?.eliminated){firePulseUntil=performance.now()+70;send({type:'input',seq:++sequence,...input,fire:true});}}
 holdButton('item',held=>{fireHeld=held;if(held)fire();});
 function triggerNudge(direction){if(state?.phase!=='racing'||rotationBlocked()||predicted?.eliminated||predicted?.nudgeCooldown>0)return;nudgeDirection=direction;nudgeUntil=performance.now()+120;}
