@@ -289,3 +289,6 @@ body.mobile #health-ui{position:fixed;left:60%;bottom:max(16px,env(safe-area-ins
 #race-ui.sky-beam .left-controls,#race-ui.sky-beam #health-ui,#race-ui.sky-beam .nudge,#race-ui.sky-beam #gas,#race-ui.sky-beam #brake{display:none}
 body.mobile #race-ui.sky-beam #sky-joystick{display:flex}#race-ui.sky-beam #item{border-color:var(--sky-color);color:var(--sky-color)}#race-ui.sky-beam #item.cooling{opacity:.45}
 #desktop-weapon[data-sky=true] .weapon-orb::after{content:'ϟ';font-size:64px;color:var(--weapon-color);position:absolute;inset:0;display:grid;place-items:center}#desktop-weapon[data-sky=true] canvas{visibility:hidden}
+
+#opponent-name{position:fixed;left:0;top:0;z-index:3;pointer-events:none;will-change:transform;max-width:min(220px,75vw);padding:7px 12px;border:1px solid var(--car-color,#cbd5df);border-radius:8px;background:#10202bef;color:#f2f6fa;box-shadow:0 3px 12px #0006;font-size:13px;font-weight:700;line-height:1.3;overflow-wrap:anywhere;text-align:center}
+#opponent-name::after{content:'';position:absolute;left:50%;top:100%;margin-left:-4px;border:4px solid transparent;border-top-color:var(--car-color,#cbd5df)}

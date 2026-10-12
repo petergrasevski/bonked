@@ -1,3 +1,4 @@
+import {CarNameTooltip} from './car-name-tooltip.js';
 import {NetworkDiagnostics} from './network-diagnostics.js';
 import {CombatPrediction} from '/shared/combat-prediction.js';
 import {PREDICTION_GRACE_MS,replayWindow} from '/shared/network-timing.js';
@@ -43,6 +44,7 @@ const input={...NEUTRAL},keys=new Set();let leftHeld=false,rightHeld=false,gasHe
 const holdResets=[];
 const portrait=matchMedia('(orientation: portrait)');
 const rotationBlocked=()=>device.mobile&&portrait.matches;
+const carNames=new CarNameTooltip($('scene'),$('opponent-name'),{world:()=>world,state:()=>state,localId:()=>myId,enabled:()=>['racing','countdown'].includes(state?.phase)&&!document.hidden&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()});
 let toastTimer;function toast(message){$('toast').textContent=message;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500);}
 function saveSession(){try{if(session)sessionStorage.setItem('drift-room',JSON.stringify(session));else sessionStorage.removeItem('drift-room');}catch{}}
 function send(message){if(ws?.readyState===WebSocket.OPEN){ws.send(JSON.stringify(message));return true;}return false;}
@@ -200,7 +202,7 @@ function renderedState(now,dt){
 }
 function frame(now){requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
   while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen();const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);combatPrediction.step(command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
-  const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);trackPicker.tick(now);
+  const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);carNames.update(now);trackPicker.tick(now);
   if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
   if(now-uiAt>100){uiAt=now;updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,presentation:'predicted-fleet',bufferMs:0,underruns:0,server:network.server});}
