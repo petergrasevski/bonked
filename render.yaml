@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: tounched
+    name: revenge
     runtime: node
     region: singapore
     plan: free

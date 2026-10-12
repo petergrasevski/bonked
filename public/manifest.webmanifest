@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Tounched",
-  "short_name": "Tounched",
-  "description": "Six-player combat racing on Saltwater Circuit",
+  "name": "Revenge",
+  "short_name": "Revenge",
+  "description": "Eight-player combat racing with spectator revenge",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -10,7 +10,7 @@
   "background_color": "#101c23",
   "theme_color": "#101c23",
   "icons": [
-    { "src": "/icons/tounched-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/tounched-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/icons/revenge-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/revenge-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

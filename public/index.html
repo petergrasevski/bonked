@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#101c23"><meta name="apple-mobile-web-app-capable" content="yes">
-<title>Tounched</title>
+<title>Revenge</title>
 <link rel="preload" href="/track-titles/coast.12314dc1cd97.webp" as="image" type="image/webp">
 <link rel="preload" href="/track-titles/ice.1ee02b691cea.webp" as="image" type="image/webp">
 <link rel="preload" href="/track-titles/desert.7a8e0665c0e3.webp" as="image" type="image/webp">
-<meta name="apple-mobile-web-app-title" content="Tounched"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/tounched-180.png">
+<meta name="apple-mobile-web-app-title" content="Revenge"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/revenge-180.png">
 <link rel="preload" href="/fonts/Righteous-Regular.ttf" as="font" type="font/ttf" crossorigin>
-<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/favicon.svg?v=revenge"><link rel="stylesheet" href="/style.css">
 <script type="importmap">{"imports":{"three":"/vendor/three.module.js","three/addons/utils/BufferGeometryUtils.js":"/vendor/BufferGeometryUtils.js"}}</script>
 </head>
 <body>
 <div id="scene" aria-label="3D view of the Saltwater Circuit"></div>
 <div class="grain"></div>
-<header class="topbar"><a href="/" class="brand" aria-label="Tounched home"><img src="/logo.svg" alt="Tounched" width="300" height="63"></a><div class="top-right"><span class="connection"><i id="connection-dot"></i><span id="connection-label">CONNECTING</span></span><button id="settings-open" class="icon-button" aria-label="Settings">⚙</button></div></header>
+<header class="topbar"><a href="/" class="brand" aria-label="Revenge home"><img src="/logo.svg?v=revenge" alt="Revenge" width="300" height="71"></a><div class="top-right"><span class="connection"><i id="connection-dot"></i><span id="connection-label">CONNECTING</span></span><button id="settings-open" class="icon-button" aria-label="Settings">⚙</button></div></header>
 <main id="lobby">
 
 <section class="lobby-card">
@@ -36,7 +36,7 @@
 <div id="results" class="modal-backdrop" hidden><section class="modal results-card" role="dialog" aria-modal="true" aria-labelledby="results-title"><div class="results-heading"><div><h2 id="results-title">Round results</h2><p id="results-target"></p></div><button id="results-lobby" class="text-button">Change circuit</button></div><div id="standings" aria-label="Current leaderboard"></div><div class="round-actions"><button id="ready" class="primary">Ready</button><button id="rematch" class="primary" hidden>New tournament ↻</button></div><p id="rematch-hint" class="fine"></p></section></div>
 <div id="settings" class="modal-backdrop" hidden><section class="modal settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title"><button id="settings-close" class="close" aria-label="Close settings"></button><h2 id="settings-title">Settings</h2><div class="settings-grid"><button id="sound" class="setting-row" aria-label="Enable sound">Engine &amp; effects <span id="sound-state">OFF</span></button><button id="copy-network" class="setting-row">Copy network log <span>↗</span></button><button id="exit-race" class="setting-row">Leave race <span>↗</span></button></div></section></div>
 <div id="dialog" class="modal-backdrop" hidden><section class="modal"><button id="close-dialog" class="close" aria-label="Close dialog"></button><div id="dialog-body"></div></section></div>
-<div id="install-guide" class="modal-backdrop" hidden><section class="modal install-card" role="dialog" aria-modal="true" aria-labelledby="install-title"><img src="/icons/tounched-192.png" width="56" height="56" alt=""><h2 id="install-title"></h2><p id="install-intro"></p><ol id="install-steps"></ol><p id="install-note"></p><div class="install-actions"><button id="install-native" class="primary" hidden>Install app</button><button id="install-fullscreen" class="secondary" hidden>Enter fullscreen</button><button id="install-continue" class="secondary">Continue in browser</button></div></section></div>
+<div id="install-guide" class="modal-backdrop" hidden><section class="modal install-card" role="dialog" aria-modal="true" aria-labelledby="install-title"><img src="/icons/revenge-192.png" width="56" height="56" alt=""><h2 id="install-title"></h2><p id="install-intro"></p><ol id="install-steps"></ol><p id="install-note"></p><div class="install-actions"><button id="install-native" class="primary" hidden>Install app</button><button id="install-fullscreen" class="secondary" hidden>Enter fullscreen</button><button id="install-continue" class="secondary">Continue in browser</button></div></section></div>
 <div id="party-bar" hidden><button id="voice-toggle" aria-pressed="false" aria-label="Enable microphone" title="Enable microphone"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/><path class="mic-slash" d="M3 3l18 18"/></svg></button></div><div id="controller-status"></div><div id="toast" role="status"></div><div id="rotate-hint" role="alert"><div class="rotate-phone">↻</div><h2>Rotate your phone</h2><p>Landscape required.</p></div>
 <script type="module" src="/app.js?v=1.0.0"></script>
 </body></html>

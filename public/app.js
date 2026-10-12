@@ -26,7 +26,7 @@ const device=detectDevice(navigator);document.body.classList.toggle('mobile',dev
 const corrections=new RenderCorrections();
 const combatPrediction=new CombatPrediction();
 const network=new NetworkDiagnostics(message=>send(message));
-window.tounchedNetwork={export:()=>network.export()};
+window.revengeNetwork={export:()=>network.export()};
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
 function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();combatPrediction.reset();network.resetStream();history=[];pending=[];accumulator=0;}
@@ -186,7 +186,7 @@ $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>
 $('settings-open').onclick=()=>{releaseControls();$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;$('settings-close').focus();};
 function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('race-settings'):$('settings-open')).focus();}
 $('race-settings').onclick=$('settings-open').onclick;
-$('copy-network').onclick=async()=>{const log=network.export();try{await navigator.clipboard.writeText(log);toast('Network log copied.');}catch{const t=document.createElement('textarea');t.value=log;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Network log copied.':'Could not copy. Use the browser console: tounchedNetwork.export()');}};
+$('copy-network').onclick=async()=>{const log=network.export();try{await navigator.clipboard.writeText(log);toast('Network log copied.');}catch{const t=document.createElement('textarea');t.value=log;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Network log copied.':'Could not copy. Use the browser console: revengeNetwork.export()');}};
 $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target===$('settings'))closeSettings();};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
 let audio=null,engineAudio=null,weaponAudio=null,soundEnabled=false;function unlockAudio(){if(!soundEnabled)return;if(!audio){audio=new(window.AudioContext||window.webkitAudioContext)();weaponAudio=new WeaponAudio(audio);engineAudio=new EngineAudio(audio);}if(audio.state==='suspended')audio.resume();}

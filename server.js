@@ -208,6 +208,6 @@ const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceA
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
 for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();skySurfaces();}selectTrack('coast');
-server.listen(PORT,HOST,()=>console.log(`\nTOUNCHED\nLocal: http://localhost:${PORT}\n${lanURLs().map(url=>`Wi-Fi: ${url}`).join('\n')}\n`));
+server.listen(PORT,HOST,()=>console.log(`\nREVENGE\nLocal: http://localhost:${PORT}\n${lanURLs().map(url=>`Wi-Fi: ${url}`).join('\n')}\n`));
 function shutdown(){clearInterval(diagnosticTimer);diagnostics.close();for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);
