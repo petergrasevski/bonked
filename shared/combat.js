@@ -111,7 +111,9 @@ export function pressWeapon(room,p,now){
     beam(room,'rail',c,0,150,now,{color:'#98ecff',duration:1800});
   }
   if(id==='mine'){
-    room.mines.push({id:++room.serial,owner:p.id,y:c.y,x:c.x-Math.cos(c.angle)*3.5,z:c.z-Math.sin(c.angle)*3.5,armAt:now+100,until:now+180000});
+    const x=c.x-Math.cos(c.angle)*3.5,z=c.z-Math.sin(c.angle)*3.5,road=nearestTrack(x,z,c.trackFraction??null);
+    // Sample the actual drop point, on the owner's deck of a stacked crossing.
+    room.mines.push({id:++room.serial,owner:p.id,x,y:road.y+.025,z,angle:Math.atan2(-road.nx,road.nz),pitch:Math.atan(road.grade||0),trackFraction:road.fraction,armAt:now+100,until:now+180000});
     if(room.mines.length>90)room.mines.shift();
   }
   if(id==='chain'){
@@ -174,7 +176,8 @@ export function updateCombat(room,dt,now){
   }
   room.projectiles=room.projectiles.filter(p=>p.until>now).slice(-180);
   for(const mine of room.mines){if(now<mine.armAt)continue;for(const p of targets(room,null)){
-    const c=p.car;if(Math.abs(c.y-(mine.y||0))>1.4||c.eliminated||Math.hypot(c.x-mine.x,c.z-mine.z)>3)continue;
+    const c=p.car,along=(c.x-mine.x)*Math.cos(mine.angle||0)+(c.z-mine.z)*Math.sin(mine.angle||0),surfaceY=(mine.y||0)+along*Math.tan(mine.pitch||0);
+    if(Math.abs(c.y-surfaceY)>1.4||c.eliminated||Math.hypot(c.x-mine.x,c.z-mine.z)>3)continue;
     const dx=mine.x-c.x,dz=mine.z-c.z,side=-dx*Math.sin(c.angle)+dz*Math.cos(c.angle),fore=dx*Math.cos(c.angle)+dz*Math.sin(c.angle);
     hit(room,p,DAMAGE.mine,now,{up:15,side:side+.35*Math.sin(c.angle),fore:fore+Math.hypot(c.vx,c.vz)*.09,x:-dx*3,z:-dz*3});mine.until=0;sound(room,'explosion',mine,now);effect(room,'explosion',mine.x,mine.z,now,{y:mine.y,duration:850});break;
   }}room.mines=room.mines.filter(m=>m.until>now);

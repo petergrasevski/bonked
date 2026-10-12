@@ -45,7 +45,7 @@ function connect(){
     if(msg.type==='state'){
       lastState=performance.now();const was=state;selectWorld(msg.trackId||'coast');const oldFleet=predicted?[predicted,...predictedOthers]:[];state=msg;history.push({time:performance.now(),state:msg});if(history.length>12)history.shift();
       const me=msg.players.find(p=>p.id===myId);
-      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));if(msg.phase==='racing')for(const frame of pending)predictFleet(predicted,predictedOthers,frame.input,STEP);corrections.reconcile(oldFleet,[predicted,...predictedOthers]);}
+      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));if(msg.phase==='racing')for(const frame of pending)predictFleet(predicted,predictedOthers,frame.input,STEP);corrections.reconcile(oldFleet,[predicted,...predictedOthers],msg.phase==='racing'?accumulator:0);}
       if(phase!==msg.phase){const previousPhase=phase;phase=msg.phase;onPhaseChange(previousPhase);}
       if(was&&me?.item&&!was.players.find(p=>p.id===myId)?.item){beep(720,.09,.03);}
     }

@@ -111,3 +111,36 @@ test('inclined projectile prediction advances elevation at every display frame a
   for(let now=510;now<2000;now+=10)pose=projectilePose(pose,shot,stamp,.01,now);
   assert.ok(Math.abs(pose.y-(shot.y+1.8))<.01);
 });
+
+test('mines sit visibly on their actual drop point on climbs and descents',()=>{
+  selectTrack('desert');
+  for(const fraction of [.175,.33,.355,.37,.88])for(const sideways of [0,.8]){
+    const a=player('a',fraction);a.car.angle+=sideways;const r=room(a);fire(r,a,'mine');
+    const mine=r.mines[0],road=nearestTrack(mine.x,mine.z,a.car.trackFraction);
+    assert.ok(Math.abs(mine.y-road.y-.025)<1e-10,'mine rests on the road behind the car');
+    const up=new Vector3(0,1,0).applyEuler(new Euler(0,-mine.angle,mine.pitch,'YXZ'));
+    const normal=new Vector3(-road.grade*road.nz,1,road.grade*road.nx).normalize();
+    assert.ok(up.distanceTo(normal)<1e-10,'rendered mine base follows the road normal');
+    // The front and back of the base must not disappear beneath a descending deck.
+    for(const side of [-1,1]){
+      const rim=new Vector3(side*.8,.03,0).applyEuler(new Euler(0,-mine.angle,mine.pitch,'YXZ')).add(new Vector3(mine.x,mine.y,mine.z));
+      assert.ok(rim.y>nearestTrack(rim.x,rim.z,mine.trackFraction).y-.01,'mine rim stays visible');
+    }
+  }
+});
+
+test('slope mines persist after dropping and detonate for a following car',()=>{
+  selectTrack('desert');const a=player('a',.35),b=player('b',.32),r=room(a,b);fire(r,a,'mine');
+  const mine={...r.mines[0]};updateCombat(r,STEP,150);assert.equal(r.mines.length,1);
+  Object.assign(b.car,{x:mine.x,z:mine.z,y:mine.y,groundY:mine.y});updateCombat(r,STEP,200);
+  assert.equal(r.mines.length,0);assert.equal(b.car.health,100-DAMAGE.mine);
+});
+
+test('mines stay on their own deck at the figure-eight crossing',()=>{
+  selectTrack('desert');
+  for(const fraction of [0,.5]){
+    const a=player('a',fraction),other=player('other',fraction===0?.5:0),r=room(a,other);fire(r,a,'mine');const mine=r.mines[0];
+    assert.ok(Math.abs(mine.y-a.car.y)<.1);Object.assign(other.car,{x:mine.x,z:mine.z});
+    updateCombat(r,STEP,150);assert.equal(other.car.health,100);assert.equal(r.mines.length,1);
+  }
+});
