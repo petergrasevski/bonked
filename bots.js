@@ -1,6 +1,6 @@
 // Server-only decisions. Steering remains in shared/game.js; none of this state
 // is attached to car snapshots or evaluated by browser prediction.
-import {botInput,botSteeringTarget,botLaneBounds,nearestTrack,MOLES,OBSTACLES,trackAt,TRACK_LENGTH,PLAZAS,PICKUP_LOCATIONS,activeTrack,angleDelta,clamp,CAR_WIDTH,CAR_LENGTH,STEP,NUDGE_DURATION} from './shared/game.js';
+import {botInput,botSteeringTarget,botLaneBounds,botRouteSide,nearestTrack,MOLES,OBSTACLES,trackAt,TRACK_LENGTH,PLAZAS,PICKUP_LOCATIONS,activeTrack,angleDelta,clamp,CAR_WIDTH,CAR_LENGTH,STEP,NUDGE_DURATION} from './shared/game.js';
 import {moleState} from './shared/desert-features.js';
 import {WEAPONS,FLAME_RANGE,TASER_RADIUS} from './shared/combat.js';
 import {weaponBasis,weaponMuzzle,weaponDirection,rayCar3D,shotgunRays} from './shared/weapon-geometry.js';
@@ -178,7 +178,7 @@ export function botControls(room,p,now,random=Math.random){
   state.lane+=clamp(state.desiredLane-state.lane,-2*STEP,2*STEP);
   // The first ice split's boost-fed branch has no barriers and carries a bot
   // over the edge at boosted speed. Use the guarded branch on that straight.
-  const side=activeTrack.id==='ice'&&trackAt(c.trackFraction).z<0?-1:state.side;
+  const side=botRouteSide(c,activeTrack.id==='ice'&&trackAt(c.trackFraction).z<0?-1:state.side);
   const driving={lane:state.lane,side,splitLead:215};
   if(time>=state.nextAvoid){state.avoidance=botAvoidance(room,p,driving,state.avoidance);state.nextAvoid=time+.1;}
   const avoidance=state.avoidance;

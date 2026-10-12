@@ -56,7 +56,7 @@ test('shotgun fires sideways from both doors, knocks cars outwards, ignores fron
   const a=player('a'),left=player('left',0,-6),right=player('right',0,6),front=player('front',8),back=player('back',-8),r=room(a,left,right,front,back);fire(r,a,'shotgun');assert.equal(left.car.health,64);assert.equal(right.car.health,64);assert.ok(left.car.vz<0&&right.car.vz>0);assert.equal(front.car.health,100);assert.equal(back.car.health,100);
 });
 test('wall impacts damage chassis; zero health launches a persistent solid wreck',()=>{
-  const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x+p.nx*p.halfWidth,z:p.z+p.nz*p.halfWidth,angle:p.angle,vx:p.nx*20,vz:p.nz*20});constrainRoad(c);assert.ok(c.health<100&&c.health>94);assert.deepEqual([100,80,60,40,20,0].map(damageLevel),[0,1,2,3,4,4]);damageCar(c,100);assert.ok(c.wrecked&&c.eliminated&&c.vy>0&&c.rollVelocity>0);assert.equal(c.health,0);
+  const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x+p.nx*p.halfWidth,z:p.z+p.nz*p.halfWidth,angle:p.angle,vx:p.nx*20,vz:p.nz*20});constrainRoad(c);assert.ok(c.health<100&&c.health>94);assert.deepEqual([100,80,60.01,60,45,30,15,0].map(damageLevel),[0,0,0,1,2,3,4,4]);damageCar(c,100);assert.ok(c.wrecked&&c.eliminated&&c.vy>0&&c.rollVelocity>0);assert.equal(c.health,0);
   Object.assign(c,{x:0,z:0,angle:0,y:0,vx:0,vz:0,yawVelocity:0});const b=player('b',-4).car;b.vx=20;collideCars([b,c]);assert.ok(b.vx<20);assert.ok(c.vx>0);assert.equal(carContact(b,c),null);assert.ok(c.wrecked);
 });
 

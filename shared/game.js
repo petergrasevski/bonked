@@ -12,7 +12,10 @@ export const TOP_SPEED = 36;
 export const SURFACE_HALF_WIDTH = ROAD_WIDTH / 2 + .6;
 export const START_BOOST_SECONDS = .8;
 export const START_SPIN_SECONDS = 1.1;
-export const healthSpeedFactor = health => .8 + .2 * (Math.max(1, Math.min(100, health)) - 1) / 99;
+export const DAMAGE_HEALTH = 60;
+// Keep full performance until 60 HP, retaining the existing penalties at 1 HP.
+export const damageSeverity = health => (DAMAGE_HEALTH - Math.max(1, Math.min(DAMAGE_HEALTH, health))) / (DAMAGE_HEALTH - 1);
+export const healthSpeedFactor = health => 1 - .2 * damageSeverity(health);
 export function launchResult(pressedAt,startAt){
   if(!Number.isFinite(pressedAt))return 'normal';
   const lead=startAt-pressedAt;
@@ -238,8 +241,8 @@ export function spawnCar(slot=0,startFraction=START_FRACTION) {
 export function sanitizeInput(raw) {
   return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
 }
-export function damageLevel(health){return clamp(Math.floor((100-health)/20),0,4);}
-export const healthHandlingFactor=health=>.4+.6*(clamp(health,1,100)-1)/99;
+export function damageLevel(health){return health>DAMAGE_HEALTH?0:clamp(1+Math.floor((DAMAGE_HEALTH-health)/15),1,4);}
+export const healthHandlingFactor=health=>1-.6*damageSeverity(health);
 export function advanceNudge(car,dt){
   if(car.eliminated||car.finished||car.overturned||car.falling||car.y-(car.groundY||0)>.05){car.nudgeTime=0;return;}
   if(car.nudgeTime>0){
@@ -498,7 +501,17 @@ export function rayCar(x,z,dx,dz,car,padding=0){
   }
   return lo;
 }
+// Once alongside a split, keep the branch the car actually occupies. A new
+// round may put either grid column here, regardless of the bot's preferred side.
+export function botRouteSide(car,preferred=1){
+  if(activeTrack.id==='ice'){
+    const p=trackAt(car.trackFraction),lateral=(car.x-p.x)*p.nx+(car.z-p.z)*p.nz;
+    if(Math.abs(p.x)<130&&Math.abs(lateral)>.1)return Math.sign(lateral);
+  }
+  return preferred;
+}
 export function botSteeringTarget(car,{lane=0,side=0,splitLead=175,avoidLane=null}={}){
+  side=botRouteSide(car,side);
   const speed=Math.hypot(car.vx,car.vz),road=trackAt(car.trackFraction),icy=activeTrack.id==='ice';
   const fraction=car.trackFraction+Math.max(7,speed*(icy?.65:.55))/TRACK_LENGTH,p=trackAt(fraction);
   // Corner speed follows road curvature, not the sideways chassis angle during a drift.

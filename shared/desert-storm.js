@@ -21,7 +21,7 @@ export function stormGustAt(seconds,x,z,angle=0){
   if(!coverage||pulse>=1)return {x:0,z:0,strength:0};
   // One-second gusts, with two seconds to recover. Smooth edges prevent kicks.
   const envelope=smooth(pulse/.18)*smooth((1-pulse)/.22),kind=(Math.floor(storm.age/3)+storm.cycle)%3;
-  const direction=angle+(kind===2?Math.PI:kind===0?Math.PI/2:-Math.PI/2),force=(kind===2?24:18)*coverage*envelope;
+  const direction=angle+(kind===2?Math.PI:kind===0?Math.PI/2:-Math.PI/2),force=(kind===2?24:18)*1.7*coverage*envelope;
   return {x:Math.cos(direction)*force,z:Math.sin(direction)*force,strength:coverage*envelope};
 }
 export function applyDesertWind(car,seconds,dt){

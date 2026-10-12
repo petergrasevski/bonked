@@ -220,3 +220,23 @@ test('ice avoidance stays on its branch and narrow blocked roads reduce throttle
   const target=botSteeringTarget(p.car,{side:-1,splitLead:215,avoidLane:100});
   assert.ok(target.lane<0,'even an invalid passing request cannot cross the crevasse');assert.ok(Number.isFinite(input.steer));
 });
+
+test('bots starting inside either ice split retain their spawned branch until the road rejoins',()=>{
+  selectTrack('ice');
+  for(const z of [-40,40])for(const x of [-90,0,90])for(let slot=0;slot<8;slot++){
+    const start=nearestTrack(x,z).fraction,p={id:'bot',car:spawnCar(slot,start),input:{fire:false}};
+    const room={phase:'racing',startAt:0,raceTime:0,players:new Map([[p.id,p]]),pickups:[],boostPads:[]};initCombat(room);
+    const initial=trackAt(p.car.trackFraction),side=Math.sign((p.car.x-initial.x)*initial.nx+(p.car.z-initial.z)*initial.nz);
+    let exited=false;
+    for(let tick=0;tick<900;tick++){
+      const road=trackAt(p.car.trackFraction);
+      if(tick>0&&Math.abs(road.x)>=130){exited=true;break;}
+      const input=botControls(room,p,room.raceTime*1000);stepCar(p.car,input);p.car.raceTime+=STEP;room.raceTime+=STEP;
+      const at=trackAt(p.car.trackFraction),lane=(p.car.x-at.x)*at.nx+(p.car.z-at.z)*at.nz;
+      assert.ok(lane*side>0,`crossed gap: x=${x} z=${z} slot=${slot}`);
+      assert.equal(p.car.falling,false,`fell: x=${x} z=${z} slot=${slot}`);assert.equal(p.car.eliminated,false);
+    }
+    assert.ok(exited,`should leave split: x=${x} z=${z} slot=${slot}`);
+  }
+  selectTrack('coast');
+});

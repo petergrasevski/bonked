@@ -23,8 +23,8 @@ test('launch boost accelerates faster, and spinout completes before held gas res
   assert.ok(Math.hypot(boost.vx,boost.vz)>Math.hypot(normal.vx,normal.vz)*1.2);assert.equal(Math.hypot(spin.vx,spin.vz),0);assert.notEqual(spin.angle,angle);
   for(let i=0;i<50;i++)stepCar(spin,gas);assert.ok(Math.hypot(spin.vx,spin.vz)>3);assert.ok(Math.abs((spin.angle-angle)-Math.PI*2)<1e-8);
 });
-test('engine speed scales linearly from 100% at 100HP to 80% at 1HP',()=>{
-  assert.equal(healthSpeedFactor(100),1);assert.equal(healthSpeedFactor(1),.8);assert.equal(healthSpeedFactor(50.5),.9);
+test('engine speed stays full through 60HP then scales linearly to 80% at 1HP',()=>{
+  assert.equal(healthSpeedFactor(100),1);assert.equal(healthSpeedFactor(1),.8);assert.equal(healthSpeedFactor(30.5),.9);for(const health of [60,61,80,100])assert.equal(healthSpeedFactor(health),1);
   for(const health of [1,25,50,75,100]){const c=at();c.health=health;const p=trackAt(.01);for(let i=0;i<300;i++){c.x=p.x;c.z=p.z;c.angle=p.angle;stepCar(c,gas);}assert.ok(Math.abs(Math.hypot(c.vx,c.vz)-TOP_SPEED*healthSpeedFactor(health))<.01);}
 });
 test('every exposed edge eliminates a fallen car even when a visible bank catches it',()=>{

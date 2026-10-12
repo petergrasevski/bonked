@@ -1,6 +1,7 @@
 import {buildCoastalCrabs,updateCoastalCrabs} from './coastal-crabs.js';
 import {boostExhaustStrength} from '/shared/boost-pads.js';
 import {buildBoostPads} from './boost-pads.js';
+import {createPickupGround} from './pickup-ground.js';
 import {buildDetailedScenery,buildDetailedBiome,detailedPalm,detailedRock} from './scenery.js';
 import {createSnowMaterial} from './snow-surface.js';
 import {buildIceShelf} from './ice-shelf.js';
@@ -11,6 +12,7 @@ import {buildDesertScenery} from './desert-scenery.js';
 import {buildDesertMoles,updateDesertMoles} from './desert-moles.js';
 import {createDesertMaterial} from './desert-surface.js';
 import {createAtmosphere} from './atmosphere.js';
+import {createGustTrails} from './desert-storm.js';
 import {createCoastalWater} from './water.js';
 import {projectilePose} from './projectile-motion.js';
 import * as THREE from 'three';
@@ -20,7 +22,7 @@ import { createPickupModel, PICKUP_COLORS } from './pickups.js';
 import { FLAME_RANGE,TASER_RADIUS,WEAPON_IDS } from '/shared/combat.js';
 import {createSportsCar,disposeCarInstance} from './car-model.js';
 import { mergeGeometries } from '/vendor/BufferGeometryUtils.js';
-import { iceSplit,activeTrack, TRACK, SEGMENTS, ROAD_WIDTH, trackAt, angleDelta, COLORS, TRACK_LENGTH, START_FRACTION, PICKUP_LOCATIONS, spawnCar, MAX_PLAYERS, hasBarrier, damageLevel, CAR_LENGTH, CAR_WIDTH, SURFACE_HALF_WIDTH, nearestTrack, collideCars, OBSTACLES } from '/shared/game.js';
+import { iceSplit,activeTrack, TRACK, SEGMENTS, ROAD_WIDTH, trackAt, angleDelta, COLORS, TRACK_LENGTH, START_FRACTION, PICKUP_LOCATIONS, spawnCar, MAX_PLAYERS, hasBarrier, damageLevel, damageSeverity, CAR_LENGTH, CAR_WIDTH, SURFACE_HALF_WIDTH, nearestTrack, collideCars, OBSTACLES } from '/shared/game.js';
 import { cameraFrame, createChase } from '/shared/chase.js';
 import { CAMERA_FOV, stepCamera, cameraPose } from '/shared/camera.js';
 const C={asphalt:0x394951,sand:0x938d7c,cliff:0x777568,cream:0xc8c6b7,coral:0xae6654,navy:0x263941,teal:0x497475,lime:0xcbd3db};
@@ -35,6 +37,7 @@ export class World{
     container.appendChild(this.renderer.domElement);
     this.camera=new THREE.PerspectiveCamera(CAMERA_FOV,1,.2,600);this.camera.position.set(0,90,64);this.camera.lookAt(0,0,0);
     this.atmosphere=createAtmosphere(this.renderer,this.scene,activeTrack.id,{mobile:matchMedia('(pointer: coarse)').matches});this.sun=this.atmosphere.sun;this.environment=this.atmosphere.environment;
+    this.gustTrails=activeTrack.id==='desert'?createGustTrails(MAX_PLAYERS):null;if(this.gustTrails)this.scene.add(this.gustTrails.mesh);
     this.materials=new Map();this.textures=new Map();this.static=new THREE.Group();this.scene.add(this.static);this.cars=new Map();this.boxes=[];this.rockets=new Map();this.lightning=new Map();this.dangerRings=new Map();this.effects=new Map();this.trails=[];this.frame=0;this.mines=new Map();this.chains=new Map();this.seenEffects=new Set();this.particles=[];this.particleClock=0;
     this.buildTrack();if(activeTrack.id==='coast'){this.buildScenery();this.landmarks=buildLandmarks(this);this.coastalCrabs=buildCoastalCrabs(this.scene);}else{this.landmarks=[];this.buildBiome();}if(activeTrack.id==='ice')this.valley=buildGlacierValley(this);if(activeTrack.id==='desert'){buildDesertScenery(this);this.desertMoles=buildDesertMoles(this);}this.mergeStatic();this.buildWater();this.buildPickups();this.buildEliminationLine();this.buildParticles();this.boostPads=buildBoostPads(this.scene);
     this.previewCars=COLORS.slice(0,2).map((color,i)=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});
@@ -182,13 +185,12 @@ export class World{
   setPickupModel(g,kind){
     if(g.userData.kind===kind)return;if(g.userData.model)g.remove(g.userData.model);
     const model=createPickupModel(kind);g.add(model);g.userData.model=model;g.userData.kind=kind;
-    g.userData.halo.material.color.setHex(PICKUP_COLORS[kind]);g.userData.ring.material.color.setHex(PICKUP_COLORS[kind]);g.userData.beacon.material.color.setHex(PICKUP_COLORS[kind]);
+    g.userData.halo.material.color.setHex(PICKUP_COLORS[kind]);g.userData.ring.material.uniforms.color.value.setHex(PICKUP_COLORS[kind]);g.userData.beacon.material.color.setHex(PICKUP_COLORS[kind]);
   }
   buildPickups(){
     for(const [i,p]of PICKUP_LOCATIONS.entries()){
       const g=new THREE.Group();g.position.set(p.x,p.y+1.9,p.z);
-      const halo=new THREE.Mesh(new THREE.PlaneGeometry(8,8),new THREE.MeshBasicMaterial({map:this.texture('glow'),color:0xffffff,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false}));halo.rotation.x=-Math.PI/2;g.add(halo);
-      const ring=new THREE.Mesh(new THREE.TorusGeometry(1.85,.13,6,32),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:1,toneMapped:false}));ring.rotation.x=-Math.PI/2;g.add(ring);
+      const {halo,ring}=createPickupGround(p,this.texture('glow'));g.add(halo,ring);
       const beacon=new THREE.Mesh(new THREE.CylinderGeometry(1.85,1.85,.8,24,1,true),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.2,side:THREE.DoubleSide,depthWrite:false,toneMapped:false}));beacon.position.y=-1.3;g.add(beacon);
       g.userData={halo,ring,beacon};this.setPickupModel(g,WEAPON_IDS[i%WEAPON_IDS.length]);this.scene.add(g);this.boxes.push(g);
     }
@@ -299,7 +301,7 @@ export class World{
       const thrust=boostExhaustStrength(car.padBoostRemaining);g.userData.boostExhaust.visible=thrust>0&&!p.eliminated;for(const jet of g.userData.boostExhaust.children)jet.scale.set(.32*thrust,.13*Math.sqrt(thrust),.13*Math.sqrt(thrust));
       g.userData.shield.visible=p.shield>0&&!p.eliminated;g.userData.shield.material.opacity=.16+Math.sin(now*.006)*.04;
       g.userData.paint.emissive.setHex(p.tased>0?0x2868c5:0);g.userData.paint.emissiveIntensity=p.tased>0?.7:0;
-      g.userData.paint.color.copy(g.userData.baseColor).multiplyScalar(p.wrecked?.22:1-(100-(p.health??100))*.004);
+      g.userData.paint.color.copy(g.userData.baseColor).multiplyScalar(p.wrecked?.22:1-damageSeverity(p.health??100)*.396);
       if(g.visible&&this.emitParticles){const level=damageLevel(p.health??100),fx=Math.cos(car.angle),fz=Math.sin(car.angle);if(level>0){for(let j=0;j<level;j++)this.particle(car.x+fx*1.2,g.position.y+.9,car.z+fz*1.2,'smoke',-car.vx*.12,-car.vz*.12);if(level>=3)for(let j=0;j<level-1;j++)this.particle(car.x+fx*1.2+(Math.random()-.5),g.position.y+.7,car.z+fz*1.2+(Math.random()-.5),'fire');}
         if(p.firing==='flame')for(let j=0;j<10;j++){const d=CAR_LENGTH/2+Math.random()*(FLAME_RANGE-CAR_LENGTH/2),spread=(Math.random()-.5)*d*.22,point=g.localToWorld(new THREE.Vector3(d,.65,spread));this.particle(point.x,point.y,point.z,'fire',fx*4,fz*4);}
       }
@@ -308,6 +310,7 @@ export class World{
     for(const [id,g]of this.cars)if(!present.has(id)){this.scene.remove(g);disposeCarInstance(g);this.cars.delete(id);}
     // Smoothing must never draw two solid chassis inside one another.
     const visibleCars=[...this.cars].filter(([id,g])=>g.visible).map(([id,g])=>{const p=state?.players.find(p=>p.id===id);return {...p,x:g.position.x,z:g.position.z,angle:-g.rotation.y,y:g.position.y,vx:0,vz:0,yawVelocity:0};});
+    this.gustTrails?.update(state?.phase==='racing'?state.raceTime:0,visibleCars);
     // Rendering is read-only: physics contacts are solved only on simulation ticks.
     this.followFrame(state?.camera||cameraFrame(previewChase,previewFleet),dt,state?visibleCars:previewFleet);
     this.boxes.forEach((g,i)=>{const pickup=state?.pickups[i];g.visible=!state||pickup?.readyAt<=state.time;this.setPickupModel(g,pickup?.item||WEAPON_IDS[i%WEAPON_IDS.length]);g.userData.model.rotation.y=now*.00045+i;g.position.y=(PICKUP_LOCATIONS[i]?.y||0)+1.9+Math.sin(now*.0017+i)*.18;g.userData.halo.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.08-g.position.y;g.userData.ring.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.13-g.position.y;});

@@ -47,7 +47,9 @@ function beaches(ctx){const bands=[[],[]];for(const side of [-1,1])for(let i=0;i
 }return bands;}
 function mountainTerrain(ctx,start,end,index){
   const {trackAt,nearestTrack,trackLength:TRACK_LENGTH}=ctx;
-  const outcrops=[],count=Math.ceil((end-start)*TRACK_LENGTH/4),bands=[[],[],[],[]],profiles=p=>[[p.halfWidth+.62,p.y-.20],[p.halfWidth+2.5,Math.max(-4.8,p.y-3.2)],[p.halfWidth+13,Math.max(-4.8,p.y*.65-3.2)],[p.halfWidth+24,Math.max(-4.8,p.y*.3-4)],[p.halfWidth+37,-4.8]];
+  // Bury both outer skirt rings below the -4m ground plane, including where
+  // the road is level. A ring exactly at -4 creates a shallow, flickering seam.
+  const outcrops=[],count=Math.ceil((end-start)*TRACK_LENGTH/4),bands=[[],[],[],[]],profiles=p=>[[p.halfWidth+.62,p.y-.20],[p.halfWidth+2.5,Math.max(-4.8,p.y-3.2)],[p.halfWidth+13,Math.max(-4.8,p.y*.65-3.2)],[p.halfWidth+24,Math.max(-4.8,p.y*.3-4.8)],[p.halfWidth+37,-4.8]];
   const point=(p,j,side,f)=>{const [offset,y]=profiles(p)[j],jitter=j<2?0:Math.sin(f*121+j*1.7)*.9+Math.cos(f*173-j)*.6;return along(p,(offset+jitter)*side,y);};
   for(let i=0;i<count;i++){
     const f=start+(end-start)*i/count,nf=start+(end-start)*(i+1)/count,p=trackAt(f),q=trackAt(nf);

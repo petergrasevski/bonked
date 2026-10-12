@@ -18,7 +18,7 @@ test('wind alternates left, right and backward in smooth one-second bursts and r
   for(const age of [3,4,4.5,5.5,6,7,8.5])assert.equal(probe(age).strength,0);
   assert.ok(probe(3.001).strength<.001);assert.ok(probe(3.999).strength<.001);
   const s=desertStormAt(21.5);assert.equal(stormGustAt(21.5,s.x+600,s.z).strength,0);
-  const car={x:s.x,z:s.z,angle:0,vx:30,vz:0};applyDesertWind(car,21.5,.5);assert.ok(car.vx<30&&car.vx>=18);assert.ok(Math.abs(car.vz)<1e-8);
+  const car={x:s.x,z:s.z,angle:0,vx:30,vz:0};applyDesertWind(car,21.5,.5);assert.ok(Math.abs(car.vx-(30-24*1.7*.5))<1e-8);assert.ok(Math.abs(car.vz)<1e-8);
   for(const state of ['finished','eliminated','falling','overturned']){const c={...car,[state]:true};applyDesertWind(c,21.5,1);assert.equal(c.vx,car.vx);}
 });
 test('desert wind agrees exactly between authoritative ticks and client prediction, leaving other circuits unchanged',()=>{
@@ -33,4 +33,21 @@ test('dust uses two fixed GPU draws and keeps near-track visibility readable at 
   for(const height of [20,50,100,200,400]){const {density}=stormHaze(storm,storm,height);assert.ok(1-Math.exp(-((density*height*1.5)**2))<.65,'cars stay readable through the haze');}
   dust.update(58);assert.equal(dust.group.visible,false);
   for(const d of [dust,copy])d.group.traverse(mesh=>{mesh.geometry?.dispose();mesh.material?.dispose();});
+});
+test('gust trails match the force direction, fade with coverage and reuse bounded buffers',async()=>{
+  const {createGustTrails}=await import('../public/desert-storm.js'),trails=createGustTrails(8),mesh=trails.mesh;
+  const matrices=mesh.instanceMatrix.array,positions=mesh.geometry.attributes.position.array;
+  for(const seconds of [18.5,21.5,24.5])for(const angle of [0,Math.PI/2,-2]){
+    const s=desertStormAt(seconds),car={x:s.x,z:s.z,y:4,angle},wind=stormGustAt(seconds,car.x,car.z,angle);
+    trails.update(seconds,[car]);assert.equal(mesh.count,1);assert.equal(mesh.visible,true);
+    assert.ok(Math.abs(matrices[0]-wind.x/Math.hypot(wind.x,wind.z))<1e-6);assert.ok(Math.abs(matrices[2]-wind.z/Math.hypot(wind.x,wind.z))<1e-6);
+    assert.ok(Math.abs(mesh.geometry.attributes.gustStrength.getX(0)-wind.strength)<1e-6);
+    assert.equal(matrices[13],4);assert.equal(mesh.instanceMatrix.array,matrices);assert.equal(mesh.geometry.attributes.position.array,positions);
+  }
+  const seconds=24.5,s=desertStormAt(seconds),car={x:s.x,z:s.z,angle:0};
+  trails.update(seconds,Array.from({length:12},()=>car));assert.equal(mesh.count,8);assert.equal(mesh.geometry.index.count,3*24*6);
+  for(const flag of ['eliminated','finished','falling','overturned']){trails.update(seconds,[{...car,[flag]:true}]);assert.equal(mesh.visible,false);}
+  for(const t of [0,25.1,70]){trails.update(t,[car]);assert.equal(mesh.visible,false);}
+  trails.update(seconds,[{...car,x:car.x+600}]);assert.equal(mesh.visible,false);
+  mesh.geometry.dispose();mesh.material.dispose();
 });

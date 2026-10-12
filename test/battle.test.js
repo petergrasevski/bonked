@@ -35,7 +35,7 @@ test('nudge prediction responds immediately without applying authoritative damag
   const shielded=at(1,0);shielded.shield=8;const attacker=at(0,-2.3);for(let i=0;i<12;i++){stepCar(attacker,{...NEUTRAL,nudge:1});resolveNudges([attacker,shielded]);}assert.equal(shielded.health,100);assert.equal(shielded.vx,0);assert.equal(shielded.vz,0);
 });
 test('damage reduces grip and steering authority independently of the smaller speed penalty',()=>{
-  assert.equal(healthHandlingFactor(100),1);assert.equal(healthHandlingFactor(1),.4);
+  for(const health of [60,61,80,100])assert.equal(healthHandlingFactor(health),1);assert.equal(healthHandlingFactor(1),.4);assert.equal(healthHandlingFactor(30.5),.7);
   const healthy=at(),damaged=at(),p=trackAt(.1);damaged.health=1;
   for(const car of [healthy,damaged]){car.vx=Math.cos(p.angle)*20+p.nx*4;car.vz=Math.sin(p.angle)*20+p.nz*4;stepCar(car,NEUTRAL);}
   const lateral=car=>-car.vx*Math.sin(car.angle)+car.vz*Math.cos(car.angle);

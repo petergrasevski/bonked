@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {desertStormAt,stormCoverage} from '../shared/desert-storm.js';
+import {desertStormAt,stormCoverage,stormGustAt} from '../shared/desert-storm.js';
 export function createDustCloud({mobile=false}={}){
   const group=new THREE.Group();group.name='roving-dust-storm';let seed=8043;
   const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
@@ -28,4 +28,35 @@ export function createDustCloud({mobile=false}={}){
 export function stormHaze(storm,focus,height){
   const coverage=stormCoverage(storm,focus.x,focus.z);
   return {coverage,density:(.0045+.011*coverage)/Math.max(1,height/42)};
+}
+
+// Three curved ribbons per car, batched into one draw with no per-frame geometry allocation.
+export function createGustTrails(maxCars=8){
+  const positions=[],uvs=[],phases=[],indices=[],segments=24;
+  for(let line=0;line<3;line++)for(let i=0;i<=segments;i++){
+    const t=i/segments,x=(t-.5)*11,z=(line-1)*2.3+Math.sin(t*Math.PI*2+line*.7)*.65,y=.9+line*.5+Math.sin(t*Math.PI)*.35;
+    const width=.10*Math.sin(Math.PI*t);
+    for(const side of [-1,1]){positions.push(x,y,z+side*width);uvs.push(t,(side+1)/2);phases.push(line/3);}
+    if(i<segments){const a=line*(segments+1)*2+i*2;indices.push(a,a+1,a+2,a+1,a+3,a+2);}
+  }
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geometry.setAttribute('phase',new THREE.Float32BufferAttribute(phases,1));geometry.setIndex(indices);
+  const strengths=new THREE.InstancedBufferAttribute(new Float32Array(maxCars),1).setUsage(THREE.DynamicDrawUsage);geometry.setAttribute('gustStrength',strengths);
+  const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms:{time:{value:0}},
+    vertexShader:`uniform float time;attribute float phase,gustStrength;varying vec2 vUv;varying float alpha;
+      void main(){vUv=uv;float age=fract(time*1.7+phase);vec3 p=position;p.x+=(age-.5)*6.;alpha=sin(age*3.14159265)*gustStrength;gl_Position=projectionMatrix*modelViewMatrix*instanceMatrix*vec4(p,1.);}`,
+    fragmentShader:`varying vec2 vUv;varying float alpha;void main(){float edge=1.-abs(vUv.y*2.-1.);gl_FragColor=vec4(1.,.94,.78,alpha*edge*.85);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+      }`});
+  const mesh=new THREE.InstancedMesh(geometry,material,maxCars),dummy=new THREE.Object3D();mesh.name='desert-gust-trails';mesh.frustumCulled=false;mesh.renderOrder=5;mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.count=0;mesh.visible=false;
+  return {mesh,update(seconds,cars){
+    mesh.count=0;material.uniforms.time.value=seconds;
+    for(const car of cars){
+      if(mesh.count===maxCars)break;
+      if(car.eliminated||car.finished||car.falling||car.overturned)continue;
+      const wind=stormGustAt(seconds,car.x,car.z,car.angle);if(wind.strength<=.001)continue;
+      dummy.position.set(car.x,car.y||0,car.z);dummy.rotation.y=-Math.atan2(wind.z,wind.x);dummy.updateMatrix();mesh.setMatrixAt(mesh.count,dummy.matrix);strengths.setX(mesh.count++,wind.strength);
+    }
+    mesh.visible=mesh.count>0;if(mesh.visible){mesh.instanceMatrix.needsUpdate=true;strengths.needsUpdate=true;}
+  }};
 }
