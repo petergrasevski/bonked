@@ -46,3 +46,10 @@ export class RenderCorrections {
     return pose;
   }
 }
+
+// Both local and remote collision bodies are predicted together. Never substitute
+// delayed snapshot poses for peers here: that creates invisible contacts.
+export function renderFleet(state,local,others,corrections,dt,remainder=0){
+  const poses=new Map([local,...others].filter(Boolean).map(car=>[car.id,corrections.render(car,dt,remainder)]));
+  return state.players.map(authority=>{const pose=poses.get(authority.id);return {...authority,...(pose?.eliminated===authority.eliminated?pose:authority)};});
+}

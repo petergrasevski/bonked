@@ -1,5 +1,5 @@
 import {NetworkDiagnostics} from './network-diagnostics.js';
-import {RemoteSnapshots} from '/shared/remote-snapshots.js';
+import {CombatPrediction} from '/shared/combat-prediction.js';
 import {PREDICTION_GRACE_MS,replayWindow} from '/shared/network-timing.js';
 import {createScoreMeter} from './score-meter.js';
 import {RoundResults} from './round-results.js';
@@ -9,7 +9,7 @@ import {initMetalInteractions} from './metal-ui.js';
 import {createTrackPicker} from './track-picker.js';
 import {readController} from './controller.js';
 import {PartyVoice} from './voice.js';
-import {RenderCorrections} from '/shared/netcode.js';
+import {RenderCorrections,renderFleet} from '/shared/netcode.js';
 import { detectDevice, initDisplayGuide } from './display.js';
 import { WeaponAudio } from './weapon-audio.js';
 import { EngineAudio, raceListener } from './engine-audio.js';
@@ -22,12 +22,12 @@ const $=id=>document.getElementById(id);
 initMetalInteractions();
 const device=detectDevice(navigator);document.body.classList.toggle('mobile',device.mobile);
 const corrections=new RenderCorrections();
-const remoteSnapshots=new RemoteSnapshots();
+const combatPrediction=new CombatPrediction();
 const network=new NetworkDiagnostics(message=>send(message));
 window.tounchedNetwork={export:()=>network.export()};
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
-function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();remoteSnapshots.reset();network.resetStream();history=[];pending=[];accumulator=0;}
+function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();combatPrediction.reset();network.resetStream();history=[];pending=[];accumulator=0;}
 let world,displayGuide=null;
 const weaponHud=new WeaponHUD($('desktop-weapon'),()=>world);
 const resultsScreen=new RoundResults($('results'));
@@ -54,13 +54,13 @@ function connect(){
     let msg;try{msg=JSON.parse(event.data);}catch{return;}
     if(msg.type==='server-ping'){send({type:'server-pong',id:msg.id});return;}
     if(msg.type==='pong'){rtt=Date.now()-msg.sent;const measuredOffset=msg.time+rtt/2-Date.now();clockOffset=network.ping===null?measuredOffset:clockOffset*.9+measuredOffset*.1;network.pong(rtt,msg.diagnostics);network.updatePing(true);return;}
-    if(msg.type==='welcome'){resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();remoteSnapshots.reset();network.resetStream();voice.join(session);setBusy(false);return;}
+    if(msg.type==='welcome'){resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();combatPrediction.reset();network.resetStream();voice.join(session);setBusy(false);return;}
     if(msg.type==='error'){toast(msg.message);setBusy(false);if(resuming){resuming=false;clearRoom();}return;}
     if(msg.type==='left'){clearRoom();return;}
     if(msg.type==='state'){
-      lastState=performance.now();network.snapshot(lastState);const was=state;selectWorld(msg.trackId||'coast');const oldFleet=predicted?[predicted,...predictedOthers]:[];state=msg;history.push({time:performance.now(),state:msg});if(history.length>12)history.shift();if(was?.phase!==msg.phase||was?.round!==msg.round)remoteSnapshots.reset();remoteSnapshots.push(msg,lastState);
+      lastState=performance.now();network.snapshot(lastState);const was=state;selectWorld(msg.trackId||'coast');const oldFleet=predicted?[predicted,...predictedOthers]:[];state=msg;history.push({time:performance.now(),state:msg});if(history.length>12)history.shift();if(was?.phase!==msg.phase||was?.round!==msg.round)combatPrediction.reset();
       const me=msg.players.find(p=>p.id===myId);
-      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));if(msg.phase==='racing'){const replay=replayWindow(pending,rtt);network.add('replaySteps',replay.length);for(const frame of replay)predictFleet(predicted,predictedOthers,frame.input,STEP);const old=oldFleet.find(p=>p.id===myId);if(old)network.add('correctionM',Math.hypot(old.x-predicted.x,old.z-predicted.z));}corrections.reconcile(oldFleet,[predicted,...predictedOthers],msg.phase==='racing'?accumulator:0);}
+      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));combatPrediction.reconcile(msg,predicted,predictedOthers);if(msg.phase==='racing'){const replay=replayWindow(pending,rtt);network.add('replaySteps',replay.length);for(const frame of replay){predictFleet(predicted,predictedOthers,frame.input,STEP);combatPrediction.step(frame.input,STEP);}const old=oldFleet.find(p=>p.id===myId);if(old)network.add('correctionM',Math.hypot(old.x-predicted.x,old.z-predicted.z));}corrections.reconcile(oldFleet,[predicted,...predictedOthers],msg.phase==='racing'?accumulator:0);}
       if(phase!==msg.phase){const previousPhase=phase;phase=msg.phase;onPhaseChange(previousPhase);}
       if(was&&me?.item&&!was.players.find(p=>p.id===myId)?.item){beep(720,.09,.03);}
     }
@@ -75,7 +75,7 @@ function setBusy(busy){entryBusy=busy;updateEntryButtons();}
 updateEntryButtons();
 function enter(type){const name=$('name').value.trim();if(!name){$('name').focus();return toast('Enter your name first.');}voice.prepare();try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');updateEntryButtons();});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
-function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();remoteSnapshots.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
+function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();combatPrediction.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 $('leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
 async function getShareURL(){let origin=location.origin;if(['localhost','127.0.0.1'].includes(location.hostname)){try{const config=await fetch('/api/config').then(r=>r.json());origin=config.lanURLs[0]||origin;}catch{}}return origin+(session?`/?room=${session.code}`:'/');}
@@ -83,7 +83,7 @@ $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.c
 const itemMeta=WEAPONS;
 function onPhaseChange(previousPhase){
   const playing=state&&state.phase!=='lobby';document.body.classList.toggle('playing',playing);$('race-ui').hidden=!playing;$('entry-panel').hidden=!!state;$('room-panel').hidden=!state;$('results').hidden=state?.phase!=='finished';if(!(previousPhase==='countdown'&&state?.phase==='racing'))releaseControls();pending=[];
-  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();remoteSnapshots.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
+  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();combatPrediction.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
   if(state?.phase==='finished')renderResults();
 }
 function node(tag,className,text){const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;}
@@ -108,7 +108,7 @@ function updateUI(now){
   if(state.phase==='lobby')return;
   renderScores();const serverNow=Date.now()+clockOffset;
   $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);
-  const item=itemMeta[me.item];weaponHud.update(me,{visible:!device.mobile,controller:document.body.classList.contains('controller-connected')});$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',taser:'TASER',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[me.item]||'—';$('item-count').textContent=item?(['flame','taser'].includes(me.item)?me.ammo.toFixed(1)+'s':me.ammo>1?'×'+me.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
+  const inventory=predicted&&state.phase==='racing'?predicted:me;const item=itemMeta[inventory.item];weaponHud.update(inventory,{visible:!device.mobile,controller:document.body.classList.contains('controller-connected')});$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',taser:'TASER',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[inventory.item]||'—';$('item-count').textContent=item?(['flame','taser'].includes(inventory.item)?inventory.ammo.toFixed(1)+'s':inventory.ammo>1?'×'+inventory.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
   for(const id of ['nudge-left','nudge-right']){$(id).classList.toggle('cooling',(me.nudgeCooldown||0)>0);$(id).setAttribute('aria-disabled',String(me.eliminated||(me.nudgeCooldown||0)>0));}
   const damage=damageLevel(me.health);$('health-number').textContent=Math.ceil(me.health);$('health-status').textContent=me.overturned&&!me.wrecked?'FLIPPED':'';$('health-ui').dataset.level=String(damage);[...$('health-bars').children].forEach((bar,i)=>bar.classList.toggle('lit',i<Math.ceil(me.health/20)));$('shield-time').textContent=me.shield>0?'SHIELD '+me.shield.toFixed(1)+'s':'';
   const remaining=(state.startAt-serverNow)/1000;$('countdown').textContent=state.phase==='countdown'?String(Math.max(1,Math.ceil(remaining))):state.phase==='racing'&&remaining>-.8?'GO!':'';
@@ -178,19 +178,17 @@ $('sound').onclick=()=>{soundEnabled=!soundEnabled;$('sound-state').textContent=
 function renderedState(now,dt){
   if(!state||!predicted)return state;
   const fresh=now-lastState<PREDICTION_GRACE_MS&&state.phase==='racing';
-  const cars=[predicted,...predictedOthers].map(car=>corrections.render(car,dt,fresh?accumulator:0));
-  const peers=state.phase==='racing'?remoteSnapshots.sample(now):null;
-  const players=state.players.map(p=>{const pose=p.id===myId?cars.find(c=>c.id===p.id):peers?.find(c=>c.id===p.id)||cars.find(c=>c.id===p.id);return {...p,...(pose?.eliminated===p.eliminated?pose:p)};});
+  const players=renderFleet(state,predicted,predictedOthers,corrections,dt,fresh?accumulator:0);
   const camera=cameraFrame(createChase(players),players);
-  const raceTime=Math.max(state.raceTime||0,...cars.map(car=>car.raceTime||0))+(fresh?accumulator:0);
-  return {...state,players,camera,raceTime,chase:renderedChase(state.chase,players)};
+  const raceTime=Math.max(state.raceTime||0,...[predicted,...predictedOthers].map(car=>car.raceTime||0))+(fresh?accumulator:0);
+  return {...state,...(state.phase==='racing'?combatPrediction.view():{}),combatTime:combatPrediction.time,players,camera,raceTime,chase:renderedChase(state.chase,players)};
 }
 function frame(now){requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
-  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
+  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);combatPrediction.step(command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
   const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);trackPicker.tick(now);
   if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
-  if(now-uiAt>100){uiAt=now;updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,bufferMs:Math.round(remoteSnapshots.delay),underruns:remoteSnapshots.underruns,server:network.server});}
+  if(now-uiAt>100){uiAt=now;updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,presentation:'predicted-fleet',bufferMs:0,underruns:0,server:network.server});}
   const listening=raceListener(rendered,world?.follow),audible=soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible);engineAudio?.update(rendered,listening,audible);
 }

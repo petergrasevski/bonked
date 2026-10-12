@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {TRACK_TITLES} from './track-title-assets.js';
 import {World} from './world.js';
 import {TRACKS,activeTrack,selectTrack,trackAt} from '../shared/game.js';
 const SIZE=320;
@@ -29,7 +30,7 @@ export function createTrackPicker(root,getWorld,onSelect){
   for(const track of Object.values(TRACKS)){
     const button=document.createElement('button');button.type='button';button.className='track-card '+track.id;button.setAttribute('aria-label',track.name);button.setAttribute('aria-pressed','false');button.dataset.trackId=track.id;
     const canvas=document.createElement('canvas');canvas.width=canvas.height=SIZE;canvas.setAttribute('aria-hidden','true');
-    const image=document.createElement('img');image.src=`/track-titles/${track.id}.png`;image.alt='';image.className='track-title';image.draggable=false;
+    const image=document.createElement('img');image.src=TRACK_TITLES[track.id];image.width=960;image.height=480;image.decoding='async';image.alt='';image.className='track-title';image.draggable=false;
     const check=document.createElement('span');check.className='track-selected';check.textContent='✓';check.setAttribute('aria-hidden','true');button.append(canvas,image,check);button.onclick=()=>onSelect(track.id);root.append(button);cards.set(track.id,{button,canvas});
   }
   const generateMissing=()=>{

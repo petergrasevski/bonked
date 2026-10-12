@@ -30,9 +30,11 @@ export function collectPickup(car,pickups,now,random=Math.random){
 }
 const players=room=>[...room.players.values()];
 const targets=(room,owner)=>players(room).filter(p=>p.id!==owner&&!p.car.finished&&(!p.car.eliminated||p.car.wrecked)&&!p.car.falling);
-function effect(room,kind,x,z,now,extra={}){room.effects.push({id:++room.serial,kind,x,z,until:now+(extra.duration||500),color:extra.color||'#ff993d',...extra});if(room.effects.length>160)room.effects.shift();}
-function sound(room,kind,car,now){room.sounds??=[];room.sounds.push({id:++room.serial,kind,x:car.x,y:car.y||0,z:car.z,at:now});if(room.sounds.length>96)room.sounds.shift();}
+function eventId(room,kind){const event=room.shotEvent;if(!event)return ++room.serial;const n=event.counts[kind]||0;event.counts[kind]=n+1;return `${event.key}:${kind}:${n}`;}
+function effect(room,kind,x,z,now,extra={}){if(room.visualOnly&&!room.shotEvent)return;room.effects.push({id:eventId(room,'effect-'+kind),kind,x,z,until:now+(extra.duration||500),color:extra.color||'#ff993d',...extra});if(room.effects.length>160)room.effects.shift();}
+function sound(room,kind,car,now){if(room.visualOnly&&!room.shotEvent)return;room.sounds??=[];room.sounds.push({id:eventId(room,'sound-'+kind),kind,x:car.x,y:car.y||0,z:car.z,at:now});if(room.sounds.length>96)room.sounds.shift();}
 function hit(room,p,amount,now,kick={}){
+  if(room.visualOnly)return false; // Only the server can award damage or weapon impulses.
   const c=p.car,protectedByShield=c.shield>0,wasWreck=c.wrecked;
   const damaged=damageCar(c,amount);
   if(protectedByShield)effect(room,'shield-hit',c.x,c.z,now,{y:c.y,color:'#66dcff',duration:160});
@@ -51,7 +53,7 @@ function pulse(room,owner,now){
 function projectile(room,p,kind,angle,now){
   const c=p.car,speed=kind==='plasma'?TOP_SPEED*1.5:kind==='machinegun'?350:65,d=weaponDirection(c),muzzle=weaponMuzzle(c);
   const target=kind==='rocket'?targets(room,p.id).filter(t=>!t.car.eliminated&&t.car.progress>c.progress).sort((a,b)=>a.car.progress-b.car.progress)[0]?.id:null;
-  const shot={id:++room.serial,kind,owner:p.id,target,...muzzle,angle:Math.atan2(d.z,d.x),pitch:Math.atan2(d.y,Math.hypot(d.x,d.z)),vx:d.x*speed,vy:d.y*speed,vz:d.z*speed,speed,until:now+(kind==='machinegun'?400:4000)};
+  const shot={id:eventId(room,kind),kind,owner:p.id,target,...muzzle,angle:Math.atan2(d.z,d.x),pitch:Math.atan2(d.y,Math.hypot(d.x,d.z)),vx:d.x*speed,vy:d.y*speed,vz:d.z*speed,speed,until:now+(kind==='machinegun'?400:4000)};
   if(kind==='rocket'){
     const route=nearestTrack(c.x,c.z,c.trackFraction);
     // Only attach actual road launches to its route; detached arenas keep free homing.
@@ -103,8 +105,9 @@ export function pressWeapon(room,p,now){
   const c=p.car,id=c.item;
   if(room.phase!=='racing'||!id||c.eliminated||c.finished||c.overturned||c.fireCooldown>0)return false;
   if(id==='flame'||id==='taser')return false; // Fuel and damage are integrated only while held.
+  c.weaponShot=(c.weaponShot||0)+1;room.shotEvent={key:`weapon:${p.id}:${c.weaponShot}`,counts:{}};
   sound(room,id,c,now);
-  if(id==='pulse'){pulse(room,p.id,now);room.pulses.push({owner:p.id,at:now+1000});}
+  if(id==='pulse'){pulse(room,p.id,now);room.pulses.push({owner:p.id,at:now+1000,key:room.shotEvent.key+':echo'});}
   if(id==='shield'){c.shield=8;effect(room,'shield-hit',c.x,c.z,now,{y:c.y,color:'#66dcff'});}
   if(['rocket','machinegun','plasma'].includes(id))projectile(room,p,id,c.angle,now);
   if(id==='railgun'){
@@ -114,13 +117,13 @@ export function pressWeapon(room,p,now){
   if(id==='mine'){
     const x=c.x-Math.cos(c.angle)*3.5,z=c.z-Math.sin(c.angle)*3.5,road=nearestTrack(x,z,c.trackFraction??null);
     // Sample the actual drop point, on the owner's deck of a stacked crossing.
-    room.mines.push({id:++room.serial,owner:p.id,x,y:road.y+.025,z,angle:Math.atan2(-road.nx,road.nz),pitch:Math.atan(road.grade||0),trackFraction:road.fraction,armAt:now+100,until:now+180000});
+    room.mines.push({id:eventId(room,'mine'),owner:p.id,x,y:road.y+.025,z,angle:Math.atan2(-road.nx,road.nz),pitch:Math.atan(road.grade||0),trackFraction:road.fraction,armAt:now+100,until:now+180000});
     if(room.mines.length>90)room.mines.shift();
   }
   if(id==='chain'){
     room.chains=room.chains.filter(b=>b.owner!==p.id);
     const anchor=weaponMuzzle(c,Math.PI,CAR_LENGTH/2),x=anchor.x-Math.cos(c.angle)*CAR_LENGTH*1.5,z=anchor.z-Math.sin(c.angle)*CAR_LENGTH*1.5,road=nearestTrack(x,z,c.trackFraction);
-    room.chains.push({id:++room.serial,owner:p.id,y:road.y+.98,x,z,vx:c.vx,vy:0,vz:c.vz,trackFraction:road.fraction,length:CAR_LENGTH*1.5,anchorX:anchor.x,anchorY:anchor.y,anchorZ:anchor.z});
+    room.chains.push({id:eventId(room,'chain'),owner:p.id,y:road.y+.98,x,z,vx:c.vx,vy:0,vz:c.vz,trackFraction:road.fraction,length:CAR_LENGTH*1.5,anchorX:anchor.x,anchorY:anchor.y,anchorZ:anchor.z});
   }
   if(id==='shotgun'){
     const hits=new Map();
@@ -135,12 +138,14 @@ export function pressWeapon(room,p,now){
   }
   c.ammo--;c.fireCooldown=id==='machinegun'?.075:id==='plasma'?.23:id==='shotgun'?.3:.2;
   if(c.ammo<=0){c.item=null;c.ammo=0;}
+  room.shotEvent=null;
   return true;
 }
 export function updateCombat(room,dt,now){
-  room.arcs=[];room.sounds=(room.sounds||[]).filter(s=>now-s.at<1500);
-  for(const p of room.players.values())p.car.tased=0;
+  room.arcs=room.visualOnly?room.arcs.filter(a=>a.owner!==room.predictionOwner):[];room.sounds=(room.sounds||[]).filter(s=>now-s.at<1500);
+  if(!room.visualOnly)for(const p of room.players.values())p.car.tased=0;
   for(const p of room.players.values()){
+    if(room.visualOnly&&p.id!==room.predictionOwner)continue;
     const c=p.car;c.firing=null;c.fireCooldown=Math.max(0,c.fireCooldown-dt);
     const held=!!(p.simInput||p.input).fire&&!c.eliminated&&!c.finished&&!c.overturned;
     const pressed=held&&!p.fireLatch;p.fireLatch=held;
@@ -149,7 +154,7 @@ export function updateCombat(room,dt,now){
       const used=Math.min(dt,c.ammo);c.ammo=Math.max(0,c.ammo-used);c.firing='taser';
       for(const q of targets(room,p.id)){
         if(q.car.eliminated||q.car.shield>0||Math.abs(q.car.y-c.y)>2.5||Math.hypot(q.car.x-c.x,q.car.z-c.z)>TASER_RADIUS)continue;
-        hit(room,q,DAMAGE.taser*used,now);if(!q.car.eliminated)q.car.tased=.08;
+        hit(room,q,DAMAGE.taser*used,now);if(!room.visualOnly&&!q.car.eliminated)q.car.tased=.08;
         room.arcs.push({owner:p.id,target:q.id});
       }
       if(c.ammo<=.00001){c.item=null;c.ammo=0;}
@@ -162,7 +167,7 @@ export function updateCombat(room,dt,now){
       if(c.ammo<=.00001){c.item=null;c.ammo=0;}
     }else if(pressed||(held&&WEAPONS[c.item]?.continuous))pressWeapon(room,p,now);
   }
-  for(const scheduled of room.pulses)if(now>=scheduled.at){pulse(room,scheduled.owner,now);const c=room.players.get(scheduled.owner)?.car;if(c&&!c.eliminated)sound(room,'pulse',c,now);scheduled.done=true;}
+  for(const scheduled of room.pulses)if(now>=scheduled.at){room.shotEvent={key:scheduled.key||`pulse:${scheduled.owner}:${scheduled.at}`,counts:{}};pulse(room,scheduled.owner,now);const c=room.players.get(scheduled.owner)?.car;if(c&&!c.eliminated)sound(room,'pulse',c,now);scheduled.done=true;room.shotEvent=null;}
   room.pulses=room.pulses.filter(p=>!p.done);
   for(const shot of room.projectiles){
     if(shot.until<=now)continue;

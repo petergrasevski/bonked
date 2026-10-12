@@ -19,8 +19,10 @@ Client metrics:
   positions before visual smoothing. Repeated large corrections indicate divergence.
 - `replaySteps`: unacknowledged control frames replayed after each snapshot.
 - `stalls`: number of update gaps crossing 250 ms in this window.
-- `bufferMs`: extra buffering for remote cars, adaptively 100–220 ms.
-- `underruns`: frames since stream reset that ran out of buffered remote samples.
+- `presentation`: `predicted-fleet` in net-v3. All cars use the same predicted
+  timeline as collision detection; remote poses are no longer buffered separately.
+- `bufferMs`: zero in net-v3 (net-v2 used a 100–220 ms remote-only buffer).
+- `underruns`: zero in net-v3; retained for older log compatibility.
 
 Server metrics:
 - `tickHz`: expected near 60; sustained lower values indicate simulation overload.
@@ -51,3 +53,23 @@ prediction mismatch rather than insufficient bandwidth.
 uses `autoDeployTrigger: commit`. A service created manually may still need its
 Dashboard Auto-Deploy setting enabled; changing YAML does not configure a service
 that is not managed by that Blueprint.
+
+## Local weapon presentation (net-v3)
+
+The client runs a disposable copy of combat alongside car prediction and input
+replay. Firing, ammunition, projectiles, beams, shields, mines and chains appear
+without waiting for a round trip. Owner + shot-counter + effect-type identifiers
+match authoritative events, preventing confirmation from playing a second shot.
+Every snapshot replaces speculative combat state; the server alone awards weapon
+damage and knockback. Incorrect predictions can still be corrected, especially
+when the other driver changes direction during a long round trip.
+
+## Track-title delivery
+
+The picker loads 960×480 transparent WebP files (about 367 KiB total versus
+5.5 MiB of source PNGs). HTML preloads them before the game's module graph/3D
+scene initializes. Their filenames include SHA-256 prefixes and the server sends
+one-year immutable cache headers. Keep the source PNGs for future artwork changes;
+regenerate WebP with `cwebp -q 85 -alpha_q 100 -m 6 -resize 960 480`, rename with the
+first 12 hex characters of its SHA-256, and update both `track-title-assets.js`
+and the three HTML preload URLs together. No extra hosting service is required.

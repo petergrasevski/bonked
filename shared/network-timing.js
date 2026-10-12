@@ -1,5 +1,5 @@
 // Bounded statistics shared by browser diagnostics and server logs.
-export const NETWORK_VERSION='net-v2';
+export const NETWORK_VERSION='net-v3';
 export const PREDICTION_GRACE_MS=750;
 export const INPUT_TIMEOUT_MS=1000;
 export class Samples{
