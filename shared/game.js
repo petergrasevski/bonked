@@ -138,13 +138,17 @@ OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
 if(activeTrack.id==='desert')OBSTACLES=DESERT_CACTI.map(({fraction,side},i)=>{const p=trackAt(fraction),lateral=side*(p.halfWidth-1.5);return {id:`cactus-${i}`,kind:'cactus',fraction,x:p.x+p.nx*lateral,z:p.z+p.nz*lateral,y:p.y,radius:.65,height:7,angle:p.angle};});
 MOLES=activeTrack.id==='desert'?desertMoles(TRACK_LENGTH).map(m=>{const p=trackAt(m.fraction);return {...m,x:p.x+p.nx*m.lateral,y:p.y,z:p.z+p.nz*m.lateral,angle:p.angle};}):[];
 CRABS=activeTrack.id==='coast'?coastalCrabs(trackAt):[];
-PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
-PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
-  let fraction=START_FRACTION+(90+row*TRACK_LENGTH/PICKUP_ROW_COUNT)/TRACK_LENGTH,p=trackAt(fraction);
+// Preserve the original rows, filling three gaps with extra weapon choices.
+const basePickupRows=Math.round(TRACK_LENGTH/(TOP_SPEED*10));
+const extraPickupFractions={coast:[.12,.405,.55],ice:[.14,.473,.806],desert:[.16,.36,.56]};
+const pickupFractions=Array.from({length:basePickupRows},(_,row)=>START_FRACTION+(90+row*TRACK_LENGTH/basePickupRows)/TRACK_LENGTH).concat(extraPickupFractions[id]).sort((a,b)=>a-b);
+PICKUP_ROW_COUNT=pickupFractions.length;
+PICKUP_LOCATIONS = pickupFractions.flatMap((initialFraction,row)=>{
+  let fraction=initialFraction,p=trackAt(fraction);
   if(OBSTACLES.some(o=>Math.hypot(o.x-p.x,o.z-p.z)<14)){fraction+=20/TRACK_LENGTH;p=trackAt(fraction);}
   const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
-}).flat();
+});
   BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:[...OBSTACLES,...MOLES],segments:SEGMENTS});
   trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS});
   return activeTrack;

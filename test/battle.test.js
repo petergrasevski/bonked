@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {spawnCar,trackAt,STEP,NEUTRAL,stepCar,resolveNudges,collideCars,CAR_WIDTH,PICKUP_LOCATIONS,PICKUP_ROW_COUNT,TRACK_LENGTH,TOP_SPEED,healthHandlingFactor,sanitizeInput} from '../shared/game.js';
 import {predictFleet} from '../shared/prediction.js';
 const at=(slot=0,side=0)=>{const p=trackAt(.1);return {...spawnCar(slot),x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,trackFraction:.1};};
-test('weapon rows offer 3–4 lanes across the road roughly ten seconds apart',()=>{
-  assert.ok(Math.abs(TRACK_LENGTH/PICKUP_ROW_COUNT/TOP_SPEED-10)<1);
+test('weapon rows offer 3–4 lanes across the road with shorter average gaps',()=>{
+  assert.ok(TRACK_LENGTH/PICKUP_ROW_COUNT/TOP_SPEED<8);
   for(let row=0;row<PICKUP_ROW_COUNT;row++){
     const items=PICKUP_LOCATIONS.filter(p=>p.row===row);assert.ok(items.length>=3&&items.length<=4);
     const road=trackAt(items[0].fraction),offsets=items.map(p=>(p.x-road.x)*road.nx+(p.z-road.z)*road.nz);
