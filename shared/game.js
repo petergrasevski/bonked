@@ -53,6 +53,15 @@ export const TRACKS = Object.freeze({
 export let BOOST_PADS;
 export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
 const trackCache=new Map(),landscapeCache=new Map();
+let segmentTree;
+// Spatial bounds prune distant road segments without approximating contacts.
+function buildSegmentTree(start=0,end=SEGMENTS.length){
+  const node={start,end,minX:Infinity,maxX:-Infinity,minZ:Infinity,maxZ:-Infinity};
+  if(end-start>12){const mid=(start+end)>>1;node.left=buildSegmentTree(start,mid);node.right=buildSegmentTree(mid,end);for(const child of [node.left,node.right]){node.minX=Math.min(node.minX,child.minX);node.maxX=Math.max(node.maxX,child.maxX);node.minZ=Math.min(node.minZ,child.minZ);node.maxZ=Math.max(node.maxZ,child.maxZ);}}
+  else for(let i=start;i<end;i++){const s=SEGMENTS[i];node.minX=Math.min(node.minX,s.x,s.x+s.dx);node.maxX=Math.max(node.maxX,s.x,s.x+s.dx);node.minZ=Math.min(node.minZ,s.z,s.z+s.dz);node.maxZ=Math.max(node.maxZ,s.z,s.z+s.dz);}
+  return node;
+}
+function segmentAtDistance(d){let lo=0,hi=SEGMENTS.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(SEGMENTS[mid].start+SEGMENTS[mid].len>=d)hi=mid;else lo=mid+1;}return SEGMENTS[lo];}
 export function getLandscape(){if(!landscapeCache.has(activeTrack.id))landscapeCache.set(activeTrack.id,createLandscape({id:activeTrack.id,segments:SEGMENTS,trackLength:TRACK_LENGTH,trackAt,nearestTrack,hasBarrier}));return landscapeCache.get(activeTrack.id);}
 export function terrainAt(x,z,ceiling=Infinity){const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=-4?{y:-4,nx:0,ny:1,nz:0}:null);}
 const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
@@ -100,7 +109,7 @@ export function selectTrack(id='coast'){
   if(!Object.hasOwn(TRACKS,id))throw new Error('Unknown track');
   activeTrack=TRACKS[id];
   if(trackCache.has(id)){
-    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS}=trackCache.get(id));return activeTrack;
+    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS,segmentTree}=trackCache.get(id));return activeTrack;
   }
 TRACK = Array.from({ length: 1500 }, (_, i) => {
   const f = i / 1500 * anchors.length, j = Math.floor(f), t = f - j, n = anchors.length;
@@ -118,6 +127,7 @@ SEGMENTS = TRACK.map((p, i) => {
   length += len; return s;
 });
 TRACK_LENGTH = length;
+segmentTree=buildSegmentTree();
 // Smooth widening around bends and three passing plazas, shared by rendering and physics.
 PLAZAS=activeTrack.id==='coast'?[.10,.30,.70]:[];
 
@@ -150,25 +160,32 @@ PICKUP_LOCATIONS = pickupFractions.flatMap((initialFraction,row)=>{
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
 });
   BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:[...OBSTACLES,...MOLES],segments:SEGMENTS});
-  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS});
+  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS,segmentTree});
   return activeTrack;
 }
 export function trackAt(fraction) {
   const d = ((fraction % 1 + 1) % 1) * TRACK_LENGTH;
-  const s = SEGMENTS.find(s => s.start+s.len >= d) || SEGMENTS.at(-1);
+  const s = segmentAtDistance(d);
   const t = (d-s.start)/s.len;
   return { y:s.y+s.dy*t, grade:s.dy/s.len, x:s.x+s.dx*t, z:s.z+s.dz*t, angle:Math.atan2(s.dz,s.dx), nx:s.nx, nz:s.nz, halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t };
 }
 export function nearestTrack(x,z,hint=null) {
-  let bestScore=Infinity;
+  let bestScore=Infinity,bestIndex=Infinity;
   let best = { distance: Infinity };
-  for (const s of SEGMENTS) {
+  const bound=node=>{const dx=Math.max(node.minX-x,0,x-node.maxX),dz=Math.max(node.minZ-z,0,z-node.maxZ);return dx*dx+dz*dz;};
+  const visit=node=>{
+    if(bound(node)>bestScore*bestScore+1e-9)return;
+    if(node.left){const first=bound(node.left)<=bound(node.right)?node.left:node.right;visit(first);visit(first===node.left?node.right:node.left);return;}
+    for(let index=node.start;index<node.end;index++){
+    const s=SEGMENTS[index];
     const t = clamp(((x-s.x)*s.dx+(z-s.z)*s.dz)/(s.len*s.len),0,1);
     const px=s.x+s.dx*t, pz=s.z+s.dz*t, d=Math.hypot(x-px,z-pz);
     const fraction=(s.start+s.len*t)/TRACK_LENGTH;
     const routePenalty=activeTrack.id==='desert'&&hint!==null?Math.max(0,arcDistance(fraction,hint)-50)*2:0;
-    if(d+routePenalty<bestScore){const rampLift=activeTrack.id==='desert'?desertRampLift(fraction,TRACK_LENGTH):0,rampGrade=activeTrack.id==='desert'?desertRampGrade(fraction,TRACK_LENGTH):0;bestScore=d+routePenalty;best={y:s.y+s.dy*t+rampLift,grade:s.dy/s.len+rampGrade,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
-  }
+    if(d+routePenalty<bestScore||(d+routePenalty===bestScore&&index<bestIndex)){bestIndex=index;const rampLift=activeTrack.id==='desert'?desertRampLift(fraction,TRACK_LENGTH):0,rampGrade=activeTrack.id==='desert'?desertRampGrade(fraction,TRACK_LENGTH):0;bestScore=d+routePenalty;best={y:s.y+s.dy*t+rampLift,grade:s.dy/s.len+rampGrade,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
+    }
+  };
+  visit(segmentTree);
   return best;
 }
 export const roadHalfWidth=fraction=>trackAt(fraction).halfWidth;

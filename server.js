@@ -1,3 +1,5 @@
+import {ServerDiagnostics} from './server-diagnostics.js';
+import {NETWORK_VERSION,INPUT_TIMEOUT_MS} from './shared/network-timing.js';
 import {captureMotion,recordMotion} from './shared/prediction.js';
 import {collectBoostPad} from './shared/boost-pads.js';
 import http from 'node:http';
@@ -15,6 +17,7 @@ import { initCombat, createPickups, collectPickup, WEAPONS, pressWeapon, updateC
 import { targetScoreForPlayers, scoreRound, nextRoundDue } from './shared/tournament.js';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const rooms=new Map(),connections=new Map();
+const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
 const MAX_ROOMS=100, GRACE_MS=20000;
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json','.json':'application/json','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
@@ -23,14 +26,14 @@ const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://localhost');
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);return res.end();}
-    if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',rooms:rooms.size,uptime:Math.round(process.uptime())}));}
+    if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',version:NETWORK_VERSION,revision:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local',rooms:rooms.size,uptime:Math.round(process.uptime())}));}
     if(url.pathname==='/api/config'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({lanURLs:process.env.PUBLIC_URL?[process.env.PUBLIC_URL]:lanURLs()}));}
     if(url.pathname==='/api/qr'){
       const value=url.searchParams.get('url');
       if(!value||value.length>512||!/^https?:\/\//.test(value)){res.writeHead(400);return res.end();}
       res.setHeader('Content-Type','image/svg+xml');return res.end(await QRCode.toString(value,{type:'svg',margin:1,color:{dark:'#101d26',light:'#ffffff'}}));
     }
-    const routes={'/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
+    const routes={'/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/network-timing.js':'shared/network-timing.js','/shared/remote-snapshots.js':'shared/remote-snapshots.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
@@ -74,10 +77,10 @@ voiceWss.on('connection',ws=>{
   });
   ws.on('close',()=>{clearTimeout(authTimeout);if(player?.voice===ws)player.voice=null;});
 });
-function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(JSON.stringify(data));}
+function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(typeof data==='string'?data:JSON.stringify(data));else if(ws?.readyState===WebSocket.OPEN)diagnostics.backpressure++;}
 function fail(ws,message){send(ws,{type:'error',message});}
 function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
-function broadcast(room,data){for(const p of room.players.values())send(p.ws,data);}
+function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
 function snapshot(room){return {type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
 function resetRoom(room,{newTournament=true,startFraction=START_FRACTION}={}){
@@ -103,12 +106,13 @@ wss.on('connection',(ws,req)=>{
   // Browsers must connect from the same origin; non-browser test clients have no Origin.
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host){ws.close(1008,'Origin rejected');return;}}catch{ws.close(1008);return;}}
   if(wss.clients.size>650){ws.close(1013,'Server full');return;}
-  const client={ws,room:null,player:null,alive:true,budget:0,window:Date.now()};connections.set(ws,client);
-  ws.on('error',()=>{});ws.on('pong',()=>client.alive=true);
+  const client={diagnosticId:randomBytes(3).toString('hex'),ws,room:null,player:null,alive:true,budget:0,window:Date.now()};connections.set(ws,client);
+  ws.on('error',()=>{});ws.on('pong',()=>{client.alive=true;if(client.pingAt)diagnostics.ping.add(performance.now()-client.pingAt);});
   ws.on('message',data=>{
     const now=Date.now();if(now-client.window>1000){client.window=now;client.budget=0;}if(++client.budget>150){ws.close(1008,'Too many messages');return;}
     let msg;try{msg=JSON.parse(data);}catch{return fail(ws,'Invalid message.');}if(!msg||typeof msg!=='object')return;
-    if(msg.type==='ping')return send(ws,{type:'pong',sent:msg.sent,time:now});
+    if(msg.type==='ping')return send(ws,{type:'pong',sent:msg.sent,time:now,diagnostics:diagnostics.last});
+    if(msg.type==='net-report'){diagnostics.client(client,msg.metrics,now);return;}
     if(msg.type==='create'||msg.type==='join'){
       if(client.room)return fail(ws,'Already in a room.');
       let room;
@@ -130,7 +134,7 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='input'){
       if(!Number.isSafeInteger(msg.seq)||msg.seq<=p.seq||msg.seq-p.seq>10000)return;
       const next=sanitizeInput(msg);if(room.phase==='countdown')recordLaunchInput(p,next,msg.accelPressedAt,now,room.startAt);
-      p.seq=msg.seq;p.input=next;p.lastInput=now;return;
+      diagnostics.inputGaps.add(now-p.lastInput);p.seq=msg.seq;p.input=next;p.lastInput=now;return;
     }
     if(msg.type==='item')return useItem(room,p,now);
     if(msg.type==='leave'){client.room=null;client.player=null;removePlayer(room,p);return send(ws,{type:'left'});}
@@ -152,8 +156,8 @@ wss.on('connection',(ws,req)=>{
 });
 let previous=performance.now(),accumulator=0,tick=0;
 const timer=setInterval(()=>{
-  const current=performance.now();accumulator+=Math.min((current-previous)/1000,.1);previous=current;
-  while(accumulator>=STEP){accumulator-=STEP;tick++;const now=Date.now();
+  const current=performance.now();const elapsed=(current-previous)/1000;diagnostics.droppedMs+=Math.max(0,elapsed-.25)*1000;accumulator+=Math.min(elapsed,.25);previous=current;const publishRooms=new Set();
+  while(accumulator>=STEP){const tickStart=performance.now();accumulator-=STEP;tick++;diagnostics.ticks++;const now=Date.now();
     for(const room of rooms.values()){
       selectTrack(room.trackId);
       for(const p of room.players.values())if(!p.bot&&!p.ws&&now-p.disconnectedAt>GRACE_MS)removePlayer(room,p);
@@ -164,7 +168,8 @@ const timer=setInterval(()=>{
         const motionBefore=new Map([...room.players.values()].map(p=>[p.id,captureMotion(p.car)]));
         room.raceTime=(room.raceTime||0)+STEP;
         for(const p of room.players.values()){
-          const input=p.bot?botInput(p.car):now-p.lastInput>250?NEUTRAL:p.input;
+          const input=p.bot?botInput(p.car):now-p.lastInput>INPUT_TIMEOUT_MS?NEUTRAL:p.input;
+          if(!p.bot&&now-p.lastInput>INPUT_TIMEOUT_MS)diagnostics.staleInputs++;
           p.simInput=input;p.appliedSeq=p.seq;
           if(p.bot){if(p.car.item&&Math.random()<.018)p.botFireUntil=now+6000;input.fire=p.car.item&&now<p.botFireUntil&&(WEAPONS[p.car.item]?.continuous||Math.floor(now/500)%2===0);}
           const previousPose={x:p.car.x,y:p.car.y,z:p.car.z};
@@ -186,14 +191,18 @@ const timer=setInterval(()=>{
         if(finished.length&&!room.endedAt)room.endedAt=now+25000;
         if((lastStanding&&now>=room.survivorEndAt)||(!lastStanding&&finished.length===survivors.length)||(room.endedAt&&now>=room.endedAt)||now-room.startAt>1200000){room.phase='finished';room.finishedAt=now;scoreRound(room,now);publish(room);}
       }
-      if(tick%3===0)publish(room);
+      if(tick%3===0)publishRooms.add(room);
     }
+    diagnostics.tickCost.add(performance.now()-tickStart);
   }
+  // Catch-up ticks produce one current snapshot, not a burst of stale ones.
+  for(const room of publishRooms)if(rooms.has(room.code))publish(room);
 },8);
-const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.ws.ping();if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
+const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),10000);
+const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
 for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();}selectTrack('coast');
 server.listen(PORT,HOST,()=>console.log(`\nTOUNCHED\nLocal: http://localhost:${PORT}\n${lanURLs().map(url=>`Wi-Fi: ${url}`).join('\n')}\n`));
-function shutdown(){for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
+function shutdown(){clearInterval(diagnosticTimer);diagnostics.close();for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

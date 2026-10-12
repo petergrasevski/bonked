@@ -252,3 +252,8 @@ h1,h2,h3,.entry-title,.primary,#copy,.weapon-name,.result-score,.score-total,#co
 .remove-bot,.modal .close{display:grid;place-items:center;padding:0;flex-shrink:0}
 .remove-bot:before,.remove-bot:after,.modal .close:before,.modal .close:after{content:'';grid-area:1/1;width:18px;height:2px;background:currentColor;pointer-events:none;transform:rotate(45deg)}
 .remove-bot:after,.modal .close:after{transform:rotate(-45deg)}
+
+/* Ping stays visible beside the race settings cog on phones and computers. */
+.network-ping{font-size:11px;font-variant-numeric:tabular-nums;letter-spacing:0;white-space:nowrap;color:#cbd5df}
+.network-ping[data-quality=fair],#connection-label[data-quality=fair]{color:#f1be79}
+.network-ping[data-quality=poor],#connection-label[data-quality=poor]{color:#ff9990}

@@ -1,3 +1,6 @@
+import {NetworkDiagnostics} from './network-diagnostics.js';
+import {RemoteSnapshots} from '/shared/remote-snapshots.js';
+import {PREDICTION_GRACE_MS,replayWindow} from '/shared/network-timing.js';
 import {createScoreMeter} from './score-meter.js';
 import {RoundResults} from './round-results.js';
 import {WeaponHUD} from './weapon-hud.js';
@@ -19,9 +22,12 @@ const $=id=>document.getElementById(id);
 initMetalInteractions();
 const device=detectDevice(navigator);document.body.classList.toggle('mobile',device.mobile);
 const corrections=new RenderCorrections();
+const remoteSnapshots=new RemoteSnapshots();
+const network=new NetworkDiagnostics(message=>send(message));
+window.tounchedNetwork={export:()=>network.export()};
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
-function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();history=[];pending=[];accumulator=0;}
+function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();remoteSnapshots.reset();network.resetStream();history=[];pending=[];accumulator=0;}
 let world,displayGuide=null;
 const weaponHud=new WeaponHUD($('desktop-weapon'),()=>world);
 const resultsScreen=new RoundResults($('results'));
@@ -46,14 +52,14 @@ function connect(){
   ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});});
   ws.addEventListener('message',event=>{
     let msg;try{msg=JSON.parse(event.data);}catch{return;}
-    if(msg.type==='pong'){rtt=Date.now()-msg.sent;clockOffset=msg.time+rtt/2-Date.now();setConnection(true,state?`${Math.round(rtt)} MS`:'SERVER ONLINE');return;}
-    if(msg.type==='welcome'){resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();voice.join(session);setBusy(false);return;}
+    if(msg.type==='pong'){rtt=Date.now()-msg.sent;const measuredOffset=msg.time+rtt/2-Date.now();clockOffset=network.ping===null?measuredOffset:clockOffset*.9+measuredOffset*.1;network.pong(rtt,msg.diagnostics);network.updatePing(true);return;}
+    if(msg.type==='welcome'){resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();remoteSnapshots.reset();network.resetStream();voice.join(session);setBusy(false);return;}
     if(msg.type==='error'){toast(msg.message);setBusy(false);if(resuming){resuming=false;clearRoom();}return;}
     if(msg.type==='left'){clearRoom();return;}
     if(msg.type==='state'){
-      lastState=performance.now();const was=state;selectWorld(msg.trackId||'coast');const oldFleet=predicted?[predicted,...predictedOthers]:[];state=msg;history.push({time:performance.now(),state:msg});if(history.length>12)history.shift();
+      lastState=performance.now();network.snapshot(lastState);const was=state;selectWorld(msg.trackId||'coast');const oldFleet=predicted?[predicted,...predictedOthers]:[];state=msg;history.push({time:performance.now(),state:msg});if(history.length>12)history.shift();if(was?.phase!==msg.phase||was?.round!==msg.round)remoteSnapshots.reset();remoteSnapshots.push(msg,lastState);
       const me=msg.players.find(p=>p.id===myId);
-      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));if(msg.phase==='racing')for(const frame of pending)predictFleet(predicted,predictedOthers,frame.input,STEP);corrections.reconcile(oldFleet,[predicted,...predictedOthers],msg.phase==='racing'?accumulator:0);}
+      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));if(msg.phase==='racing'){const replay=replayWindow(pending,rtt);network.add('replaySteps',replay.length);for(const frame of replay)predictFleet(predicted,predictedOthers,frame.input,STEP);const old=oldFleet.find(p=>p.id===myId);if(old)network.add('correctionM',Math.hypot(old.x-predicted.x,old.z-predicted.z));}corrections.reconcile(oldFleet,[predicted,...predictedOthers],msg.phase==='racing'?accumulator:0);}
       if(phase!==msg.phase){const previousPhase=phase;phase=msg.phase;onPhaseChange(previousPhase);}
       if(was&&me?.item&&!was.players.find(p=>p.id===myId)?.item){beep(720,.09,.03);}
     }
@@ -68,7 +74,7 @@ function setBusy(busy){entryBusy=busy;updateEntryButtons();}
 updateEntryButtons();
 function enter(type){const name=$('name').value.trim();if(!name){$('name').focus();return toast('Enter your name first.');}voice.prepare();try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');updateEntryButtons();});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
-function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
+function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();remoteSnapshots.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 $('leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
 async function getShareURL(){let origin=location.origin;if(['localhost','127.0.0.1'].includes(location.hostname)){try{const config=await fetch('/api/config').then(r=>r.json());origin=config.lanURLs[0]||origin;}catch{}}return origin+(session?`/?room=${session.code}`:'/');}
@@ -76,7 +82,7 @@ $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.c
 const itemMeta=WEAPONS;
 function onPhaseChange(previousPhase){
   const playing=state&&state.phase!=='lobby';document.body.classList.toggle('playing',playing);$('race-ui').hidden=!playing;$('entry-panel').hidden=!!state;$('room-panel').hidden=!state;$('results').hidden=state?.phase!=='finished';if(!(previousPhase==='countdown'&&state?.phase==='racing'))releaseControls();pending=[];
-  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
+  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();remoteSnapshots.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
   if(state?.phase==='finished')renderResults();
 }
 function node(tag,className,text){const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;}
@@ -162,6 +168,7 @@ $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>
 $('settings-open').onclick=()=>{releaseControls();$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;$('settings-close').focus();};
 function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('race-settings'):$('settings-open')).focus();}
 $('race-settings').onclick=$('settings-open').onclick;
+$('copy-network').onclick=async()=>{const log=network.export();try{await navigator.clipboard.writeText(log);toast('Network log copied.');}catch{const t=document.createElement('textarea');t.value=log;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Network log copied.':'Could not copy. Use the browser console: tounchedNetwork.export()');}};
 $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target===$('settings'))closeSettings();};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
 let audio=null,engineAudio=null,weaponAudio=null,soundEnabled=false;function unlockAudio(){if(!soundEnabled)return;if(!audio){audio=new(window.AudioContext||window.webkitAudioContext)();weaponAudio=new WeaponAudio(audio);engineAudio=new EngineAudio(audio);}if(audio.state==='suspended')audio.resume();}
@@ -169,19 +176,20 @@ function beep(freq,duration,volume){if(!audio||!soundEnabled)return;const o=audi
 $('sound').onclick=()=>{soundEnabled=!soundEnabled;$('sound-state').textContent=soundEnabled?'ON':'OFF';$('sound').setAttribute('aria-label',soundEnabled?'Mute sound':'Enable sound');unlockAudio();if(!soundEnabled){weaponAudio?.stop();engineAudio?.stop();}};
 function renderedState(now,dt){
   if(!state||!predicted)return state;
-  const fresh=now-lastState<250&&state.phase==='racing';
+  const fresh=now-lastState<PREDICTION_GRACE_MS&&state.phase==='racing';
   const cars=[predicted,...predictedOthers].map(car=>corrections.render(car,dt,fresh?accumulator:0));
-  const players=state.players.map(p=>({...p,...cars.find(c=>c.id===p.id)}));
+  const peers=state.phase==='racing'?remoteSnapshots.sample(now):null;
+  const players=state.players.map(p=>{const pose=p.id===myId?cars.find(c=>c.id===p.id):peers?.find(c=>c.id===p.id)||cars.find(c=>c.id===p.id);return {...p,...(pose?.eliminated===p.eliminated?pose:p)};});
   const camera=cameraFrame(createChase(players),players);
   const raceTime=Math.max(state.raceTime||0,...cars.map(car=>car.raceTime||0))+(fresh?accumulator:0);
   return {...state,players,camera,raceTime,chase:renderedChase(state.chase,players)};
 }
-function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-lastFrame)/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
-  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<250&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<250){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
+function frame(now){requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
+  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
   const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);trackPicker.tick(now);
   if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
-  if(now-uiAt>100){uiAt=now;updateUI(now);}
+  if(now-uiAt>100){uiAt=now;updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,bufferMs:Math.round(remoteSnapshots.delay),underruns:remoteSnapshots.underruns,server:network.server});}
   const listening=raceListener(rendered,world?.follow),audible=soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible);engineAudio?.update(rendered,listening,audible);
 }
