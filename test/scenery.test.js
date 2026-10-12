@@ -59,3 +59,13 @@ test('overpass pylons leave the entire lower road and its verges clear',()=>{
   for(const side of [-1,1])assert.ok(!pylons.some(p=>Math.hypot(p.position.x-crossing.x-crossing.nx*(crossing.halfWidth+1)*side,p.position.z-crossing.z-crossing.nz*(crossing.halfWidth+1)*side)<.01),'both conflicting crossing pylons removed');
   dispose(w);selectTrack('coast');
 });
+
+
+test('every mesa layer shares a closed contour with the next layer',()=>{
+  selectTrack('desert');const w=world();buildDetailedBiome(w);const mesas=w.static.children.filter(o=>o.userData.sceneryKind==='mesa');assert.ok(mesas.length>10);
+  for(const mesa of mesas){
+    const edges=new Map(),key=p=>p.map(n=>(Math.abs(n)<.00005?0:n).toFixed(4)).join(',');
+    mesa.traverse(o=>{if(!o.geometry)return;const p=o.geometry.attributes.position;for(let i=0;i<p.count;i+=3){const ps=[0,1,2].map(j=>[p.getX(i+j),p.getY(i+j),p.getZ(i+j)]);for(const [a,b]of [[0,1],[1,2],[2,0]]){const ka=key(ps[a]),kb=key(ps[b]);if(ka===kb)continue;const edge=ka<kb?ka+'|'+kb:kb+'|'+ka,entry=edges.get(edge)||{count:0,y:Math.max(ps[a][1],ps[b][1])};entry.count++;edges.set(edge,entry);}}});
+    for(const edge of edges.values())if(edge.count===1)assert.ok(edge.y<.06,'only the buried bottom rim may be open');
+  }dispose(w);selectTrack('coast');
+});

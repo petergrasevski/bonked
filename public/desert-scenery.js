@@ -1,5 +1,6 @@
+import {cactus} from './scenery.js';
 import * as THREE from 'three';
-import {trackAt,nearestTrack,TRACK_LENGTH,getLandscape} from '../shared/game.js';
+import {trackAt,nearestTrack,TRACK_LENGTH,getLandscape,OBSTACLES} from '../shared/game.js';
 import {DESERT_JUMPS,DESERT_MOUNTAIN,DESERT_MOLE_ZONE} from '../shared/desert-features.js';
 const PALETTE={sand:0xdcb76d,stone:0xa66542,light:0xe6b478,clay:0xb97c51,rust:0xd79760,steel:0x4b4440,dark:0x47392d,yellow:0xf9d366};
 const tri=(v,a,b,c)=>v.push(...a,...b,...c);
@@ -46,7 +47,7 @@ function jump(w,ramp){
     const a=-width+i*width/9,b=a+width/9,lip=[];quad(lip,desertRampPoint(ramp,ramp.length-.8,a,.05),desertRampPoint(ramp,ramp.length-.8,b,.05),desertRampPoint(ramp,ramp.length,b,.05),desertRampPoint(ramp,ramp.length,a,.05));
     const c=desertRampPoint(ramp,ramp.length,a),d=desertRampPoint(ramp,ramp.length,b);quad(lip,c,d,[d[0],d[1]-.55,d[2]],[c[0],c[1]-.55,c[2]]);w.mesh(geometry(lip),i%2?PALETTE.yellow:PALETTE.dark,0,0,0,g);
   }
-  for(const center of [-5.3,0,5.3])for(const d of [3.2,6.3]){
+  for(const center of [-width*.58,0,width*.58])for(const d of [3.2,6.3]){
     const points=[[d-1.2,center-1.2],[d,center],[d-1.2,center+1.2],[d-.6,center+1.2],[d+.6,center],[d-.6,center-1.2]].map(([x,z])=>desertRampPoint(ramp,x,z,.065));
     for(const [a,b,c]of [[0,1,5],[1,4,5],[1,2,3],[1,3,4]])tri(chevrons,points[a],points[b],points[c]);
   }
@@ -65,5 +66,6 @@ function moleGround(w){
 }
 export function buildDesertScenery(w){
   const a=mountainside(w,DESERT_MOUNTAIN.start,DESERT_MOUNTAIN.ascentEnd,1),b=mountainside(w,DESERT_MOUNTAIN.bridgeEnd,DESERT_MOUNTAIN.end,2),bridge=highBridge(w),jumps=DESERT_JUMPS.map(r=>jump(w,r)),plateau=moleGround(w);
-  return {mountains:[a,b],bridge,jumps,plateau};
+  const cacti=OBSTACLES.filter(o=>o.kind==='cactus').map((o,i)=>{const g=cactus(w,o.x,o.z,i,o.y);g.rotation.y=-o.angle;g.userData.sceneryKind='road-cactus';return g;});
+  return {mountains:[a,b],bridge,jumps,plateau,cacti};
 }

@@ -44,7 +44,7 @@ test('mine-like launches can land upright or stranded on their roof',()=>{
 });
 test('ball and chain obeys its tether and transfers motion through turns',()=>{
   const a=player('a'),r=room(a);fire(r,a,'chain');const ball=r.chains[0];for(let i=1;i<600;i++){a.car.x+=.3;a.car.z=Math.sin(i*.02)*4;a.car.angle=Math.atan2(Math.cos(i*.02)*.08,.3);a.car.vx=18;a.car.vz=Math.cos(i*.02)*4.8;updateCombat(r,STEP,i*STEP*1000);assert.ok(Math.hypot(ball.x-ball.anchorX,ball.z-ball.anchorZ)<=ball.length+.001);assert.ok(Number.isFinite(ball.vx)&&Math.abs(ball.vx)<100);}assert.ok(Math.abs(ball.vz)>1);
-  const b=player('b',ball.x+.5,ball.z);r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.ok(b.car.vy>0&&b.car.vy<15);assert.equal(r.chains.length,0);
+  const b=player('b',ball.x+.5,ball.z);b.car.y=ball.y-.75;r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.ok(b.car.vy>0&&b.car.vy<15);assert.equal(r.chains.length,0);
 });
 test('flamethrower has three seconds of held fuel, limited forward reach and continuous damage',()=>{
   const a=player('a'),b=player('b',7),c=player('c',15),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-64)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);

@@ -1,6 +1,7 @@
+import {boostLayout,boostSpeed} from './boost-pads.js';
 import {wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
 import {createLandscape} from './landscape.js';
-import {DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
+import {DESERT_CACTI,DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
 export const MAX_PLAYERS = 6;
 export const LAPS = 3;
 export const STEP = 1 / 60;
@@ -49,6 +50,7 @@ export const TRACKS = Object.freeze({
   ice:{id:'ice',name:'Glacier Run',description:'2.03 km of ice · split lanes · exposed straights',grip:.12},
   desert:{id:'desert',name:'Redrock Overpass',description:'Mountain bridge · four jumps · mole flats',grip:.85},
 });
+export let BOOST_PADS;
 export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
 const trackCache=new Map(),landscapeCache=new Map();
 export function getLandscape(){if(!landscapeCache.has(activeTrack.id))landscapeCache.set(activeTrack.id,createLandscape({id:activeTrack.id,segments:SEGMENTS,trackLength:TRACK_LENGTH,trackAt,nearestTrack,hasBarrier}));return landscapeCache.get(activeTrack.id);}
@@ -95,7 +97,7 @@ export function selectTrack(id='coast'){
   if(!Object.hasOwn(TRACKS,id))throw new Error('Unknown track');
   activeTrack=TRACKS[id];
   if(trackCache.has(id)){
-    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS}=trackCache.get(id));return activeTrack;
+    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS}=trackCache.get(id));return activeTrack;
   }
 TRACK = Array.from({ length: 1500 }, (_, i) => {
   const f = i / 1500 * anchors.length, j = Math.floor(f), t = f - j, n = anchors.length;
@@ -130,6 +132,7 @@ OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
   const f=fraction+offset/TRACK_LENGTH,p=trackAt(f);
   return {id:`island-${index}-${i}`,fraction:f,x:p.x,z:p.z,radius:1.65,height:1.5};
 }));
+if(activeTrack.id==='desert')OBSTACLES=DESERT_CACTI.map(({fraction,side},i)=>{const p=trackAt(fraction),lateral=side*(p.halfWidth-1.5);return {id:`cactus-${i}`,kind:'cactus',fraction,x:p.x+p.nx*lateral,z:p.z+p.nz*lateral,y:p.y,radius:.65,height:7,angle:p.angle};});
 MOLES=activeTrack.id==='desert'?desertMoles(TRACK_LENGTH).map(m=>{const p=trackAt(m.fraction);return {...m,x:p.x+p.nx*m.lateral,y:p.y,z:p.z+p.nz*m.lateral,angle:p.angle};}):[];
 PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
 PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
@@ -138,7 +141,8 @@ PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
   const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
 }).flat();
-  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS});
+  BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:OBSTACLES});
+  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS});
   return activeTrack;
 }
 export function trackAt(fraction) {
@@ -162,9 +166,10 @@ export function nearestTrack(x,z,hint=null) {
 export const roadHalfWidth=fraction=>trackAt(fraction).halfWidth;
 export const surfaceHalfWidth=fraction=>roadHalfWidth(fraction)+.6;
 export function constrainObstacles(car){
-  if(car.falling||car.y-(car.groundY||0)>1.5)return;
+  if(car.falling)return;
   const c=Math.cos(car.angle),s=Math.sin(car.angle);
   for(const o of OBSTACLES){
+    if(car.y>(o.y||0)+o.height||car.y+1.4<(o.y||0))continue;
     if(Math.hypot(car.x-o.x,car.z-o.z)>o.radius+CAR_LENGTH)continue;
     const ox=(o.x-car.x)*c+(o.z-car.z)*s,oz=-(o.x-car.x)*s+(o.z-car.z)*c;
     const qx=clamp(ox,-CAR_LENGTH/2,CAR_LENGTH/2),qz=clamp(oz,-CAR_WIDTH/2,CAR_WIDTH/2);
@@ -202,7 +207,7 @@ export function collideDesertMoles(car,raceSeconds=car.raceTime||0,{damage=true}
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
   const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
-  return { raceTime:0,moleCooldown:0,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
+  return { raceTime:0,moleCooldown:0,steering:0,padBoostRemaining:0,padBoostFrom:0,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
   return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
@@ -337,6 +342,7 @@ export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
   for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
   car.tasePhase=(car.tasePhase||0)+dt;
+  const padSpeed=boostSpeed(car,dt,TOP_SPEED);
   verticalStep(car,dt);
   if(car.falling&&car.y< -20){car.vx=0;car.vz=0;return;}
   car.nudgeMoved=false;
@@ -345,6 +351,14 @@ export function stepCar(car, input, dt=STEP) {
   car.nudgeHeld=direction;
   const spinStep=Math.min(car.spinout||0,dt);car.spinout=Math.max(0,(car.spinout||0)-dt);
   if(spinStep)car.angle+=Math.PI*2*spinStep/START_SPIN_SECONDS;
+  // Steering rack inertia is simulation state, replicated with the car so
+  // prediction/replay has the same gradual turn-in and release as the server.
+  const icy=activeTrack.id==='ice',targetSteer=car.finished?0:input.steer;
+  if(icy)car.steering=targetSteer;
+  else{
+    const current=car.steering||0,releasing=Math.abs(targetSteer)<Math.abs(current)&&targetSteer*current>=0;
+    car.steering=current+(targetSteer-current)*(1-Math.exp(-dt/(releasing?.16:.11)));
+  }
   const uncontrolled=spinStep>0||car.wrecked||car.overturned||car.y-(car.groundY||0)>.05||car.falling;
   if(uncontrolled){
     const drag=car.y-(car.groundY||0)>.05||car.falling?.15:car.wrecked?2.4:3;
@@ -353,17 +367,18 @@ export function stepCar(car, input, dt=STEP) {
     if(car.finished)input=NEUTRAL;
     let c=Math.cos(car.angle),s=Math.sin(car.angle);
     let forward=car.vx*c+car.vz*s,lateral=-car.vx*s+car.vz*c;
-    const speedFactor=healthSpeedFactor(car.health),maxSpeed=TOP_SPEED*speedFactor*(car.boost>0?1.1:1);
+    const speedFactor=healthSpeedFactor(car.health),maxSpeed=Math.max(TOP_SPEED*speedFactor*(car.boost>0?1.1:1),padSpeed??0);
     const force=car.stun>0?0:input.reverse?-24*speedFactor:forward>=maxSpeed&&car.impactTime>0?0:input.throttle*25.2*speedFactor*(car.boost>0?1.35:1);
-    const steering=clamp(input.steer+(car.tased>0?(Math.sin(car.tasePhase*19)+.5*Math.sin(car.tasePhase*31))*.3:0),-1,1);
+    const steering=clamp(car.steering+(car.tased>0?(Math.sin(car.tasePhase*19)+.5*Math.sin(car.tasePhase*31))*.3:0),-1,1);
     forward+=force*dt;forward*=Math.exp(-(input.brake?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
+    if(padSpeed!==null)forward=Math.max(forward,padSpeed);
     const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
-    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:9.5*handling*activeTrack.grip)*dt);
+    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:(icy?9.5:8.2)*handling*activeTrack.grip)*dt);
     const turn=steering*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
-    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:.65)*handling*activeTrack.grip;
+    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:icy?.65:.58)*handling*activeTrack.grip;
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }

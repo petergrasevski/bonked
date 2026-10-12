@@ -144,3 +144,15 @@ test('mines stay on their own deck at the figure-eight crossing',()=>{
     updateCombat(r,STEP,150);assert.equal(other.car.health,100);assert.equal(r.mines.length,1);
   }
 });
+
+
+test('chain ball rolls along mountain grades on its own deck and respects its 3D tether',()=>{
+  selectTrack('desert');for(const from of [.17,.33,.985,.485]){
+    const a=player('a',from),r=room(a);fire(r,a,'chain');let slopeDifference=0;
+    for(let i=1;i<100;i++){
+      const f=from+i*.25/TRACK_LENGTH,p=trackAt(f);Object.assign(a.car,p,{trackFraction:f,groundY:p.y,pitch:Math.atan(p.grade),vx:Math.cos(p.angle)*15,vz:Math.sin(p.angle)*15});updateCombat(r,STEP,i*1000*STEP);
+      const b=r.chains[0],road=nearestTrack(b.x,b.z,a.car.trackFraction);assert.ok(b.y>=road.y+.95,'ball stays above the road');assert.ok(Math.hypot(b.x-b.anchorX,b.y-b.anchorY,b.z-b.anchorZ)<=b.length+.001);slopeDifference=Math.max(slopeDifference,Math.abs(b.y-.98-a.car.y));
+    }
+    if(from===.17||from===.33)assert.ok(slopeDifference>1,'ball uses its own road height, not the car height');
+  }
+});

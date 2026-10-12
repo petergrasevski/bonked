@@ -5,6 +5,8 @@ const wrap=f=>f-Math.floor(f);
 export const DESERT_JUMPS=Object.freeze([.085,.415,.80,.925].map((fraction,id)=>Object.freeze({id:`desert-jump-${id}`,fraction,length:10,height:1.8})));
 export const DESERT_MOUNTAIN=Object.freeze({start:.145,ascentEnd:.215,bridgeEnd:.285,end:.395,height:36});
 export const DESERT_MOLE_ZONE=Object.freeze({center:.665,length:252,transition:21,halfWidth:18.9});
+export const DESERT_NARROW=Object.freeze({start:.872,narrowStart:.902,narrowEnd:.914,end:.983});
+export const DESERT_CACTI=Object.freeze([.035,.115,.445,.545,.765,.845,.97].map((fraction,i)=>({fraction,side:i%2?1:-1})));
 export const MOLE_CYCLE=6;
 function plazaWeight(fraction,trackLength){const z=DESERT_MOLE_ZONE,d=Math.abs(wrap(fraction)-z.center)*trackLength;return 1-smooth((d-z.length/2)/z.transition);}
 export function desertElevation(fraction,originalElevation,trackLength){
@@ -13,7 +15,7 @@ export function desertElevation(fraction,originalElevation,trackLength){
   const elevation=originalElevation+(m.height-originalElevation)*mountain;
   return trackLength?elevation*(1-plazaWeight(f,trackLength)):elevation;
 }
-export function desertHalfWidth(fraction,trackLength){return 9+(DESERT_MOLE_ZONE.halfWidth-9)*plazaWeight(fraction,trackLength);}
+export function desertHalfWidth(fraction,trackLength){const f=wrap(fraction),n=DESERT_NARROW,t=f<n.start||f>n.end?0:f<n.narrowStart?smooth((f-n.start)/(n.narrowStart-n.start)):f<=n.narrowEnd?1:1-smooth((f-n.narrowEnd)/(n.end-n.narrowEnd));return 9+(DESERT_MOLE_ZONE.halfWidth-9)*plazaWeight(fraction,trackLength)-4.5*t;}
 export function desertHasBarrier(fraction){const f=wrap(fraction),m=DESERT_MOUNTAIN;return !(f>=m.start&&f<m.ascentEnd||f>m.bridgeEnd&&f<=m.end);}
 export function desertRampLift(fraction,trackLength){
   const f=wrap(fraction);for(const ramp of DESERT_JUMPS){const distance=(ramp.fraction-f)*trackLength;if(distance>=0&&distance<ramp.length)return ramp.height*(1-distance/ramp.length);}return 0;

@@ -47,7 +47,7 @@ function beaches(ctx){const bands=[[],[]];for(const side of [-1,1])for(let i=0;i
 }return bands;}
 function mountainTerrain(ctx,start,end,index){
   const {trackAt,nearestTrack,trackLength:TRACK_LENGTH}=ctx;
-  const outcrops=[],count=Math.ceil((end-start)*TRACK_LENGTH/4),bands=[[],[],[],[]],profiles=p=>[[p.halfWidth+.62,p.y-.20],[p.halfWidth+2.5,Math.max(-4.12,p.y-3.2)],[p.halfWidth+13,Math.max(-4.12,p.y*.65-3.2)],[p.halfWidth+24,Math.max(-4.12,p.y*.3-4)],[p.halfWidth+37,-4.12]];
+  const outcrops=[],count=Math.ceil((end-start)*TRACK_LENGTH/4),bands=[[],[],[],[]],profiles=p=>[[p.halfWidth+.62,p.y-.20],[p.halfWidth+2.5,Math.max(-4.8,p.y-3.2)],[p.halfWidth+13,Math.max(-4.8,p.y*.65-3.2)],[p.halfWidth+24,Math.max(-4.8,p.y*.3-4)],[p.halfWidth+37,-4.8]];
   const point=(p,j,side,f)=>{const [offset,y]=profiles(p)[j],jitter=j<2?0:Math.sin(f*121+j*1.7)*.9+Math.cos(f*173-j)*.6;return along(p,(offset+jitter)*side,y);};
   for(let i=0;i<count;i++){
     const f=start+(end-start)*i/count,nf=start+(end-start)*(i+1)/count,p=trackAt(f),q=trackAt(nf);
@@ -57,14 +57,14 @@ function mountainTerrain(ctx,start,end,index){
   for(const [f,sign]of [[start,-1],[end,1]]){
     const p=trackAt(f),cross=[...Array.from({length:5},(_,j)=>point(p,4-j,-1,f)),...Array.from({length:5},(_,j)=>point(p,j,1,f))];
     for(let i=0;i<cross.length-1;i++){
-      const a=cross[i],b=cross[i+1];for(let k=0;k<4;k++){const t=k/4,nt=(k+1)/4,aa=[a[0],a[1]+(-4.12-a[1])*t,a[2]],bb=[b[0],b[1]+(-4.12-b[1])*t,b[2]],cc=[b[0],b[1]+(-4.12-b[1])*nt,b[2]],dd=[a[0],a[1]+(-4.12-a[1])*nt,a[2]];if(sign===1)quad(bands[k],aa,bb,cc,dd);else quad(bands[k],aa,dd,cc,bb);}
+      const a=cross[i],b=cross[i+1];for(let k=0;k<4;k++){const t=k/4,nt=(k+1)/4,aa=[a[0],a[1]+(-4.8-a[1])*t,a[2]],bb=[b[0],b[1]+(-4.8-b[1])*t,b[2]],cc=[b[0],b[1]+(-4.8-b[1])*nt,b[2]],dd=[a[0],a[1]+(-4.8-a[1])*nt,a[2]];if(sign===1)quad(bands[k],aa,bb,cc,dd);else quad(bands[k],aa,dd,cc,bb);}
     }
   }
 
   // Tall stepped outcrops frame the climb without covering the road deck.
   for(const [f,side]of [[start+(end-start)*.42,1],[start+(end-start)*.72,-1]]){
     const p=trackAt(f),x=p.x+p.nx*(p.halfWidth+29)*side,z=p.z+p.nz*(p.halfWidth+29)*side,radius=22,height=Math.max(26,p.y+15),vertices=[[],[]],rings=[1,.82,.63,.46,.27,0],N=24;
-    const at=(r,j)=>{const a=j/N*Math.PI*2,fold=1+.07*Math.sin(a*5+index)+.045*Math.cos(a*7-index),px=x+Math.cos(a)*r*radius*fold,pz=z+Math.sin(a)*r*radius*fold;let y=-4+Math.pow(1-r,.85)*height;const road=nearestTrack(px,pz);if(road.distance<road.halfWidth+1.5)y=Math.min(y,road.y-.3);return [px,y,pz];};
+    const at=(r,j)=>{const a=j/N*Math.PI*2,fold=1+.07*Math.sin(a*5+index)+.045*Math.cos(a*7-index),px=x+Math.cos(a)*r*radius*fold,pz=z+Math.sin(a)*r*radius*fold;let y=-4.8+Math.pow(1-r,.85)*(height+.8);const road=nearestTrack(px,pz);if(road.distance<road.halfWidth+1.5)y=Math.min(y,road.y-.3);return [px,y,pz];};
     for(let k=1;k<rings.length;k++)for(let j=0;j<N;j++)quad(vertices[k%2],at(rings[k-1],j),at(rings[k],j),at(rings[k],j+1),at(rings[k-1],j+1));
     outcrops.push(vertices);
   }
@@ -73,7 +73,7 @@ function mountainTerrain(ctx,start,end,index){
 
 function molePlateau(ctx){
   const {trackAt,trackLength}=ctx,zone=DESERT_MOLE_ZONE,start=zone.center-(zone.length/2+zone.transition)/trackLength,end=zone.center+(zone.length/2+zone.transition)/trackLength,v=[];
-  for(let i=0;i<100;i++){const p=trackAt(start+(end-start)*i/100),q=trackAt(start+(end-start)*(i+1)/100);for(const side of [-1,1]){const a=along(p,side*(p.halfWidth+.62),p.y-.20),b=along(p,side*(p.halfWidth+12),-4.1),c=along(q,side*(q.halfWidth+12),-4.1),d=along(q,side*(q.halfWidth+.62),q.y-.20);if(side===1)quad(v,a,b,c,d);else quad(v,a,d,c,b);}}
+  for(let i=0;i<100;i++){const p=trackAt(start+(end-start)*i/100),q=trackAt(start+(end-start)*(i+1)/100);for(const side of [-1,1]){const a=along(p,side*(p.halfWidth+.62),p.y-.20),b=along(p,side*(p.halfWidth+12),-4.8),c=along(q,side*(q.halfWidth+12),-4.8),d=along(q,side*(q.halfWidth+.62),q.y-.20);if(side===1)quad(v,a,b,c,d);else quad(v,a,d,c,b);}}
   return v;
 }
 export function createLandscape(ctx){

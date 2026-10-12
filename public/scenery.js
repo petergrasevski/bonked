@@ -122,16 +122,14 @@ function glacier(w,x,z,seed){
 }
 function mesa(w,x,z,index){
   const height=14+index%9,top=6+index%5,bottom=12+index%7,g=group(w,x,2-height/2,z,'mesa');
-  // Coherent irregular contours keep ledges aligned across the sediment layers.
-  for(let j=0;j<10;j++){
-    const t=j/10,nt=(j+1)/10,r=1+(top/bottom-1)*t,nr=1+(top/bottom-1)*nt,ledge=j%3===0?.035:0;
-    w.mesh(createIslandBand(bottom,index,[[r+ledge,t*height],[nr+ledge,nt*height]],28),[0xa66542,0xb97c51,0xd79760][j%3],0,0,0,g);
-  }
-  w.mesh(createIslandBand(bottom,index,[[top/bottom,height],[top/bottom*.82,height+.6],[0,height+.7]],28),0xe6b478,0,0,0,g);
+  // Every layer starts on the exact previous contour, including its ledge.
+  const ring=j=>[1+(top/bottom-1)*j/10+(j>0&&j<10&&j%3===0?.035:0),j/10*height];
+  for(let j=0;j<10;j++)w.mesh(createIslandBand(bottom,index,[ring(j),ring(j+1)],28),[0xa66542,0xb97c51,0xd79760][j%3],0,0,0,g);
+  w.mesh(createIslandBand(bottom,index,[ring(10),[top/bottom*.82,height+.6],[0,height+.7]],28),0xe6b478,0,0,0,g);
   return g;
 }
-function cactus(w,x,z,seed){
-  const g=group(w,x,-3.8,z,'cactus'),height=5+rand(seed)*2;
+export function cactus(w,x,z,seed,y=-3.8){
+  const g=group(w,x,y,z,'cactus'),height=5+rand(seed)*2;
   w.cylinder(0,height*.5,0,.43,.57,height,0x577451,14,g);const cap=w.mesh(new THREE.SphereGeometry(.43,12,6),0x577451,0,height,0,g);cap.scale.y=1.3;
   for(const side of [-1,1])tube(w,[[side*.2,height*.4,0],[side*1.3,height*.43,0],[side*1.7,height*.56,0],[side*1.7,height*(side===1?.85:.70),0]],.27,0x577451,g,10);
   for(let j=0;j<8;j++){const a=j/8*TAU;tube(w,[[Math.cos(a)*.55,.2,Math.sin(a)*.55],[Math.cos(a)*.48,height*.55,Math.sin(a)*.48],[Math.cos(a)*.42,height,Math.sin(a)*.42]],.022,0x799851,g,4);}

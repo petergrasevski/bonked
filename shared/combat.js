@@ -1,5 +1,5 @@
 import {weaponBasis,weaponDirection,weaponMuzzle,rayCar3D,sweepTrackWalls,MUZZLE_HEIGHT} from './weapon-geometry.js';
-import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt } from './game.js';
+import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
 export const WEAPONS = {
   pulse:{name:'Pulse',icon:'◎',ammo:1,hint:'two shockwaves, one second apart'},
   rocket:{name:'Homing rocket',icon:'➤',ammo:1,hint:'locks onto the next car ahead'},
@@ -118,7 +118,8 @@ export function pressWeapon(room,p,now){
   }
   if(id==='chain'){
     room.chains=room.chains.filter(b=>b.owner!==p.id);
-    room.chains.push({id:++room.serial,owner:p.id,y:c.y,x:c.x-Math.cos(c.angle)*CAR_LENGTH*2,z:c.z-Math.sin(c.angle)*CAR_LENGTH*2,vx:c.vx,vz:c.vz,length:CAR_LENGTH*1.5});
+    const anchor=weaponMuzzle(c,Math.PI,CAR_LENGTH/2),x=anchor.x-Math.cos(c.angle)*CAR_LENGTH*1.5,z=anchor.z-Math.sin(c.angle)*CAR_LENGTH*1.5,road=nearestTrack(x,z,c.trackFraction);
+    room.chains.push({id:++room.serial,owner:p.id,y:road.y+.98,x,z,vx:c.vx,vy:0,vz:c.vz,trackFraction:road.fraction,length:CAR_LENGTH*1.5,anchorX:anchor.x,anchorY:anchor.y,anchorZ:anchor.z});
   }
   if(id==='shotgun'){
     const hits=new Map();
@@ -183,18 +184,22 @@ export function updateCombat(room,dt,now){
   }}room.mines=room.mines.filter(m=>m.until>now);
   for(const ball of room.chains){
     const owner=room.players.get(ball.owner),c=owner?.car;if(!c||c.eliminated){ball.dead=true;continue;}
-    const anchorX=c.x-Math.cos(c.angle)*CAR_LENGTH/2,anchorZ=c.z-Math.sin(c.angle)*CAR_LENGTH/2;
-    const previousX=ball.x,previousZ=ball.z;
-    ball.vx*=Math.exp(-.6*dt);ball.vz*=Math.exp(-.6*dt);ball.x+=ball.vx*dt;ball.z+=ball.vz*dt;
-    const dx=ball.x-anchorX,dz=ball.z-anchorZ,d=Math.hypot(dx,dz)||1;
-    if(d>ball.length){
-      const nx=dx/d,nz=dz/d,correction=d-ball.length;ball.x-=nx*correction;ball.z-=nz*correction;
-      const separating=(ball.vx-c.vx)*nx+(ball.vz-c.vz)*nz;
-      if(separating>0){ball.vx-=nx*separating;ball.vz-=nz*separating;c.vx+=nx*separating*.12;c.vz+=nz*separating*.12;}
-      ball.vx-=nx*correction/dt*.5;ball.vz-=nz*correction/dt*.5;
+    const anchor=weaponMuzzle(c,Math.PI,CAR_LENGTH/2),previous={x:ball.x,y:ball.y,z:ball.z};
+    ball.vx*=Math.exp(-.6*dt);ball.vz*=Math.exp(-.6*dt);ball.vy=(ball.vy||0)-22*dt;
+    ball.x+=ball.vx*dt;ball.z+=ball.vz*dt;ball.y+=ball.vy*dt;
+    // Alternate ground and 3D rope constraints. Route hints keep the ball on
+    // the owner's overpass deck; its own contact point determines its height.
+    for(let pass=0;pass<8;pass++){
+      const road=roadSurfaceAt(ball.x,ball.z,c.trackFraction),ground=road||terrainAt(ball.x,ball.z,Math.max(ball.y,anchor.y)+2);
+      if(ground&&ball.y<ground.y+.98){ball.y=ground.y+.98;ball.vy=Math.max(0,ball.vy);}
+      const dx=ball.x-anchor.x,dy=ball.y-anchor.y,dz=ball.z-anchor.z,d=Math.hypot(dx,dy,dz)||1;
+      if(d<=ball.length+.00001)break;
+      const nx=dx/d,ny=dy/d,nz=dz/d,correction=d-ball.length;ball.x-=nx*correction;ball.y-=ny*correction;ball.z-=nz*correction;
+      if(pass===0){const separating=(ball.vx-c.vx)*nx+(ball.vy-(c.vy||0))*ny+(ball.vz-c.vz)*nz;if(separating>0){ball.vx-=nx*separating;ball.vy-=ny*separating;ball.vz-=nz*separating;c.vx+=nx*separating*.12;c.vz+=nz*separating*.12;}ball.vx-=nx*correction/dt*.5;ball.vz-=nz*correction/dt*.5;}
     }
-    ball.y=c.y;ball.anchorX=anchorX;ball.anchorZ=anchorZ;
-    for(const p of targets(room,ball.owner)){if(Math.abs(p.car.y-c.y)>1.7)continue;if(rayCar(previousX,previousZ,ball.x-previousX,ball.z-previousZ,p.car,.8)!==null){
+    ball.anchorX=anchor.x;ball.anchorY=anchor.y;ball.anchorZ=anchor.z;
+    ball.renderVx=(ball.x-previous.x)/dt;ball.renderVy=(ball.y-previous.y)/dt;ball.renderVz=(ball.z-previous.z)/dt;
+    for(const p of targets(room,ball.owner)){if(rayCar3D(previous,{x:ball.x-previous.x,y:ball.y-previous.y,z:ball.z-previous.z},p.car,.95)!==null){
       const dx=p.car.x-ball.x,dz=p.car.z-ball.z,d=Math.hypot(dx,dz)||1,side=-dx*Math.sin(p.car.angle)+dz*Math.cos(p.car.angle);
       hit(room,p,DAMAGE.chain,now,{x:dx/d*16,z:dz/d*16,up:7,side:side*.4,fore:.4});ball.dead=true;sound(room,'explosion',ball,now);effect(room,'explosion',ball.x,ball.z,now,{y:ball.y,duration:700});break;
     }}

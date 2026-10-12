@@ -1,5 +1,5 @@
 import { START_FRACTION, TRACK_LENGTH, TOP_SPEED, trackAt } from './game.js';
-export const CAMERA_LOOKAHEAD = 20; // Road metres ahead of the leader.
+export const CAMERA_LOOKAHEAD = 10; // Road metres ahead of the leader.
 export const CHASE_DISTANCE = TOP_SPEED * 3; // Fixed road distance, not a timer.
 // Race progress is unwrapped across the start line. Never compare wrapped fractions.
 export function createChase(cars) {
@@ -29,7 +29,7 @@ export function cameraFrame(chase,cars=[]){
   const leader=running.length?Math.max(...running.map(car=>car.progress)):chase.leaderProgress;
   const rear=running.length?Math.min(...running.map(car=>car.progress)):leader;
   const spread=Math.max(0,(leader-rear)*TRACK_LENGTH),middle=(rear+leader)/2;
-  const target=trackAt(START_FRACTION+middle+5/TRACK_LENGTH);
+  const target=trackAt(START_FRACTION+middle+(CAMERA_LOOKAHEAD-CAMERA_REAR_SPACE)/2/TRACK_LENGTH);
   // A forward chord anticipates bends and averages the track's segment tangents.
   const behind=trackAt(START_FRACTION+middle-5/TRACK_LENGTH);
   const ahead=trackAt(START_FRACTION+middle+20/TRACK_LENGTH);
@@ -40,4 +40,13 @@ export function cameraFrame(chase,cars=[]){
 export function raceOrder(a,b){
   const ca=a.car||a,cb=b.car||b;
   return Number(ca.eliminated)-Number(cb.eliminated)||Number(cb.finished)-Number(ca.finished)||(ca.finished&&cb.finished?ca.finishTime-cb.finishTime:ca.eliminated&&cb.eliminated?cb.eliminatedAt-ca.eliminatedAt:cb.progress-ca.progress);
+}
+
+// Follow the same corrected, fractional-tick progress as the rendered leader.
+// Authority still decides elimination; this only positions its visible warning.
+export function renderedChase(chase,players){
+  if(!chase?.active)return chase;
+  const running=players.filter(p=>!p.eliminated);if(!running.length)return chase;
+  const leaderProgress=Math.max(...running.map(p=>p.progress)),progress=chase.progress+leaderProgress-chase.leaderProgress;
+  return {...chase,progress,leaderProgress,...trackAt(START_FRACTION+progress)};
 }
