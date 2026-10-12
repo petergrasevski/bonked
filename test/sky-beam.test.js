@@ -6,7 +6,7 @@ import {updateSkyBeams,resetSkyBeams,sanitizeSkyAim,SKY_DELAY,SKY_COOLDOWN} from
 import {skyGroundAt,skyRayGround,skyPatch} from '../shared/sky-ground.js';
 import {pulsePush,PULSE_RADIUS} from '../shared/shockwave.js';
 import * as THREE from 'three';
-import {SkyBeamView,advanceSkyCursor} from '../public/sky-beam.js';
+import {SkyBeamView,advanceSkyCursor,smoothSkyTarget} from '../public/sky-beam.js';
 import {readController} from '../public/controller.js';
 import {joystickVector} from '../public/touch-controls.js';
 function scene(){
@@ -60,6 +60,9 @@ test('an idle target retains its screen position as the race camera translates a
     const target=new THREE.Vector3(view.aim.x,skyGroundAt(view.aim.x,view.aim.z).y,view.aim.z),screen=target.clone().project(camera);assert.ok(Math.abs(screen.x)<.0001&&Math.abs(screen.y)<.0001);
     if(previous)assert.ok(target.distanceTo(previous)>1);previous=target;
   }
+  view.update(state,'me',camera,{x:p.x,z:p.z,spread:0},{x:1,y:0},1/60);
+  const center=view.targets.get('me').material.uniforms.center.value;
+  assert.equal(center.x,view.aim.x);assert.equal(center.y,view.aim.z,'local aiming has no smoothing delay');
   view.update(null,'me',camera,{}, {x:0,y:0},1/60);assert.equal(view.targets.size,0);assert.equal(view.aim,null);
 });
 
@@ -77,6 +80,34 @@ test('other players see human spectator targets and their cooldown, but never bo
   const marker=view.targets.get('remote');assert.equal(marker.material.uniforms.opacity.value,.18);
   assert.equal(marker.material.uniforms.center.value.x,remote.skyTarget.x);
   remote.skyTarget.x+=2;state.time=2000;view.update(state,'me',camera,{}, {x:0,y:0},1/60);
-  assert.equal(marker.material.uniforms.center.value.x,remote.skyTarget.x);assert.equal(marker.material.uniforms.opacity.value,.5);
+  assert.ok(marker.material.uniforms.center.value.x>remote.skyTarget.x-2&&marker.material.uniforms.center.value.x<remote.skyTarget.x,'remote target moves smoothly instead of snapping');assert.equal(marker.material.uniforms.opacity.value,.5);
+  state.round=2;view.update(state,'me',camera,{}, {x:0,y:0},1/60);assert.equal(marker.material.uniforms.center.value.x,remote.skyTarget.x,'new round discards old smoothing');
   view.update(null,'me',camera,{}, {x:0,y:0},1/60);assert.equal(view.targets.size,0);
+});
+
+test('remote target damping is frame-rate independent and settles when updates stop',()=>{
+  const results=[30,60,120].map(hz=>{
+    let pose=smoothSkyTarget(null,{x:0,z:4},0);const target={x:10,z:-6};
+    for(let i=0;i<hz/2;i++)pose=smoothSkyTarget(pose,target,1/hz);
+    assert.ok(Math.abs(pose.x-target.x)<.001&&Math.abs(pose.z-target.z)<.001);
+    assert.deepEqual(target,{x:10,z:-6},'rendering never changes the authoritative target');return pose;
+  });
+  for(const field of ['x','z','vx','vz'])assert.ok(Math.max(...results.map(p=>p[field]))-Math.min(...results.map(p=>p[field]))<1e-10);
+  const teleport=smoothSkyTarget(results[0],{x:200,z:100},1/60);assert.deepEqual(teleport,{x:200,z:100,vx:0,vz:0});
+});
+test('uneven 20 Hz target updates move continuously at 30/60/120 Hz without packet-sized jumps',()=>{
+  for(const hz of [30,60,120]){
+    const dt=1/hz,arrivals=[.035,.065,.045,.055],target={x:0,z:0};let pose,next=.05,packet=0,previous,rawPrevious=0;
+    const renderedSteps=[],rawSteps=[];
+    for(let i=0;i<hz*3;i++){
+      const t=i*dt;if(t>=next){target.x=30*t;target.z=-15*t;next+=arrivals[packet++%arrivals.length];}
+      pose=smoothSkyTarget(pose,target,dt);
+      if(t>1){renderedSteps.push(pose.x-previous);rawSteps.push(target.x-rawPrevious);assert.ok(pose.x>previous,'moves between packets');}
+      previous=pose.x;rawPrevious=target.x;
+    }
+    const variation=steps=>Math.sqrt(steps.reduce((sum,v)=>sum+(v-30*dt)**2,0)/steps.length);
+    assert.ok(variation(renderedSteps)<variation(rawSteps)*.3,`${hz} Hz must remove most packet jitter`);
+    const stopped={...target};for(let i=0;i<hz;i++)pose=smoothSkyTarget(pose,stopped,dt);
+    assert.ok(Math.abs(pose.x-stopped.x)<1e-6,'stale targets settle, never extrapolate away');
+  }
 });
