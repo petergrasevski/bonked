@@ -20,11 +20,14 @@ export class RoundResults{
         const result=rows[i],cell=node('div','result-player');cell.dataset.playerId=result.id;cell.classList.toggle('me',result.id===myId);cell.style.setProperty('--car',result.color);cell.style.setProperty('--glow','3px');
         const previous=rows[i-1],rank=previous&&previous.total===result.total?Number(list.lastElementChild.dataset.rank):i+1;cell.dataset.rank=rank;
         const heading=node('span','leaderboard-place',`#${rank}`),meter=createScoreMeter(result.name,result.total,state.targetScore,result.delta),total=node('strong','result-score',String(result.total));
+        if(result.id===myId){heading.append(node('span','result-you','YOU'));cell.setAttribute('aria-label',result.name+', your result');}
         const name=node('div','result-driver'),label=node('span','result-driver-name',result.name+(result.id===myId?' (you)':'')),tick=node('span','ready-tick','✓');tick.hidden=!result.ready;tick.setAttribute('aria-label','Ready');name.append(label,tick);
         const delta=node('span','result-change',`${result.delta>0?'+':''}${result.delta} ${Math.abs(result.delta)===1?'point':'points'}`);delta.classList.toggle('loss',result.delta<0);
         cell.append(heading,meter,total,name,delta);list.append(cell);
       }
     }
+    const focusKey=JSON.stringify([state.code,state.round,myId]);
+    if(this.focusKey!==focusKey){this.focusKey=focusKey;const list=this.find('standings'),own=list.querySelector('.me');if(own)list.scrollLeft+=own.getBoundingClientRect().left-list.getBoundingClientRect().left-(list.clientWidth-own.clientWidth)/2;}
     this.find('results-lobby').hidden=state.host!==myId;
     const ready=this.find('ready');ready.hidden=!!complete;ready.disabled=!!me?.ready;ready.textContent=me?.ready?'Ready ✓':'Ready';
     this.find('rematch').hidden=!complete||state.host!==myId;this.find('rematch-hint').textContent=complete&&state.host!==myId?'Waiting for host.':'';

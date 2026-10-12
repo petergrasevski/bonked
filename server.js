@@ -1,4 +1,5 @@
 import {ServerDiagnostics} from './server-diagnostics.js';
+import {botControls} from './bots.js';
 import {NETWORK_VERSION,INPUT_TIMEOUT_MS} from './shared/network-timing.js';
 import {captureMotion,recordMotion} from './shared/prediction.js';
 import {collectBoostPad} from './shared/boost-pads.js';
@@ -11,9 +12,9 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, WebSocket } from 'ws';
 import QRCode from 'qrcode';
-import { TRACKS,selectTrack,getLandscape,BOOST_PADS,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,botInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
+import { TRACKS,selectTrack,getLandscape,BOOST_PADS,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
 import { createChase, updateChase, chaseSnapshot, cameraFrame } from './shared/chase.js';
-import { initCombat, createPickups, collectPickup, WEAPONS, pressWeapon, updateCombat } from './shared/combat.js';
+import { initCombat, createPickups, collectPickup, pressWeapon, updateCombat } from './shared/combat.js';
 import { targetScoreForPlayers, scoreRound, nextRoundDue } from './shared/tournament.js';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const rooms=new Map(),connections=new Map();
@@ -88,7 +89,7 @@ function resetRoom(room,{newTournament=true,startFraction=START_FRACTION}={}){
   if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
   room.round=newTournament?1:(room.round||1)+1;room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
   room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;
-  let slot=0;for(const p of room.players.values()){p.car=spawnCar(slot++,startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botFireUntil=0;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
+  let slot=0;for(const p of room.players.values()){p.car=spawnCar(slot++,startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botState=null;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
   room.chase=createChase([...room.players.values()].map(p=>p.car));room.raceSize=room.players.size;room.winnerId=null;
 }
 function startRound(room,now,next=false){
@@ -169,10 +170,9 @@ const timer=setInterval(()=>{
         const motionBefore=new Map([...room.players.values()].map(p=>[p.id,captureMotion(p.car)]));
         room.raceTime=(room.raceTime||0)+STEP;
         for(const p of room.players.values()){
-          const input=p.bot?botInput(p.car):now-p.lastInput>INPUT_TIMEOUT_MS?NEUTRAL:p.input;
+          const input=p.bot?botControls(room,p,now):now-p.lastInput>INPUT_TIMEOUT_MS?NEUTRAL:p.input;
           if(!p.bot&&now-p.lastInput>INPUT_TIMEOUT_MS)diagnostics.staleInputs++;
           p.simInput=input;p.appliedSeq=p.seq;
-          if(p.bot){if(p.car.item&&Math.random()<.018)p.botFireUntil=now+6000;input.fire=p.car.item&&now<p.botFireUntil&&(WEAPONS[p.car.item]?.continuous||Math.floor(now/500)%2===0);}
           const previousPose={x:p.car.x,y:p.car.y,z:p.car.z};
           stepCar(p.car,input);p.car.raceTime=room.raceTime;collideDesertMoles(p.car,room.raceTime);collideCoastalCrabs(p.car,room.raceTime);
           if(!p.car.finished&&!p.car.eliminated&&p.car.progress>=room.finishProgress){p.car.finished=true;p.car.finishTime=now-room.startAt;}

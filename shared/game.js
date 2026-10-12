@@ -498,16 +498,43 @@ export function rayCar(x,z,dx,dz,car,padding=0){
   }
   return lo;
 }
-export function botInput(car){
-  const p=trackAt(car.trackFraction+Math.max(7,Math.hypot(car.vx,car.vz)*.35)/TRACK_LENGTH);
-  for(const f of PLAZAS){const d=arcDistance(car.trackFraction,f);if(d<48){const side=car.botLane||1,offset=side*5*Math.min(1,(48-d)/18);p.x+=p.nx*offset;p.z+=p.nz*offset;}}
-  if(activeTrack.id==='ice'&&Math.abs(p.x)<175){
-    const side=car.botLane||(car.gridSlot%2?-1:1),offset=side*8*clamp((175-Math.abs(p.x))/45,0,1);p.x+=p.nx*offset;p.z+=p.nz*offset;
+export function botSteeringTarget(car,{lane=0,side=0,splitLead=175,avoidLane=null}={}){
+  const speed=Math.hypot(car.vx,car.vz),road=trackAt(car.trackFraction),icy=activeTrack.id==='ice';
+  const fraction=car.trackFraction+Math.max(7,speed*(icy?.65:.55))/TRACK_LENGTH,p=trackAt(fraction);
+  // Corner speed follows road curvature, not the sideways chassis angle during a drift.
+  const ahead=trackAt(car.trackFraction+24/TRACK_LENGTH),turn=angleDelta(ahead.angle,road.angle),bend=Math.abs(turn);
+  const iceSpace=icy?clamp((Math.min(road.halfWidth,p.halfWidth)-9)/6,0,1):0;
+  let offset=clamp(lane,-p.halfWidth+CAR_WIDTH/2+.8,p.halfWidth-CAR_WIDTH/2-.8)*clamp(1-bend/.3,0,1);
+  // Wide ice turns leave room to aim inside and let momentum drift outward.
+  offset+=Math.sign(turn)*4*iceSpace*clamp(bend/.3,0,1);
+  for(const f of PLAZAS){const d=arcDistance(car.trackFraction,f);if(d<65){const blend=clamp((65-d)/17,0,1);offset=offset*(1-blend)+(side||car.botLane||1)*5*clamp((48-d)/18,0,1);}}
+  if(activeTrack.id==='ice'&&Math.abs(p.x)<splitLead){
+    const blend=clamp((splitLead-Math.abs(p.x))/(splitLead-130),0,1);offset=offset*(1-blend)+(side||car.botLane||(car.gridSlot%2?-1:1))*8*blend;
   }
+  if(Number.isFinite(avoidLane))offset=avoidLane;
+  const bounds=botLaneBounds(fraction,side||Math.sign(offset)||1,splitLead);
+  offset=clamp(offset,bounds.min,bounds.max);
+  p.x+=p.nx*offset;p.z+=p.nz*offset;
+  return {point:p,lane:offset,speed,bend,iceSpace,icy};
+}
+// Legal lane centres keep the whole chassis away from road edges and ice gaps.
+export function botLaneBounds(fraction,side=1,splitLead=175){
+  const p=trackAt(fraction),edge=p.halfWidth-CAR_WIDTH/2-.8;
+  let min=-edge,max=edge;
+  if(activeTrack.id==='ice'&&Math.abs(p.x)<splitLead){
+    const inner=iceSplit(p.x)>0?iceSplit(p.x)+CAR_WIDTH/2+.65:0;
+    if(side>0)min=inner;else max=-inner;
+  }
+  return {min,max};
+}
+export function botInput(car,options={}){
+  const {point:p,speed,bend,iceSpace,icy}=botSteeringTarget(car,options);
   const target=Math.atan2(p.z-car.z,p.x-car.x);
   const error=angleDelta(target,car.angle);
-  const ahead=trackAt(car.trackFraction+24/TRACK_LENGTH),bend=Math.abs(angleDelta(ahead.angle,car.angle));const desired=clamp(36-bend*(activeTrack.id==='ice'?65:20),activeTrack.id==='ice'?8:13,36);
-  return {steer:clamp(error*2.5,-1,1),throttle:Math.hypot(car.vx,car.vz)>desired?0:1,reverse:false,brake:Math.abs(error)>1.1,fire:false};
+  // Correct outward momentum as well as heading; bound collision-induced slip.
+  const slip=speed>4?clamp(angleDelta(car.angle,Math.atan2(car.vz,car.vx)),icy?-.9:-.6,icy?.9:.6):0;
+  const desired=clamp(36-bend*(icy?20:12),icy?8+10*iceSpace:16,36);
+  return {steer:clamp(error*2.5+slip*(icy?.5:1.5),-1,1),throttle:speed>desired?0:1,reverse:false,brake:Math.abs(error)>1.1,fire:false};
 }
 
 selectTrack();
