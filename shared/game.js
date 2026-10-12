@@ -94,7 +94,7 @@ TRACK = Array.from({ length: 1500 }, (_, i) => {
   return { x: spline(anchors[(j+n-1)%n][0], anchors[j][0], anchors[(j+1)%n][0], anchors[(j+2)%n][0], t), z: spline(anchors[(j+n-1)%n][1], anchors[j][1], anchors[(j+1)%n][1], anchors[(j+2)%n][1], t) };
 });
 // Preserve the requested 30% length reduction while authoring turns independently.
-if(activeTrack.id==='ice')TRACK=icePoints();
+if(activeTrack.id==='ice')TRACK=icePoints().map(p=>({...p,y:1}));
 if(activeTrack.id==='desert')TRACK=desertPoints();
 const rawLength=TRACK.reduce((sum,p,i)=>sum+Math.hypot(p.x-TRACK[(i+1)%TRACK.length].x,p.z-TRACK[(i+1)%TRACK.length].z),0);
 if(activeTrack.id==='coast')for(const p of TRACK){p.x*=TARGET_TRACK_LENGTH/rawLength;p.z*=TARGET_TRACK_LENGTH/rawLength;}
@@ -171,7 +171,7 @@ export function constrainObstacles(car){
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
   const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
-  return { gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:0,rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
+  return { gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
   return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
@@ -319,6 +319,13 @@ export function stepCar(car, input, dt=STEP) {
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
   advanceNudge(car,dt);
   const track=constrainRoad(car);
+  if(!car.falling&&!car.overturned&&!car.wrecked&&car.y<=car.groundY+.001&&car.vy<=0){
+    // Match the actual road normal in the same YXZ body basis as the renderer.
+    // Airborne impact rotations remain entirely ballistic.
+    const grade=track.grade||0,along=grade*(Math.cos(car.angle)*track.nz-Math.sin(car.angle)*track.nx),across=grade*(-Math.sin(car.angle)*track.nz-Math.cos(car.angle)*track.nx),blend=1-Math.exp(-dt*14);
+    car.pitch+=(Math.atan2(along,Math.sqrt(1+across*across))-car.pitch)*blend;
+    car.roll+=(Math.atan(-across)-car.roll)*blend;
+  }
   let diff=track.fraction-car.trackFraction;if(diff>.5)diff-=1;if(diff<-.5)diff+=1;
   if(track.distance<track.halfWidth+5&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
   if(activeTrack.id==='desert'&&!uncontrolled&&Math.hypot(car.vx,car.vz)>12){

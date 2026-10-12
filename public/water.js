@@ -18,16 +18,24 @@ void main(){vUv=uv;vec4 world=modelMatrix*vec4(position,1.);world.y+=surface(wor
 const noise=`
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.)),f.x),f.y);}`;
-export function createCoastalWater(track,segments,fog){
+export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
   const time={value:0},fogColor={value:fog.color.clone()},fogDensity={value:fog.density};
   const bounds={minX:Math.min(...track.map(p=>p.x))-100,minZ:Math.min(...track.map(p=>p.z))-100,maxX:Math.max(...track.map(p=>p.x))+100,maxZ:Math.max(...track.map(p=>p.z))+100};
   const width=bounds.maxX-bounds.minX,height=bounds.maxZ-bounds.minZ;
   const canvas=document.createElement('canvas');canvas.width=canvas.height=1024;const ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,1024,1024);ctx.lineJoin=ctx.lineCap='round';
   ctx.scale(1024/width,1024/height);ctx.translate(-bounds.minX,-bounds.minZ);
   for(let size=100;size>=12;size-=2){const shade=Math.round(225*Math.exp(-(size-12)/22));ctx.beginPath();track.forEach((p,i)=>i?ctx.lineTo(p.x,p.z):ctx.moveTo(p.x,p.z));ctx.closePath();ctx.lineWidth=size;ctx.strokeStyle=`rgb(${shade},${shade},${shade})`;ctx.stroke();}
+  // Extend shallow turquoise water and foam around the newly connected islands.
+  ctx.globalCompositeOperation='lighten';
+  for(const land of landforms){
+    const points=land.shoreline;ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[2]):ctx.moveTo(p[0],p[2]));ctx.closePath();
+    for(let size=42;size>=2;size-=2){const shade=Math.round(230*Math.exp(-size/15));ctx.lineWidth=size;ctx.strokeStyle=`rgb(${shade},${shade},${shade})`;ctx.stroke();}
+    ctx.fillStyle='#eee';ctx.fill();
+  }
+  ctx.globalCompositeOperation='source-over';
   const depthTexture=new THREE.CanvasTexture(canvas);depthTexture.colorSpace=THREE.NoColorSpace;depthTexture.generateMipmaps=false;depthTexture.minFilter=THREE.LinearFilter;depthTexture.magFilter=THREE.LinearFilter;
-  const waterMaterial=new THREE.ShaderMaterial({fog:true,uniforms:{time,fogColor,fogDensity,coastMap:{value:depthTexture},coastBounds:{value:new THREE.Vector4(bounds.minX,bounds.minZ,width,height)}},vertexShader:vertex,fragmentShader:`
-    uniform float time;uniform vec3 fogColor;uniform float fogDensity;uniform sampler2D coastMap;uniform vec4 coastBounds;varying vec3 vWorld;varying vec2 vUv;
+  const waterMaterial=new THREE.ShaderMaterial({fog:true,uniforms:{time,fogColor,fogDensity,sunDirection:{value:new THREE.Vector3(...(lighting?.sunOffset||[-55,62,-44])).normalize()},sunColor:{value:new THREE.Color(lighting?.sunColor||0xffd4a0)},skyHorizon:{value:new THREE.Color(lighting?.horizon||0xb6c6cb)},skyZenith:{value:new THREE.Color(lighting?.zenith||0x6593b7)},coastMap:{value:depthTexture},coastBounds:{value:new THREE.Vector4(bounds.minX,bounds.minZ,width,height)}},vertexShader:vertex,fragmentShader:`
+    uniform float time;uniform vec3 fogColor,sunDirection,sunColor,skyHorizon,skyZenith;uniform float fogDensity;uniform sampler2D coastMap;uniform vec4 coastBounds;varying vec3 vWorld;varying vec2 vUv;
     ${waves}${noise}
     void main(){
       vec2 p=vWorld.xz;vec3 w=surface(p);
@@ -41,11 +49,11 @@ export function createCoastalWater(track,segments,fog){
       float variation=noise(p*.055+time*.018)*.65+noise(p*.19-time*.023)*.35;
       vec3 deep=vec3(.009,.075,.135),turquoise=vec3(.025,.31,.30);
       vec3 water=mix(deep,turquoise,clamp(shallow*1.3,0.,1.))*(.84+variation*.3);
-      vec3 sky=mix(vec3(.68,.76,.78),vec3(.19,.39,.64),smoothstep(0.,.8,reflected.y));
+      vec3 sky=mix(skyHorizon,skyZenith,smoothstep(0.,.8,reflected.y));sky+=sunColor*pow(max(0.,dot(reflected,sunDirection)),12.)*.15;
       float fresnel=.035+.965*pow(1.-max(dot(normal,view),0.),5.);
       vec3 color=mix(water,sky,clamp(fresnel,.035,.85));
-      vec3 sun=normalize(vec3(-55.,62.,-44.));float shine=max(0.,dot(reflect(-sun,normal),view));
-      color+=vec3(1.,.82,.55)*(pow(shine,420.)*2.6+pow(shine,45.)*.09);
+      vec3 sun=sunDirection;float shine=max(0.,dot(reflect(-sun,normal),view));
+      color+=sunColor*(pow(shine,420.)*3.8+pow(shine,45.)*.22);
       float crest=smoothstep(.27,.36,w.x)*smoothstep(.66,.9,noise(p*.8+time*.07));color=mix(color,vec3(.55,.8,.79),crest*.2);
       float distanceToEye=length(cameraPosition-vWorld);float haze=1.-exp(-pow(fogDensity*distanceToEye,2.));
       gl_FragColor=vec4(color,1.);
@@ -60,6 +68,14 @@ export function createCoastalWater(track,segments,fog){
     const a=segments[i],b=segments[(i+1)%segments.length],corners=[];
     for(const [s,distance]of [[a,a.start],[b,i+1===segments.length?a.start+a.len:b.start]])for(const edge of [0,1]){const offset=(s.halfWidth+.65+edge*3.4)*side;corners.push({p:[s.x+s.nx*offset,-2.06,s.z+s.nz*offset],uv:[distance/5,edge]});}
     for(const j of [0,1,2,1,3,2]){vertices.push(...corners[j].p);uv.push(...corners[j].uv);}
+  }
+  for(const land of landforms){let distance=0;const points=land.shoreline;
+    for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length],dx=b[0]-a[0],dz=b[2]-a[2],len=Math.hypot(dx,dz)||1;
+      const center=points.reduce((sum,p)=>[sum[0]+p[0]/points.length,sum[1]+p[2]/points.length],[0,0]);
+      const nx=(a[0]-center[0]),nz=(a[2]-center[1]),n=Math.hypot(nx,nz)||1;
+      const corners=[[a[0],-2.06,a[2]],[a[0]+nx/n*3.4,-2.06,a[2]+nz/n*3.4],[b[0],-2.06,b[2]],[b[0]+nx/n*3.4,-2.06,b[2]+nz/n*3.4]];
+      for(const j of [0,1,2,1,3,2]){vertices.push(...corners[j]);uv.push((distance+(j>1?len:0))/5,j%2);}distance+=len;
+    }
   }
   const shoreGeo=new THREE.BufferGeometry();shoreGeo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));shoreGeo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
   const shoreMaterial=new THREE.ShaderMaterial({uniforms:{time,fogColor,fogDensity},vertexShader:vertex,transparent:true,depthWrite:false,side:THREE.DoubleSide,fragmentShader:`

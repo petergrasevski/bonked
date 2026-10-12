@@ -16,7 +16,7 @@ test('independent track rooms, host authority, authenticated lobby-only audio, l
   const a=await connect();a.send({type:'create',trackId:'ice'});await until(()=>a.welcome&&a.state);
   const b=await connect();b.send({type:'join',code:a.welcome.code});await until(()=>b.welcome);
   const c=await connect();c.send({type:'create',trackId:'desert'});await until(()=>c.welcome&&c.state);
-  assert.equal(c.state.trackId,'desert');assert.ok(c.state.players[0].y>19);assert.equal(a.state.trackId,'ice');assert.equal(a.state.players[0].y,0);
+  assert.equal(c.state.trackId,'desert');assert.ok(c.state.players[0].y>19);assert.equal(a.state.trackId,'ice');assert.equal(a.state.players[0].y,1);
   b.send({type:'track',trackId:'desert'});await until(()=>b.messages.some(m=>m.type==='error'));assert.equal(a.state.trackId,'ice');
   a.send({type:'track',trackId:'coast'});await until(()=>b.state.trackId==='coast');assert.equal(c.state.trackId,'desert');
   a.send({type:'track',trackId:'__proto__'});await until(()=>a.messages.some(m=>m.message==='Unknown track.'));assert.equal(a.state.trackId,'coast');
