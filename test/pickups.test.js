@@ -5,10 +5,10 @@ import {createPickupModel} from '../public/pickups.js';
 import {createPickups,collectPickup,WEAPON_IDS,WEAPONS} from '../shared/combat.js';
 import {spawnCar} from '../shared/game.js';
 test('every advertised weapon awards exactly that item and its ammunition',()=>{
-  for(const item of WEAPON_IDS){const car={...spawnCar(),x:0,z:0},pickup={id:0,item,x:0,z:0,readyAt:0};assert.equal(collectPickup(car,[pickup],1000,()=>.1),pickup);assert.equal(car.item,item);assert.equal(car.ammo,WEAPONS[item].ammo);assert.equal(pickup.readyAt,5500);assert.equal(pickup.item,'rocket');}
+  for(const item of WEAPON_IDS){const car={...spawnCar(),x:0,z:0},pickup={id:0,item,x:0,z:0,readyAt:0};assert.equal(collectPickup(car,[pickup],1000,()=>.1),pickup);assert.equal(car.item,item);assert.equal(car.ammo,WEAPONS[item].ammo);assert.equal(pickup.readyAt,3000);assert.equal(pickup.item,'rocket');}
 });
 test('pickups have a visible type before collection; cooldown prevents a second driver collecting',()=>{
-  const pickups=createPickups(()=>.95);assert.ok(pickups.every(p=>p.item==='shotgun'));const p=pickups[0],a={...spawnCar(),x:p.x,z:p.z},b={...a};collectPickup(a,pickups,2000,()=>0);assert.equal(a.item,'shotgun');assert.equal(p.item,'pulse');assert.equal(collectPickup(b,pickups,6499),null);collectPickup(b,pickups,6500);assert.equal(b.item,'pulse');
+  const pickups=createPickups(()=>.95);assert.ok(pickups.every(p=>p.item==='shotgun'));const p=pickups[0],a={...spawnCar(),x:p.x,z:p.z},b={...a};collectPickup(a,pickups,2000,()=>0);assert.equal(a.item,'shotgun');assert.equal(p.item,'pulse');assert.equal(collectPickup(b,pickups,3999),null);collectPickup(b,pickups,4000);assert.equal(b.item,'pulse');
 });
 test('dead, airborne, occupied or overturned cars cannot consume pickups',()=>{
   for(const change of [{eliminated:true},{y:2},{item:'shield'},{overturned:true},{falling:true}]){const car={...spawnCar(),x:0,z:0,...change},p={id:0,item:'railgun',x:0,z:0,readyAt:0};assert.equal(collectPickup(car,[p],1000),null);assert.equal(p.readyAt,0);}

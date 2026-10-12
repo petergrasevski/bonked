@@ -4,7 +4,7 @@ const smooth=t=>{t=clamp(t,0,1);return t*t*(3-2*t);};
 const wrap=f=>f-Math.floor(f);
 export const DESERT_JUMPS=Object.freeze([.085,.415,.80,.925].map((fraction,id)=>Object.freeze({id:`desert-jump-${id}`,fraction,length:10,height:1.8})));
 export const DESERT_MOUNTAIN=Object.freeze({start:.145,ascentEnd:.215,bridgeEnd:.285,end:.395,height:36});
-export const DESERT_MOLE_ZONE=Object.freeze({center:.665,length:252,transition:21,halfWidth:18.9});
+export const DESERT_MOLE_ZONE=Object.freeze({center:.665,length:252,transition:21,halfWidth:15.12});
 export const DESERT_NARROW=Object.freeze({start:.872,narrowStart:.902,narrowEnd:.914,end:.983});
 export const DESERT_CACTI=Object.freeze([.035,.115,.445,.545,.765,.845,.97].map((fraction,i)=>({fraction,side:i%2?1:-1})));
 export const MOLE_CYCLE=6;
@@ -29,7 +29,9 @@ export function desertMoles(trackLength){
   // Positive lateral is the right/inner side of this bend. The outer line stays
   // less crowded, while two central heads discourage driving straight through.
   const cluster=[[-42,-1],[42,1.5],[-66,14],[-38,10],[-10,15],[18,11],[46,14],[74,10]];
-  return field.concat(cluster.map(([distance,lateral],i)=>({id:`desert-mole-cluster-${i}`,fraction:zone.center+distance/trackLength,lateral,radius:1.7,height:2.5,phase:(.85+i*1.37)%MOLE_CYCLE})));
+  const moles=field.concat(cluster.map(([distance,lateral],i)=>({id:`desert-mole-cluster-${i}`,fraction:zone.center+distance/trackLength,lateral,radius:1.7,height:2.5,phase:(.85+i*1.37)%MOLE_CYCLE})));
+  // Leave the field authored in place; only tuck edge hazards inside the fence.
+  return moles.map(m=>({...m,lateral:clamp(m.lateral,-zone.halfWidth+m.radius+.65,zone.halfWidth-m.radius-.65)}));
 }
 export function moleState(mole,raceSeconds=0){
   const phase=((raceSeconds+(mole.phase||0))%MOLE_CYCLE+MOLE_CYCLE)%MOLE_CYCLE;

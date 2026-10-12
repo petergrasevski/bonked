@@ -3,7 +3,7 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {CRABS} from '../shared/game.js';
 import {crabState} from '../shared/coastal-crabs.js';
 
-// Eight articulated crabs use three instanced draws: shells, eyes and legs.
+// Twelve articulated crabs use three instanced draws: shells, eyes and legs.
 export function createCrabParts(){
   const shells=[],eyes=[];
   const ball=(bucket,x,y,z,sx,sy,sz)=>{const g=new THREE.SphereGeometry(1,12,8);g.scale(sx,sy,sz);g.translate(x,y,z);bucket.push(g);};

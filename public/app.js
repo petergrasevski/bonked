@@ -1,7 +1,7 @@
 import {createScoreMeter} from './score-meter.js';
 import {RoundResults} from './round-results.js';
 import {WeaponHUD} from './weapon-hud.js';
-import {updateControlLegend,DESKTOP_CONTROLS_HTML} from './control-legend.js';
+import {updateControlLegend} from './control-legend.js';
 import {initMetalInteractions} from './metal-ui.js';
 import {createTrackPicker} from './track-picker.js';
 import {readController} from './controller.js';
@@ -83,7 +83,6 @@ function sortedPlayers(){return [...state.players].sort(raceOrder);}
 function renderResults(){resultsScreen.render(state,myId,Date.now()+clockOffset);}
 let scoreKey='';
 function renderScores(){const key=JSON.stringify([state.round,state.targetScore,state.players.map(p=>[p.id,p.score,p.eliminated])]);if(key===scoreKey)return;scoreKey=key;
-  $('hud-target').textContent=state.targetScore+' TO WIN';
   const board=$('tournament-scores');board.replaceChildren();
   for(const p of state.players){const score=p.score||0,heat=clamp(score/state.targetScore,0,1),cell=node('div','score-player');cell.classList.toggle('me',p.id===myId);cell.classList.toggle('out',p.eliminated);cell.style.setProperty('--car',p.color);cell.style.setProperty('--glow',(2+heat*8)+'px');cell.title=p.name+': '+score+' / '+state.targetScore;
     const meter=createScoreMeter(p.name,score,state.targetScore);
@@ -160,9 +159,6 @@ const editable=target=>target instanceof Element&&!!target.closest('input,textar
 for(const event of ['contextmenu','selectstart','dragstart'])document.addEventListener(event,e=>{if(!editable(e.target))e.preventDefault();});
 for(const event of ['touchstart','touchmove','touchend'])document.addEventListener(event,e=>{if(e.target instanceof Element&&e.target.closest('.controls,#scene')&&e.cancelable)e.preventDefault();},{passive:false});
 for(const event of ['gesturestart','gesturechange','gestureend','dblclick'])document.addEventListener(event,e=>{if(document.body.classList.contains('playing')&&!editable(e.target)&&e.cancelable)e.preventDefault();},{passive:false});
-$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{displayGuide.show();}};
-$('howto').onclick=()=>{$('settings').hidden=true;releaseControls();$('dialog-body').innerHTML='<h2>Controls</h2><p>Hold GO to accelerate. Hold LEFT or RIGHT to steer. Holding both keeps the steering centred.</p><p>Hold DRIFT/R briefly to slide, or for 0.35 seconds to reverse.</p><p>Tap a top corner to NUDGE left or right. Shove nearby cars sideways and deal 8 damage; each nudge has a short cooldown.</p><p>Drive through a floating weapon to collect it. Tap WEAPON to use it. Hold for machine gun, plasma, flamethrower or taser. The taser arcs to nearby cars, draining health and disrupting steering for up to five seconds.</p><p>Start holding GO at 1 second remaining (±20 ms) for a boost. Holding from more than 2 seconds early causes a spinout.</p><p>Stay ahead of the red cutoff line. Last car standing wins the round; otherwise finish three laps. Earn 3 points for first, 2 for second, and −2 for last. First to 15 wins with up to four cars; first to 10 with five to eight. Tap Ready between rounds, or wait five seconds. The next grid starts where the winner finished. Water is fatal.</p><div class="computer-controls-guide">'+DESKTOP_CONTROLS_HTML+'</div><p><kbd>W</kbd> accelerates; <kbd>A</kbd> / <kbd>D</kbd> steer. <kbd>S</kbd> brakes, then reverses. Press <kbd>Enter ↵</kbd> to fire, or hold it for continuous weapons.</p><p>Controller: left stick steers · X accelerates · Square brakes/reverses · R1 fires · L2/R2 nudge. Pair a DualSense in your phone’s Bluetooth settings, then press a controller button.</p><p>Party chat is available when you join a lobby. Your mic starts off; tap the microphone button to enable it or mute it. You can hear others while your mic is off. Headphones help prevent speaker feedback.</p>';$('dialog').hidden=false;};
-$('phone').onclick=async()=>{$('settings').hidden=true;releaseControls();const url=await getShareURL();const isPublic=new URL(url).protocol==='https:';const content=$('dialog-body');content.replaceChildren(node('h2','','Open on your phone'),node('p','',isPublic?'Scan the code on your phone, or share the link with your friends. It works over Wi-Fi or mobile data.':'Connect your phone to the same Wi-Fi as this laptop, then scan the code. Keep the laptop awake and the server running.'));const img=node('img','qr');img.alt='QR code to open the game on your phone';img.src=`/api/qr?url=${encodeURIComponent(url)}`;const link=node('a','phone-link',url);link.href=url;content.append(img,link,node('p','',location.hostname.endsWith('.trycloudflare.com')?'This preview runs on the laptop. Keep it awake.':isPublic?'Share this link to join from another device.':'Keep the laptop awake while playing on this local address.'));$('dialog').hidden=false;};
 $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>{if(e.target===$('dialog'))$('dialog').hidden=true;};
 $('settings-open').onclick=()=>{releaseControls();$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;$('settings-close').focus();};
 function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('race-settings'):$('settings-open')).focus();}

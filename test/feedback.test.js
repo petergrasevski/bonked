@@ -10,16 +10,16 @@ const player=(id,x=0,z=0)=>({id,car:{...spawnCar(),x,z,angle:0},input:{...NEUTRA
 const room=(...players)=>{const r={phase:'racing',startAt:0,players:new Map(players.map(p=>[p.id,p]))};initCombat(r);return r;};
 const run=(r,seconds,offset=0)=>{for(let i=0;i<Math.round(seconds/STEP);i++)updateCombat(r,STEP,offset+(i+1)*STEP*1000);};
 
-test('both ice straights have two real lanes with guarded and exposed gap edges',()=>{
+test('ice forks retain guarded edges except the boost-fed first right branch',()=>{
   selectTrack('ice');assert.equal(iceSplit(0),4);assert.equal(iceSplit(130),0);
   for(const z of [-40,40])for(const side of [-1,1]){
     const center=nearestTrack(0,z);const make=(x,offset)=>{const p=nearestTrack(x,z);return {...spawnCar(),x:p.x+p.nx*offset,z:p.z+p.nz*offset,angle:Math.atan2(p.nz,p.nx)-Math.PI/2,trackFraction:p.fraction};};
-    assert.equal(hasBarrier(center.fraction,side,true),true);
+    const exposedRight=z<0&&side>0;assert.equal(hasBarrier(center.fraction,side,true),!exposedRight);
     const lane=make(0,side*9);constrainRoad(lane);assert.equal(lane.falling,false);
-    const wall=make(0,side*4.2);constrainRoad(wall);assert.equal(wall.falling,false);assert.ok(nearestTrack(wall.x,wall.z).distance>4.9);
+    const wall=make(0,side*4.2);constrainRoad(wall);assert.equal(wall.falling,false);assert.ok(exposedRight?nearestTrack(wall.x,wall.z).distance<4.3:nearestTrack(wall.x,wall.z).distance>4.9);
     const gap=make(side<0?65:-65,side*2);constrainRoad(gap);assert.equal(gap.falling,true,'unguarded gap is not drivable');
     const exposed=make(side<0?65:-65,side*15);constrainRoad(exposed);assert.ok(exposed.falling||exposed.edgeBalance);for(let i=0;i<60;i++)stepCar(exposed,NEUTRAL);assert.equal(exposed.falling,true);
-    const guarded=make(side<0?-65:65,side*14.2);constrainRoad(guarded);assert.equal(guarded.falling,false);
+    const guarded=make(side<0?-65:65,side*14.2);constrainRoad(guarded);assert.equal(guarded.falling,false);if(exposedRight)assert.equal(guarded.edgeBalance,true);
   }
 });
 test('ice rematch grids stay inside both lanes even when the winner stops at a split',()=>{

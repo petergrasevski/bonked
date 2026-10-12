@@ -4,12 +4,12 @@ import {desertStormAt,stormCoverage,stormGustAt,applyDesertWind,STORM_DELAY} fro
 import {createDustCloud,stormHaze} from '../public/desert-storm.js';
 import {selectTrack,spawnCar,stepCar,trackAt,STEP,NEUTRAL} from '../shared/game.js';
 import {predictFleet} from '../shared/prediction.js';
-test('storms traverse the map for 28 seconds followed by 45 seconds clear',()=>{
-  assert.equal(desertStormAt(14.99).active,false);assert.equal(desertStormAt(15).active,true);assert.equal(desertStormAt(42.99).active,true);
-  for(const t of [43,50,80,87.99])assert.equal(desertStormAt(t).active,false);
-  assert.equal(desertStormAt(88).active,true);assert.ok(desertStormAt(17).x<desertStormAt(33).x);assert.ok(desertStormAt(90).x>desertStormAt(110).x);
+test('storms traverse the map for 42 seconds followed by 45 seconds clear',()=>{
+  assert.equal(desertStormAt(14.99).active,false);assert.equal(desertStormAt(15).active,true);assert.equal(desertStormAt(56.99).active,true);
+  for(const t of [57,70,90,101.99])assert.equal(desertStormAt(t).active,false);
+  assert.equal(desertStormAt(102).active,true);assert.ok(desertStormAt(17).x<desertStormAt(33).x);assert.ok(desertStormAt(104).x>desertStormAt(140).x);
   const storm=desertStormAt(25);assert.equal(stormCoverage(storm,storm.x,storm.z),1);assert.equal(stormCoverage(storm,storm.x+storm.rx+1,storm.z),0);
-  assert.ok(Math.PI*storm.rx*storm.rz/(540*340)>.45);assert.ok(Math.PI*storm.rx*storm.rz/(540*340)<.65);
+  assert.ok(Math.PI*storm.rx*storm.rz/(540*340)>.8);assert.ok(Math.PI*storm.rx*storm.rz/(540*340)<1);
   for(const t of [-100,NaN,Infinity,1e6])assert.ok(Number.isFinite(desertStormAt(t).x));
 });
 test('wind alternates left, right and backward in smooth one-second bursts and respects cloud boundaries',()=>{
@@ -29,8 +29,8 @@ test('desert wind agrees exactly between authoritative ticks and client predicti
 });
 test('dust uses two fixed GPU draws and keeps near-track visibility readable at all camera heights',()=>{
   const dust=createDustCloud({mobile:true}),copy=createDustCloud({mobile:true});assert.equal(dust.group.children.length,2);assert.equal(dust.clouds.count,48);assert.equal(dust.grains.geometry.attributes.position.count,550);assert.deepEqual(dust.clouds.instanceMatrix.array,copy.clouds.instanceMatrix.array);
-  const buffer=dust.clouds.instanceMatrix.array,storm=dust.update(25);assert.equal(dust.group.visible,true);assert.equal(dust.clouds.instanceMatrix.array,buffer);
+  const buffer=dust.clouds.instanceMatrix.array,storm=dust.update(25);assert.equal(dust.group.visible,true);assert.equal(dust.group.scale.x,1.25);assert.equal(dust.group.scale.z,1.25);assert.ok(Math.abs(desertStormAt(26).x-desertStormAt(25).x)<17);assert.equal(dust.clouds.instanceMatrix.array,buffer);
   for(const height of [20,50,100,200,400]){const {density}=stormHaze(storm,storm,height);assert.ok(1-Math.exp(-((density*height*1.5)**2))<.65,'cars stay readable through the haze');}
-  dust.update(44);assert.equal(dust.group.visible,false);
+  dust.update(58);assert.equal(dust.group.visible,false);
   for(const d of [dust,copy])d.group.traverse(mesh=>{mesh.geometry?.dispose();mesh.material?.dispose();});
 });

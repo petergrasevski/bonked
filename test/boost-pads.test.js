@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {selectTrack,BOOST_PADS,spawnCar,stepCar,trackAt,TOP_SPEED,CAR_WIDTH,STEP,NEUTRAL,OBSTACLES,constrainObstacles,PICKUP_LOCATIONS} from '../shared/game.js';
-import {collectBoostPad,PAD_DURATION,boostExhaustStrength} from '../shared/boost-pads.js';
-import {buildBoostPads,padAnimationPhase} from '../public/boost-pads.js';
+import {selectTrack,BOOST_PADS,spawnCar,stepCar,trackAt,nearestTrack,hasBarrier,TOP_SPEED,CAR_WIDTH,STEP,NEUTRAL,MOLES,OBSTACLES,constrainObstacles,PICKUP_LOCATIONS} from '../shared/game.js';
+import {collectBoostPad,PAD_DURATION,boostExhaustStrength,samplePadRoad} from '../shared/boost-pads.js';
+import {buildBoostPads,padAnimationPhase,padSurfaceGeometry} from '../public/boost-pads.js';
 import {DESERT_NARROW,DESERT_JUMPS} from '../shared/desert-features.js';
 const at=p=>({...spawnCar(),x:p.x,y:p.y,z:p.z,groundY:p.y,angle:p.angle,trackFraction:p.fraction,pitch:Math.atan(p.grade||0),vx:Math.cos(p.angle)*20,vz:Math.sin(p.angle)*20});
 test('authored boost layouts fit roads, use 1.5 car widths, and have the requested ice configurations',()=>{
-  for(const id of ['coast','ice','desert']){selectTrack(id);assert.ok(BOOST_PADS.length>=10);for(const p of BOOST_PADS){assert.equal(p.width,CAR_WIDTH*1.5);assert.ok(Math.abs(p.lateral)+p.width/2<trackAt(p.fraction).halfWidth);assert.equal(p.y,trackAt(p.fraction).y);}}
+  for(const id of ['coast','ice','desert']){selectTrack(id);assert.ok(BOOST_PADS.length>=10);for(const p of BOOST_PADS){assert.equal(p.width,CAR_WIDTH*1.5);assert.ok(Math.abs(p.lateral)+p.width/2<trackAt(p.fraction).halfWidth);assert.equal(p.y,samplePadRoad(p.surface,p.x,p.z));}}
   selectTrack('ice');const rows=Map.groupBy(BOOST_PADS,p=>p.fraction);assert.deepEqual([...rows.values()].map(p=>p.length),[2,2,2,5]);
   const [pair,opposite,middle]=[...rows.values()];assert.ok(pair.every(p=>p.lateral>0));assert.ok(opposite[0].lateral*opposite[1].lateral<0);assert.ok(middle.every(p=>Math.abs(p.lateral)<2));
 });
@@ -36,11 +36,14 @@ test('boost ramps to 150% speed in 0.4 seconds, decays over two seconds and pres
   }
   assert.ok(Math.abs(last-TOP_SPEED)<1e-8);assert.ok(car.padBoostRemaining<1e-12);assert.ok(peak<=54.000001);
 });
-test('pad rendering uses three instanced draws and dims a used pad',()=>{
-  selectTrack('ice');const scene=new THREE.Scene(),visual=buildBoostPads(scene);assert.equal(scene.children.length,3);assert.equal(visual.base.count,BOOST_PADS.length);
-  const bright=new THREE.Color();visual.chevrons.getColorAt(0,bright);visual.update({raceTime:.5,boostPads:[{id:BOOST_PADS[0].id,readyAt:1}]},500);const dark=new THREE.Color();visual.chevrons.getColorAt(0,dark);assert.ok(dark.g<bright.g);
-  const matrix=new THREE.Matrix4();visual.glow.getMatrixAt(0,matrix);assert.equal(matrix.elements[0],0);visual.update({raceTime:1,boostPads:[{id:BOOST_PADS[0].id,readyAt:1}]},1000);visual.chevrons.getColorAt(0,dark);assert.ok(dark.equals(bright));
-  scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
+test('pad rendering uses three batched draws, follows road triangles and dims used pads',()=>{
+  for(const id of ['ice','desert']){
+    selectTrack(id);const scene=new THREE.Scene(),visual=buildBoostPads(scene);assert.equal(scene.children.length,3);assert.equal(visual.pads.length,BOOST_PADS.length);
+    const colour=()=>visual.chevrons.geometry.attributes.color.getY(0),bright=colour();visual.update({raceTime:.5,boostPads:[{id:BOOST_PADS[0].id,readyAt:1}]},500);assert.ok(colour()<bright);assert.equal(visual.glow.geometry.attributes.color.getY(0),0);
+    visual.update({raceTime:1,boostPads:[{id:BOOST_PADS[0].id,readyAt:1}]},1000);assert.equal(colour(),bright);
+    for(const pad of BOOST_PADS){const g=padSurfaceGeometry(pad),p=g.attributes.position;assert.ok(p.count>0);for(let i=0;i<p.count;i++){const y=samplePadRoad(pad.surface,p.getX(i),p.getZ(i));assert.notEqual(y,null);assert.ok(Math.abs(p.getY(i)-y-.045)<.001,'decal stays flush above every slope triangle');}g.dispose();}
+    scene.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
+  }
 });
 test('desert narrows to half-width after the final pickup, widens before finish, and cactus trunks block cars',()=>{
   selectTrack('desert');const n=DESERT_NARROW;assert.ok(n.start>Math.max(...PICKUP_LOCATIONS.map(p=>p.fraction)));assert.ok(n.narrowEnd<DESERT_JUMPS.at(-1).fraction);
@@ -53,4 +56,17 @@ test('removed risky pad rows stay absent and arrows advance at three frames per 
   selectTrack('coast');assert.ok(BOOST_PADS.every(p=>p.fraction>.04));selectTrack('desert');assert.ok(BOOST_PADS.every(p=>p.fraction<.77||p.fraction>.81));
   assert.equal(padAnimationPhase(0),padAnimationPhase(320));assert.ok(padAnimationPhase(334)>padAnimationPhase(0));assert.ok(padAnimationPhase(667)>padAnimationPhase(334));assert.equal(padAnimationPhase(1000),0);
   assert.equal(boostExhaustStrength(0),0);assert.equal(boostExhaustStrength(2),1);assert.ok(boostExhaustStrength(1)<boostExhaustStrength(1.5));assert.ok(boostExhaustStrength(.1)<.01);
+});
+
+test('narrowed mole-field boost pads remain clear of all holes',()=>{
+  selectTrack('desert');const pads=BOOST_PADS.filter(p=>p.fraction>.59&&p.fraction<.74);assert.equal(pads.length,2);
+  for(const p of pads)for(const mole of MOLES)assert.ok(Math.hypot(p.x-mole.x,p.z-mole.z)>mole.radius+4);
+});
+
+test('first Glacier boost-fed fork lane has no inner or outer walls; other guards remain',()=>{
+  selectTrack('ice');const side=Math.sign(BOOST_PADS[0].lateral);assert.equal(side,1);
+  for(let x=-150;x<=150;x+=5){const first=nearestTrack(x,-40);assert.equal(hasBarrier(first.fraction,side,false),false);assert.equal(hasBarrier(first.fraction,side,true),false);}
+  assert.equal(hasBarrier(nearestTrack(0,-40).fraction,-side,true),true);
+  assert.equal(hasBarrier(nearestTrack(-65,-40).fraction,-side,false),true);
+  for(const side of [-1,1]){assert.equal(hasBarrier(nearestTrack(0,40).fraction,side,true),true);assert.equal(hasBarrier(nearestTrack(475,0).fraction,side,false),true);}
 });

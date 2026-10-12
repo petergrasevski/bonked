@@ -1,4 +1,4 @@
-import {weaponBasis,weaponDirection,weaponMuzzle,rayCar3D,sweepTrackWalls,MUZZLE_HEIGHT} from './weapon-geometry.js';
+import {shotgunRays,weaponBasis,weaponDirection,weaponMuzzle,rayCar3D,sweepTrackWalls,MUZZLE_HEIGHT} from './weapon-geometry.js';
 import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
 export const WEAPONS = {
   pulse:{name:'Pulse',icon:'◎',ammo:1,hint:'two shockwaves, one second apart'},
@@ -14,8 +14,9 @@ export const WEAPONS = {
   shotgun:{name:'Shotgun',icon:'↔',ammo:4,hint:'fires from both sides · four shells'},
 };
 export const WEAPON_IDS=Object.keys(WEAPONS);
+export const FLAME_RANGE=(CAR_LENGTH*2+1)*1.5;
 export const TASER_RADIUS=CAR_LENGTH*1.75;
-export const DAMAGE={taser:15,pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:12,plasma:8,shotgunPellet:7};
+export const DAMAGE={taser:15,pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:12,plasma:8,shotgunPellet:12};
 export function initCombat(room){room.serial??=0;room.arcs=[];room.sounds=[];room.projectiles=[];room.effects=[];room.mines=[];room.chains=[];room.pulses=[];}
 export function giveWeapon(car,id){if(!WEAPONS[id])throw Error('Unknown weapon');car.item=id;car.ammo=WEAPONS[id].ammo;car.fireCooldown=0;}
 const randomWeapon=random=>WEAPON_IDS[Math.floor(random()*WEAPON_IDS.length)];
@@ -24,7 +25,7 @@ export function collectPickup(car,pickups,now,random=Math.random){
   if(car.item||car.finished||car.eliminated||car.y-(car.groundY||0)>=1||car.overturned||car.falling)return null;
   const pickup=pickups.filter(p=>now>=p.readyAt&&Math.abs(car.y-(p.y||0))<1&&Math.hypot(car.x-p.x,car.z-p.z)<3).sort((a,b)=>Math.hypot(car.x-a.x,car.z-a.z)-Math.hypot(car.x-b.x,car.z-b.z))[0];
   if(!pickup)return null;
-  giveWeapon(car,pickup.item);pickup.readyAt=now+4500;pickup.item=randomWeapon(random);
+  giveWeapon(car,pickup.item);pickup.readyAt=now+2000;pickup.item=randomWeapon(random);
   return pickup;
 }
 const players=room=>[...room.players.values()];
@@ -123,9 +124,12 @@ export function pressWeapon(room,p,now){
   }
   if(id==='shotgun'){
     const hits=new Map();
-    for(const side of [-1,1]){
-      for(let i=-2;i<=2;i++){const angle=Math.PI/2*side+i*.09,h=rayHits(room,p,angle,16,.1)[0];if(h)hits.set(h.target,(hits.get(h.target)||0)+DAMAGE.shotgunPellet);}
-      beam(room,'shotgun',c,Math.PI/2*side,16,now,{color:'#ffd990',duration:170});
+    for(const {origin,direction,side,barrel} of shotgunRays(c)){
+      const delta={x:direction.x*16,y:direction.y*16,z:direction.z*16};
+      const first=targets(room,p.id).map(target=>({target,t:rayCar3D(origin,delta,target.car,.1)})).filter(h=>h.t!==null).sort((a,b)=>a.t-b.t)[0];
+      if(first)hits.set(first.target,(hits.get(first.target)||0)+DAMAGE.shotgunPellet);
+      const t=first?.t??1;
+      effect(room,'shotgun',origin.x,origin.z,now,{y:origin.y,toX:origin.x+delta.x*t,toY:origin.y+delta.y*t,toZ:origin.z+delta.z*t,color:'#ffd990',duration:170,side,barrel});
     }
     for(const [target,amount]of hits){const dx=target.car.x-c.x,dz=target.car.z-c.z,d=Math.hypot(dx,dz)||1;hit(room,target,amount,now,{x:dx/d*18,z:dz/d*18});}
   }
@@ -153,7 +157,7 @@ export function updateCombat(room,dt,now){
       const used=Math.min(dt,c.ammo);c.ammo-=used;c.firing='flame';
       for(const q of targets(room,p.id)){
         const origin=weaponMuzzle(c,0,0),b=weaponBasis(c),dx=q.car.x-origin.x,dy=q.car.y+.7-origin.y,dz=q.car.z-origin.z,along=dx*b.forward.x+dy*b.forward.y+dz*b.forward.z,side=Math.abs(dx*b.side.x+dy*b.side.y+dz*b.side.z),vertical=Math.abs(dx*b.up.x+dy*b.up.y+dz*b.up.z);
-        if(along>0&&along<CAR_LENGTH*2+1&&side<1.2+along*.24&&vertical<1.2+along*.12)hit(room,q,DAMAGE.flame*used,now);
+        if(along>0&&along<FLAME_RANGE&&side<1.2+along*.24&&vertical<1.2+along*.12)hit(room,q,DAMAGE.flame*used,now);
       }
       if(c.ammo<=.00001){c.item=null;c.ammo=0;}
     }else if(pressed||(held&&WEAPONS[c.item]?.continuous))pressWeapon(room,p,now);

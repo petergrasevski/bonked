@@ -8,11 +8,12 @@ export function boostSpeed(car,dt,topSpeed){
   return age<=PAD_RAMP?car.padBoostFrom+(peak-car.padBoostFrom)*Math.min(1,age/PAD_RAMP):peak+(topSpeed-peak)*smooth((age-PAD_RAMP)/PAD_DECAY);
 }
 // Layout only; each room owns independent copies of the readyAt timestamps.
-export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[]}){
+export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[],segments=[]}){
   const pads=[],width=carWidth*1.5,padLength=5,gap=width+.25;
   const add=(fraction,lateral)=>{const p=trackAt(fraction);if(Math.abs(lateral)+width/2>p.halfWidth-.15)return;const x=p.x+p.nx*lateral,z=p.z+p.nz*lateral;
     if(obstacles.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+4))return;
-    pads.push({...p,id:`${id}-boost-${pads.length}`,fraction,lateral,x,z,width,length:padLength,readyAt:0});};
+    const surface=padRoadTriangles(segments,fraction,length);
+    pads.push({...p,y:samplePadRoad(surface,x,z)??p.y,surface,id:`${id}-boost-${pads.length}`,fraction,lateral,x,z,width,length:padLength,readyAt:0});};
   const row=f=>{const p=trackAt(f),count=Math.floor((p.halfWidth*2-.5)/gap);for(let i=0;i<count;i++)add(f,(i-(count-1)/2)*gap);};
   const pair=(f,side=1)=>{const p=trackAt(f);add(f,side*(p.halfWidth-width/2-.35));add(f,side*(p.halfWidth-width/2-.35-gap));};
   if(id==='coast'){
@@ -28,7 +29,7 @@ export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[
     add(fs[2],-gap/2);add(fs[2],gap/2);row(fs[3]);
   }else if(id==='desert'){
     const zone=DESERT_MOLE_ZONE,start=zone.center-zone.length/2/length;
-    for(const t of [.25,.5]){const f=start+zone.length*t/length,p=trackAt(f);add(f,-p.halfWidth+width/2+.6);}
+    for(const t of [.25,.5])for(const shift of [0,6,-6,10,-10]){const f=start+(zone.length*t+shift)/length,p=trackAt(f),before=pads.length;add(f,-p.halfWidth+width/2+.6);if(pads.length>before)break;}
     pair(.163,-1);pair(.19,1);pair(.377,-1);
     row((DESERT_NARROW.narrowStart+DESERT_NARROW.narrowEnd)/2);
   }
@@ -47,7 +48,7 @@ export function collectBoostPad(car,pads,raceTime,previous=car){
       let a=(-half-origin)/delta,b=(half-origin)/delta;if(a>b)[a,b]=[b,a];interval[0]=Math.max(interval[0],a);interval[1]=Math.min(interval[1],b);
     }
     if(!touches||interval[0]>interval[1])continue;
-    const t=interval[0],x=previous.x+dx*t,z=previous.z+dz*t,y=(previous.y??car.y)+(car.y-(previous.y??car.y))*t,roadY=pad.y+((x-pad.x)*c+(z-pad.z)*s)*(pad.grade||0);
+    const t=interval[0],x=previous.x+dx*t,z=previous.z+dz*t,y=(previous.y??car.y)+(car.y-(previous.y??car.y))*t,roadY=samplePadRoad(pad.surface,x,z)??pad.y+((x-pad.x)*c+(z-pad.z)*s)*(pad.grade||0);
     if(Math.abs(y-roadY)>.55)continue;
     car.padBoostFrom=Math.max(0,car.vx*Math.cos(car.angle)+car.vz*Math.sin(car.angle));car.padBoostRemaining=PAD_DURATION;pad.readyAt=raceTime+PAD_COOLDOWN;return pad;
   }
@@ -57,4 +58,26 @@ export function collectBoostPad(car,pads,raceTime,previous=car){
 export function boostExhaustStrength(remaining){
   if(!(remaining>0))return 0;
   return remaining>PAD_DECAY?.25+.75*Math.min(1,(PAD_DURATION-remaining)/PAD_RAMP):smooth(remaining/PAD_DECAY);
+}
+
+// Retain the actual road ribbon triangles around each pad. This keeps decals
+// and pickup height checks on the same curved, sloped deck, even at overpasses.
+export function padRoadTriangles(segments,fraction,length){
+  const triangles=[];
+  for(let i=0;i<segments.length;i++){
+    const a=segments[i],b=segments[(i+1)%segments.length],distance=Math.abs(((a.start/length-fraction+1.5)%1)-.5)*length;
+    if(distance>20+a.len)continue;
+    const points=[[a.x-a.nx*a.halfWidth,a.y,a.z-a.nz*a.halfWidth],[a.x+a.nx*a.halfWidth,a.y,a.z+a.nz*a.halfWidth],[b.x-b.nx*b.halfWidth,b.y,b.z-b.nz*b.halfWidth],[b.x+b.nx*b.halfWidth,b.y,b.z+b.nz*b.halfWidth]];
+    triangles.push([points[0],points[1],points[2]],[points[1],points[3],points[2]]);
+  }
+  return triangles;
+}
+export function samplePadRoad(triangles,x,z){
+  for(const [a,b,c] of triangles||[]){
+    const bx=b[0]-a[0],bz=b[2]-a[2],cx=c[0]-a[0],cz=c[2]-a[2],dx=x-a[0],dz=z-a[2],det=bx*cz-bz*cx;
+    if(Math.abs(det)<1e-9)continue;
+    const u=(dx*cz-dz*cx)/det,v=(bx*dz-bz*dx)/det;
+    if(u>=-1e-6&&v>=-1e-6&&u+v<=1+1e-6)return a[1]+u*(b[1]-a[1])+v*(c[1]-a[1]);
+  }
+  return null;
 }

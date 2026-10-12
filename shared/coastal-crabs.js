@@ -1,11 +1,11 @@
 // Authored beach openings and deterministic kinematic hazards. Cars never write
 // to crab state: the server, prediction and renderer sample the same race clock.
 export const COAST_BEACH_SECTIONS=Object.freeze([3,8,14,19]);
-export const CRAB_PERIOD=8,CRAB_CROSSING_SECONDS=1;
+export const CRAB_PERIOD=6,CRAB_CROSSING_SECONDS=1;
 export function coastalCrabs(trackAt){
-  return COAST_BEACH_SECTIONS.flatMap((section,beach)=>[.3,.7].map((offset,index)=>{
+  return COAST_BEACH_SECTIONS.flatMap((section,beach)=>[.3,.5,.7].map((offset,index)=>{
     const fraction=(section+offset)/24,p=trackAt(fraction);
-    return {id:`beach-crab-${beach}-${index}`,fraction,...p,radius:1.35,height:1.5,phase:beach*1.37+index*3.1,side:index?1:-1};
+    return {id:`beach-crab-${beach}-${index}`,fraction,...p,radius:1.35,height:1.5,phase:beach*1.37+index*2,side:index%2?1:-1};
   }));
 }
 export function crabState(crab,seconds=0){

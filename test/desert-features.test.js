@@ -29,13 +29,13 @@ test('four 10m jump wedges share collision height and forward slope with their a
 });
 
 test('mole plaza retains its compact plateau and keeps every hazard inside the fences',()=>{
-  selectTrack('desert');const z=DESERT_MOLE_ZONE;assert.equal(z.length/TOP_SPEED,7);assert.equal(z.halfWidth*2,37.8);
-  for(let metres=-125;metres<=125;metres+=10){const f=z.center+metres/TRACK_LENGTH,p=trackAt(f);assert.ok(p.halfWidth>18.89);assert.ok(p.y<.0001);assert.equal(hasBarrier(f),true);}
+  selectTrack('desert');const z=DESERT_MOLE_ZONE;assert.equal(z.length/TOP_SPEED,7);assert.equal(z.halfWidth*2,30.24);
+  for(let metres=-125;metres<=125;metres+=10){const f=z.center+metres/TRACK_LENGTH,p=trackAt(f);assert.ok(p.halfWidth>15.11);assert.ok(p.y<.0001);assert.equal(hasBarrier(f),true);}
   for(const side of [-1,1]){
     const edge=z.center+side*z.length/2/TRACK_LENGTH,outer=edge+side*z.transition/TRACK_LENGTH,middle=(edge+outer)/2;
-    assert.equal(desertHalfWidth(outer,TRACK_LENGTH),9);assert.ok(Math.abs(desertHalfWidth(middle,TRACK_LENGTH)-13.95)<1e-8);
+    assert.equal(desertHalfWidth(outer,TRACK_LENGTH),9);assert.ok(Math.abs(desertHalfWidth(middle,TRACK_LENGTH)-12.06)<1e-8);
   }
-  assert.equal(MOLES.length,26);for(const mole of MOLES){assert.ok(Math.abs((mole.fraction-z.center)*TRACK_LENGTH)<126);assert.ok(Math.abs(mole.lateral)+mole.radius<z.halfWidth-1.5,'moles stay inside the fenced field');}
+  assert.equal(MOLES.length,26);for(const mole of MOLES){assert.ok(Math.abs((mole.fraction-z.center)*TRACK_LENGTH)<126);assert.ok(Math.abs(mole.lateral)+mole.radius<=z.halfWidth-.64,'moles stay inside the fenced field');}
 });
 
 test('moles have deterministic staggered warning, raised and fully retracted phases',()=>{
@@ -87,4 +87,9 @@ test('extra moles target the centre and inside shortcut while leaving room betwe
   for(let i=0;i<MOLES.length;i++)for(let j=i+1;j<MOLES.length;j++){
     const a=MOLES[i],b=MOLES[j];assert.ok(Math.hypot(a.x-b.x,a.z-b.z)>a.radius+b.radius+CAR_WIDTH,'raised heads leave a car-width gap');
   }
+});
+
+test('narrower mole field preserves all longitudinal positions and only moves the outermost hazards',()=>{
+  selectTrack('desert');const cluster=MOLES.filter(m=>m.id.startsWith('desert-mole-cluster-')),original=[[-42,-1],[42,1.5],[-66,14],[-38,10],[-10,15],[18,11],[46,14],[74,10]];
+  cluster.forEach((m,i)=>{assert.ok(Math.abs((m.fraction-DESERT_MOLE_ZONE.center)*TRACK_LENGTH-original[i][0])<1e-8);assert.ok(Math.abs(m.lateral-original[i][1])<=2.24);if(Math.abs(original[i][1])<12)assert.equal(m.lateral,original[i][1]);});
 });

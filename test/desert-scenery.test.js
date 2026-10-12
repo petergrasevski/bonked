@@ -32,7 +32,7 @@ test('two mountain masses support the elevated road and leave the bridge canyon 
 });
 test('expanded mole plateau meets ground and all added desert detail stays inside mobile geometry budgets',()=>{
   selectTrack('desert');const w=world(),s=buildDesertScenery(w);w.static.updateMatrixWorld(true);let triangles=0,min=Infinity,max=-Infinity;const batches=new Set();
-  s.plateau.traverse(o=>{if(!o.geometry)return;const p=o.geometry.attributes.position;for(let i=0;i<p.count;i++){min=Math.min(min,p.getY(i));max=Math.max(max,p.getY(i));}});assert.ok(min<=-4&&max<0);assert.equal(trackAt(DESERT_MOLE_ZONE.center).halfWidth,18.9);
+  s.plateau.traverse(o=>{if(!o.geometry)return;const p=o.geometry.attributes.position;for(let i=0;i<p.count;i++){min=Math.min(min,p.getY(i));max=Math.max(max,p.getY(i));}});assert.ok(min<=-4&&max<0);assert.equal(trackAt(DESERT_MOLE_ZONE.center).halfWidth,15.12);
   w.static.traverse(o=>{if(!o.geometry)return;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3;for(const a of Object.values(o.geometry.attributes))assert.ok(a.array.every(Number.isFinite));const g=o.geometry.clone().applyMatrix4(o.matrixWorld);g.computeBoundingBox();const c=g.boundingBox.getCenter(new THREE.Vector3());batches.add(`${o.material.uuid}:${Math.floor(c.x/70)}:${Math.floor(c.z/70)}`);g.dispose();});
   assert.ok(triangles<25000);assert.ok(batches.size<120);assert.ok(w.materials.size<14);dispose(w);selectTrack('coast');
 });

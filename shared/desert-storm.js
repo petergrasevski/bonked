@@ -1,13 +1,14 @@
 // One deterministic weather clock per race, used by the server and prediction.
-export const STORM_DELAY=15,STORM_DURATION=28,STORM_CLEAR=45,STORM_PERIOD=STORM_DURATION+STORM_CLEAR;
+export const STORM_DELAY=15,STORM_DURATION=42,STORM_CLEAR=45,STORM_PERIOD=STORM_DURATION+STORM_CLEAR;
+export const STORM_SCALE=1.25;
 const clamp=v=>Math.max(0,Math.min(1,v));
 const smooth=v=>{v=clamp(v);return v*v*(3-2*v);};
 export function desertStormAt(seconds){
   const time=Math.max(0,Number.isFinite(seconds)?seconds:0)-STORM_DELAY;
-  if(time<0)return {active:false,strength:0,x:-360,z:0,rx:220,rz:150,age:0,cycle:0};
+  if(time<0)return {active:false,strength:0,x:-360,z:0,rx:220*STORM_SCALE,rz:150*STORM_SCALE,age:0,cycle:0};
   const cycle=Math.floor(time/STORM_PERIOD),age=time-cycle*STORM_PERIOD,active=age<STORM_DURATION;
   const direction=cycle%2?-1:1;
-  return {active,age,cycle,rx:220,rz:150,x:direction*(-340+680*Math.min(1,age/STORM_DURATION)),z:Math.sin(age*.19+cycle*1.7)*55,
+  return {active,age,cycle,rx:220*STORM_SCALE,rz:150*STORM_SCALE,x:direction*(-340+680*Math.min(1,age/STORM_DURATION)),z:Math.sin(age*(.19*28/STORM_DURATION)+cycle*1.7)*55,
     strength:active?smooth(age/2)*smooth((STORM_DURATION-age)/2):0};
 }
 export function stormCoverage(storm,x,z){

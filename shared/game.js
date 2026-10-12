@@ -86,6 +86,9 @@ export function iceSplit(x){
 export function hasBarrier(fraction,side=0,inner=false){
   if(activeTrack.id==='ice'){
     const p=trackAt(fraction);
+    // First straight's boost-fed right branch is exposed at both the crevasse
+    // and the outside edge. The other branch and the return fork keep guards.
+    if(p.z<0&&Math.abs(p.x)<155&&side>0)return false;
     if(inner)return iceSplit(p.x)>.3&&(side<0?p.x>-55&&p.x<30:p.x>-30&&p.x<55);
     if(Math.abs(p.x)>457.2+1e-6)return true; // only the curved/square U-turn itself
     if(!side)return hasBarrier(fraction,-1)||hasBarrier(fraction,1);
@@ -144,7 +147,7 @@ PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
   const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
 }).flat();
-  BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:OBSTACLES});
+  BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:[...OBSTACLES,...MOLES],segments:SEGMENTS});
   trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS});
   return activeTrack;
 }
@@ -379,10 +382,16 @@ export function stepCar(car, input, dt=STEP) {
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
     if(padSpeed!==null)forward=Math.max(forward,padSpeed);
     const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
-    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:(icy?9.5:8.2)*handling*activeTrack.grip)*dt);
+    // At speed, the rear tyres shed grip so the body turns ahead of its
+    // momentum: a physical tail-out slide that settles as the rack centres.
+    // Straight-line recovery, low-speed manoeuvres, handbraking and ice retain
+    // their established grip; no extra impulse or visual-only rotation is added.
+    const fast=clamp((Math.abs(forward)-TOP_SPEED*.5)/(TOP_SPEED*.5),0,1);
+    const speedDrift=icy||input.brake?0:fast*fast*(3-2*fast)*Math.min(1,Math.abs(steering)/.65);
+    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:(icy?9.5:8.2)*(1-.72*speedDrift)*handling*activeTrack.grip)*dt);
     const turn=steering*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
-    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:icy?.65:.58)*handling*activeTrack.grip;
+    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:icy?.65:.58*(1-.58*speedDrift))*handling*activeTrack.grip;
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }

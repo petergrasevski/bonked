@@ -39,12 +39,25 @@ test('Glacier follows its exact pre-change steering and velocity trajectory',()=
   for(const [key,value]of Object.entries(expected))assert.ok(Math.abs(car[key]-value)<1e-10,key);
 });
 test('replicated steering state survives snapshots and predicts the same release and reversal',()=>{
-  for(const id of ['coast','desert']){
-    const server=moving(id);let client={...server};
+  for(const id of ['coast','desert'])for(const speed of [20,36]){
+    const server=moving(id);server.vx=Math.cos(server.angle)*speed;server.vz=Math.sin(server.angle)*speed;let client={...server};
     for(let i=0;i<60;i++){
       const input=drive(i<15?.3:i<30?0:i<45?-.3:0);stepCar(server,input);predictFleet(client,[],input,STEP);
       for(const key of ['x','z','vx','vz','angle','steering'])assert.ok(Math.abs(server[key]-client[key])<1e-10,`${id}: ${key}`);
       if(i%3===2)client=JSON.parse(JSON.stringify(server));
     }
+  }
+});
+
+test('dry-track slip builds progressively with cornering speed and recovers after steering release',()=>{
+  for(const id of ['coast','desert']){
+    const slipAt=speed=>{const car=moving(id),p=trackAt(.01);car.vx=Math.cos(car.angle)*speed;car.vz=Math.sin(car.angle)*speed;
+      // Keep the probe away from walls and at a fixed speed, so only grip is measured.
+      for(let i=0;i<30;i++){car.x=p.x;car.z=p.z;const v=Math.hypot(car.vx,car.vz);car.vx*=speed/v;car.vz*=speed/v;stepCar(car,drive(.65));}
+      return {car,p,slip:Math.abs(angleDelta(car.angle,Math.atan2(car.vz,car.vx)))};
+    };
+    const low=slipAt(12),mid=slipAt(24),fast=slipAt(36);assert.ok(mid.slip>low.slip);assert.ok(fast.slip>low.slip*1.8);assert.ok(fast.slip>Math.PI/15,'fast turns visibly swing the rear out by more than 12 degrees');assert.ok(fast.slip<Math.PI/9,'fast cornering stays below 20 degrees of slip');
+    for(let i=0;i<90;i++){fast.car.x=fast.p.x;fast.car.z=fast.p.z;stepCar(fast.car,drive(0));}
+    assert.ok(Math.abs(angleDelta(fast.car.angle,Math.atan2(fast.car.vz,fast.car.vx)))<fast.slip*.03,'grip settles naturally after release');
   }
 });

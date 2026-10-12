@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {Vector3,Euler} from 'three';
 import {selectTrack,trackAt,nearestTrack,TRACK_LENGTH,spawnCar,NEUTRAL,STEP,stepCar,hasBarrier} from '../shared/game.js';
 import {initCombat,giveWeapon,pressWeapon,updateCombat,DAMAGE} from '../shared/combat.js';
-import {weaponBasis,weaponMuzzle,weaponDirection,rayCar3D,sweepTrackWalls} from '../shared/weapon-geometry.js';
+import {shotgunRays,weaponBasis,weaponMuzzle,weaponDirection,rayCar3D,sweepTrackWalls} from '../shared/weapon-geometry.js';
 import {projectilePose} from '../public/projectile-motion.js';
 function player(id,f,progress=f){const p=trackAt(f);return {id,car:{...spawnCar(),...p,trackFraction:f,progress,groundY:p.y,pitch:Math.atan(p.grade)},input:{...NEUTRAL}};}
 function room(...ps){const r={phase:'racing',startAt:0,players:new Map(ps.map(p=>[p.id,p]))};initCombat(r);return r;}
@@ -100,9 +100,10 @@ test('continuous rocket wall sweeps detect outer and ice inner barriers without 
   selectTrack('ice');
   assert.notEqual(sweepTrackWalls({x:0,y:.9,z:-31},{x:0,y:0,z:-18}),null,'sweep crosses the guarded gap edge');
   assert.equal(sweepTrackWalls({x:80,y:.9,z:-34},{x:0,y:0,z:-12}),null,'bare gap edges remain unguarded');
-  const route=nearestTrack(0,-40),a=player('a',route.fraction);Object.assign(a.car,{x:0,z:-31,angle:-Math.PI/2,pitch:0});const r=room(a);fire(r,a,'rocket');assert.equal(r.projectiles.length,1);
+  assert.equal(sweepTrackWalls({x:0,y:.9,z:-31},{x:0,y:0,z:-5}),null,'boost-fed right fork has no inner bumper');
+  const route=nearestTrack(0,-49),a=player('a',route.fraction);Object.assign(a.car,{x:0,z:-49,angle:Math.PI/2,pitch:0});const r=room(a);fire(r,a,'rocket');assert.equal(r.projectiles.length,1);
   updateCombat(r,.2,200);assert.equal(r.projectiles.length,0,'large step cannot tunnel through inner bumper');
-  const explosion=r.effects.find(e=>e.kind==='explosion');assert.ok(explosion&&explosion.y>.5);assert.ok(explosion.z>-36);
+  const explosion=r.effects.find(e=>e.kind==='explosion');assert.ok(explosion&&explosion.y>.5);assert.ok(explosion.z< -44);
 });
 
 test('inclined projectile prediction advances elevation at every display frame and freezes when stale',()=>{
@@ -155,4 +156,9 @@ test('chain ball rolls along mountain grades on its own deck and respects its 3D
     }
     if(from===.17||from===.33)assert.ok(slopeDifference>1,'ball uses its own road height, not the car height');
   }
+});
+
+test('shotgun barrel origins and spread rotate with all three chassis axes',()=>{
+  const c={x:7,y:20,z:-4,angle:.7,pitch:.32,roll:-.44},rays=shotgunRays(c),rotation=new Euler(c.roll,-c.angle,c.pitch,'YXZ');
+  assert.equal(rays.length,6);for(const ray of rays){const origin=new Vector3(ray.barrel*.25,1.39,ray.side*1.03).applyEuler(rotation).add(new Vector3(c.x,c.y+(1-Math.cos(c.roll)*Math.cos(c.pitch))*.5,c.z));assert.ok(origin.distanceTo(new Vector3(ray.origin.x,ray.origin.y,ray.origin.z))<1e-10);assert.ok(Math.abs(Math.hypot(...Object.values(ray.direction))-1)<1e-10);}
 });

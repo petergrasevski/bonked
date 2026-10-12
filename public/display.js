@@ -34,7 +34,7 @@ export function initDisplayGuide({onOpen=()=>{},onClose=()=>{}}={}){
   const presentation=()=>appPresentation({fullscreen:!!document.fullscreenElement||modes[1].matches,standalone:navigator.standalone===true||modes[0].matches});
   const close=()=>{dialog.hidden=true;document.body.classList.remove('installing');onClose();previousFocus?.focus();};
   const update=()=>{
-    const mode=presentation();$('display-status').textContent=mode==='app'?'HOME SCREEN APP':mode==='fullscreen'?'FULLSCREEN':'BROWSER';
+    const mode=presentation();
     $('install-continue').textContent=mode==='browser'?'Continue in browser':'Back to game';
     $('install-native').hidden=!installPrompt||mode!=='browser';
     $('install-fullscreen').hidden=mode!=='browser'||!document.fullscreenEnabled;
@@ -47,7 +47,6 @@ export function initDisplayGuide({onOpen=()=>{},onClose=()=>{}}={}){
     const mode=presentation();if(mode!=='browser'){$('install-title').textContent=mode==='app'?'You’re playing as an app':'You’re in fullscreen';$('install-intro').textContent='The game already has its own screen. You’re ready to race.';steps.replaceChildren();$('install-note').textContent='';}
     update();dialog.hidden=false;document.body.classList.add('installing');$('install-continue').focus();
   };
-  $('install-help').onclick=show;
   $('install-continue').onclick=()=>{try{sessionStorage.setItem('tounched-display-guide-dismissed','1');}catch{}close();};
   dialog.addEventListener('keydown',e=>{
     if(e.key==='Escape'){e.preventDefault();$('install-continue').click();}

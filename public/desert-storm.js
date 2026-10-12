@@ -23,7 +23,7 @@ export function createDustCloud({mobile=false}={}){
     fragmentShader:`uniform float strength;varying float alpha;void main(){vec2 p=gl_PointCoord*2.-1.;float shape=1.-smoothstep(.1,1.,dot(p,p));gl_FragColor=vec4(.84,.64,.40,shape*alpha*strength*.48);}`}));
   grains.frustumCulled=false;grains.renderOrder=4;group.add(grains);
   group.visible=false;
-  return {group,clouds,grains,update(seconds,bufferHeight=600){const storm=desertStormAt(seconds);group.visible=storm.strength>0;group.position.set(storm.x,0,storm.z);uniforms.strength.value=storm.strength;uniforms.time.value=seconds;grains.material.uniforms.pointScale.value=bufferHeight;return storm;}};
+  return {group,clouds,grains,update(seconds,bufferHeight=600){const storm=desertStormAt(seconds);group.visible=storm.strength>0;group.position.set(storm.x,0,storm.z);group.scale.set(storm.rx/220,1,storm.rz/150);uniforms.strength.value=storm.strength;uniforms.time.value=seconds;grains.material.uniforms.pointScale.value=bufferHeight;return storm;}};
 }
 export function stormHaze(storm,focus,height){
   const coverage=stormCoverage(storm,focus.x,focus.z);

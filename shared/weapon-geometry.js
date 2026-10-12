@@ -42,3 +42,14 @@ export function sweepTrackWalls(origin,delta,radius=.25){
   }
   return first;
 }
+
+// Three physical roof barrels per side. +X points forward and ±Z outwards.
+export function shotgunRays(car){
+  const b=weaponBasis(car),o=bodyOrigin(car),rays=[];
+  for(const side of [-1,1])for(const barrel of [-1,0,1]){
+    const forward=barrel*.25,lateral=side*1.03,height=1.39,direction=weaponDirection(car,side*(Math.PI/2-barrel*.09));
+    const origin={x:o.x+b.forward.x*forward+b.side.x*lateral+b.up.x*height,y:o.y+b.forward.y*forward+b.side.y*lateral+b.up.y*height,z:o.z+b.forward.z*forward+b.side.z*lateral+b.up.z*height};
+    rays.push({origin,direction,side,barrel});
+  }
+  return rays;
+}

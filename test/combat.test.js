@@ -47,13 +47,13 @@ test('ball and chain obeys its tether and transfers motion through turns',()=>{
   const b=player('b',ball.x+.5,ball.z);b.car.y=ball.y-.75;r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.ok(b.car.vy>0&&b.car.vy<15);assert.equal(r.chains.length,0);
 });
 test('flamethrower has three seconds of held fuel, limited forward reach and continuous damage',()=>{
-  const a=player('a'),b=player('b',7),c=player('c',15),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-64)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
+  const a=player('a'),b=player('b',7),c=player('c',18),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-64)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
 });
 test('plasma travels straight at 1.5 times top speed with minor damage',()=>{
   const a=player('a'),b=player('b',30),r=room(a,b);fire(r,a,'plasma');const shot=r.projectiles[0],x=shot.x;updateCombat(r,STEP,17);assert.equal(shot.speed,54);assert.equal(shot.angle,0);assert.ok(Math.abs(shot.x-x-54*STEP)<1e-6);run(r,.6,17);assert.equal(b.car.health,92);
 });
 test('shotgun fires sideways from both doors, knocks cars outwards, ignores front and rear',()=>{
-  const a=player('a'),left=player('left',0,-6),right=player('right',0,6),front=player('front',8),back=player('back',-8),r=room(a,left,right,front,back);fire(r,a,'shotgun');assert.equal(left.car.health,65);assert.equal(right.car.health,65);assert.ok(left.car.vz<0&&right.car.vz>0);assert.equal(front.car.health,100);assert.equal(back.car.health,100);
+  const a=player('a'),left=player('left',0,-6),right=player('right',0,6),front=player('front',8),back=player('back',-8),r=room(a,left,right,front,back);fire(r,a,'shotgun');assert.equal(left.car.health,64);assert.equal(right.car.health,64);assert.ok(left.car.vz<0&&right.car.vz>0);assert.equal(front.car.health,100);assert.equal(back.car.health,100);
 });
 test('wall impacts damage chassis; zero health launches a persistent solid wreck',()=>{
   const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x+p.nx*p.halfWidth,z:p.z+p.nz*p.halfWidth,angle:p.angle,vx:p.nx*20,vz:p.nz*20});constrainRoad(c);assert.ok(c.health<100&&c.health>94);assert.deepEqual([100,80,60,40,20,0].map(damageLevel),[0,1,2,3,4,4]);damageCar(c,100);assert.ok(c.wrecked&&c.eliminated&&c.vy>0&&c.rollVelocity>0);assert.equal(c.health,0);
@@ -61,3 +61,15 @@ test('wall impacts damage chassis; zero health launches a persistent solid wreck
 });
 
 test('shotgun can fire again after 0.3 seconds, but not sooner',()=>{const a=player('a'),r=room(a);fire(r,a,'shotgun');run(r,.2);assert.equal(pressWeapon(r,a,200),false);run(r,.12,200);assert.equal(pressWeapon(r,a,320),true);assert.equal(a.car.ammo,2);});
+
+test('all three shotgun barrels deal independent damage with matching visible shots',()=>{
+  const losses=[];
+  for(const x of [3.7,2.45,0]){
+    const a=player('a'),b=player('b',x,12),r=room(a,b);fire(r,a,'shotgun');losses.push(100-b.car.health);
+    const shots=r.effects.filter(e=>e.kind==='shotgun');assert.equal(shots.length,6);assert.equal(new Set(shots.map(e=>`${e.x}:${e.z}`)).size,6);
+  }
+  assert.deepEqual(losses,[12,24,36]);
+});
+test('flame reaches 1.5 times its former range but still respects the far limit',()=>{
+  const a=player('a'),near=player('near',15),far=player('far',17),r=room(a,near,far);giveWeapon(a.car,'flame');a.input.fire=true;run(r,1);assert.ok(Math.abs(near.car.health-88)<1e-6);assert.equal(far.car.health,100);
+});
