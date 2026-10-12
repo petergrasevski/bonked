@@ -1,13 +1,13 @@
-# Revenge
+# Bonked
 
-A playable browser combat-racing prototype inspired by the shared overhead racing of Wrecked. Original procedural 3D artwork, three selectable circuits, distance-based elimination, three-lap races, and private rooms for up to eight cars. The in-game title is “Revenge”.
+A playable browser combat-racing prototype inspired by the shared overhead racing of Wrecked. Original procedural 3D artwork, three selectable circuits, distance-based elimination, three-lap races, and private rooms for up to eight cars. The in-game title is “Bonked”.
 
 ## Run on this laptop
 
 Requires Node.js 22 or newer.
 
 ```sh
-cd /Users/pgrasevski/src/tmp/revenge
+cd /Users/pgrasevski/src/tmp/bonked
 npm ci
 npm start
 ```
@@ -143,8 +143,8 @@ Quick Tunnels are for development and have no uptime guarantee. See [Cloudflare'
 A Docker image is included for the next stage:
 
 ```sh
-docker build -t revenge .
-docker run -d --name revenge --restart unless-stopped -p 3210:3210 revenge
+docker build -t bonked .
+docker run -d --name bonked --restart unless-stopped -p 3210:3210 bonked
 ```
 
 Deploy this container to a host that supports **persistent WebSockets**, with TLS and an HTTPS public domain. Terminate TLS at the host's reverse proxy and forward both HTTP and WebSocket upgrades to port 3210. The browser automatically uses `wss://` on HTTPS. Set `PUBLIC_URL=https://your-game.example` for generated invites/QR codes when opening through localhost.
@@ -193,7 +193,7 @@ Eight landmarks are spaced about 303 road metres apart (roughly ten seconds at r
 
 ### Laptop-independent free hosting
 
-`render.yaml` configures one **Free** Node web service in Singapore, with `/health` checks and deployments on commits. Connect [the game's repository](https://github.com/petergrasevski/revenge) in Render, select Node, `npm ci --omit=dev`, `node server.js`, Singapore, and **Free ($0)**. No database, disk or paid compute is required. This account was prompted for card verification even on Free; deployment was stopped at the user’s request and no cloud service exists yet. Keep paid upgrades off; without a payment method, exceeding included bandwidth suspends the free service rather than charging. Render's free service sleeps after 15 minutes of no incoming HTTP/WebSocket traffic and takes roughly one minute to wake. Active games send input and ping messages. Free services may also restart, so this is hobby hosting, not guaranteed uptime; rooms and scores are in memory and reset on a restart. [Official free-tier limits](https://render.com/docs/free).
+`render.yaml` configures one **Free** Node web service in Singapore, with `/health` checks and deployments on commits. Connect [the game's repository](https://github.com/petergrasevski/bonked) in Render, select Node, `npm ci --omit=dev`, `node server.js`, Singapore, and **Free ($0)**. No database, disk or paid compute is required. This account was prompted for card verification even on Free; deployment was stopped at the user’s request and no cloud service exists yet. Keep paid upgrades off; without a payment method, exceeding included bandwidth suspends the free service rather than charging. Render's free service sleeps after 15 minutes of no incoming HTTP/WebSocket traffic and takes roughly one minute to wake. Active games send input and ping messages. Free services may also restart, so this is hobby hosting, not guaranteed uptime; rooms and scores are in memory and reset on a restart. [Official free-tier limits](https://render.com/docs/free).
 
 WebSocket snapshots use low-level compression to reduce free-tier bandwidth. A public smoke test accepts any deployed origin: `node scripts/check-public.mjs https://YOUR-SERVICE.onrender.com`.
 
