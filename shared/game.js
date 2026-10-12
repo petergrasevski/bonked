@@ -1,8 +1,9 @@
+import {applyDesertWind} from './desert-storm.js';
 import {boostLayout,boostSpeed} from './boost-pads.js';
 import {wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
 import {createLandscape} from './landscape.js';
 import {DESERT_CACTI,DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
-export const MAX_PLAYERS = 6;
+export const MAX_PLAYERS = 8;
 export const LAPS = 3;
 export const STEP = 1 / 60;
 export const ROAD_WIDTH = 12;
@@ -36,8 +37,8 @@ export const TARGET_TRACK_LENGTH = 3466.9092022732743 * .7;
 export const START_FRACTION = .012;
 export const REVERSE_HOLD_MS = 350;
 export const brakeMode = heldMs => ({ brake: heldMs >= 0 && heldMs < REVERSE_HOLD_MS, reverse: heldMs >= REVERSE_HOLD_MS });
-export const COLORS = ['#ff514f', '#388bff', '#ffd139', '#44db89', '#b681ff', '#ff893e'];
-export const COLOR_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'];
+export const COLORS = ['#ff514f', '#388bff', '#ffd139', '#44db89', '#b681ff', '#ff893e', '#45dfef', '#f98bc4'];
+export const COLOR_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange', 'Cyan', 'Pink'];
 export const NEUTRAL = Object.freeze({ steer: 0, throttle: 0, reverse: false, brake: false, fire: false, nudge: 0 });
 export const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 export function angleDelta(a, b) { return Math.atan2(Math.sin(a - b), Math.cos(a - b)); }
@@ -382,6 +383,7 @@ export function stepCar(car, input, dt=STEP) {
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }
+  if(activeTrack.id==='desert')applyDesertWind(car,(car.raceTime||0)+dt,dt);
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
   advanceNudge(car,dt);
   const track=constrainRoad(car);

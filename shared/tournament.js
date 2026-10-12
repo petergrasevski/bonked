@@ -1,7 +1,7 @@
 import { raceOrder } from './chase.js';
 export const targetScoreForPlayers=count=>count<=4?15:10;
 export const ROUND_WAIT_MS=5000;
-export const PLACE_POINTS=[3,2,1,0,-1,-2];
+export const PLACE_POINTS=[3,2,1,0,-1,-1,-1,-2];
 export function scoreRound(room,now){
   if(room.roundResults?.length)return; // Repeated finish ticks must never award points twice.
   const order=[...room.players.values()].sort(raceOrder);

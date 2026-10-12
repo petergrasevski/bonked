@@ -1,3 +1,4 @@
+import {createDustCloud,stormHaze} from './desert-storm.js';
 import * as THREE from 'three';
 // Lighting, fog, reflections and ocean share the same palette and sun direction.
 export const ATMOSPHERES={
@@ -64,6 +65,7 @@ export function createAtmosphere(renderer,scene,trackId,{mobile=false}={}){
   const sun=new THREE.DirectionalLight(profile.sunColor,profile.sunPower);sun.castShadow=true;sun.position.set(...profile.sunOffset);sun.shadow.mapSize.setScalar(mobile?1024:2048);const reach=trackId==='desert'?225:68;Object.assign(sun.shadow.camera,{left:-reach,right:reach,top:trackId==='desert'?225:58,bottom:trackId==='desert'?-225:-58,near:1,far:trackId==='desert'?850:200});sun.shadow.radius=trackId==='desert'?1:3;sun.shadow.normalBias=.07;sun.shadow.bias=-.0004;scene.add(sun,sun.target);
   const rim=new THREE.DirectionalLight(trackId==='coast'?0xa3bbeb:0x98c6ff,trackId==='ice'?.25:trackId==='desert'?.18:.48);rim.position.set(35,20,60);scene.add(rim);
   const snow=trackId==='ice'?createBlizzard(mobile?1600:2200):null;if(snow)scene.add(snow);
-  const size=new THREE.Vector2();
-  return {profile,environment,sun,sky,snow,update(camera,now,groundY=0){scene.fog.density=weatherFogDensity(profile,Math.max(0,camera.position.y-groundY));if(snow){snow.material.uniforms.time.value=now/1000;snow.material.uniforms.center.value.copy(camera.position);renderer.getDrawingBufferSize(size);snow.material.uniforms.pointScale.value=size.y*.55;}}};
+  const dust=trackId==='desert'?createDustCloud({mobile}):null;if(dust)scene.add(dust.group);
+  const size=new THREE.Vector2(),clearFog=new THREE.Color(profile.fog),dustFog=new THREE.Color(0xb68b60),clearHorizon=new THREE.Color(profile.horizon);
+  return {profile,environment,sun,sky,snow,dust,update(camera,now,groundY=0,weatherTime=now/1000,focus=null){const height=Math.max(0,camera.position.y-groundY);scene.fog.density=weatherFogDensity(profile,height);if(dust){renderer.getDrawingBufferSize(size);const storm=dust.update(weatherTime,size.y),haze=stormHaze(storm,focus||camera.position,height);scene.fog.density=haze.density;scene.fog.color.copy(clearFog).lerp(dustFog,haze.coverage*.8);sun.intensity=profile.sunPower*(1-haze.coverage*.58);sky.material.uniforms.horizon.value.copy(clearHorizon).lerp(dustFog,haze.coverage*.75);sky.material.uniforms.hazeColor.value.copy(scene.fog.color).convertLinearToSRGB();sky.material.uniforms.cloudCover.value=profile.clouds+haze.coverage*.65;}if(snow){snow.material.uniforms.time.value=now/1000;snow.material.uniforms.center.value.copy(camera.position);renderer.getDrawingBufferSize(size);snow.material.uniforms.pointScale.value=size.y*.55;}}};
 }

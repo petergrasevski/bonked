@@ -1,11 +1,11 @@
-import {DESERT_MOLE_ZONE,DESERT_NARROW,DESERT_JUMPS} from './desert-features.js';
-export const PAD_RAMP=.7,PAD_DECAY=2,PAD_DURATION=PAD_RAMP+PAD_DECAY,PAD_COOLDOWN=1;
+import {DESERT_MOLE_ZONE,DESERT_NARROW} from './desert-features.js';
+export const PAD_RAMP=.4,PAD_DECAY=2,PAD_DURATION=PAD_RAMP+PAD_DECAY,PAD_COOLDOWN=1;
 const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 export function boostSpeed(car,dt,topSpeed){
   if(!(car.padBoostRemaining>0))return null;
   car.padBoostRemaining=Math.max(0,car.padBoostRemaining-dt);
   const age=PAD_DURATION-car.padBoostRemaining,peak=topSpeed*1.5;
-  return age<=PAD_RAMP?car.padBoostFrom+(peak-car.padBoostFrom)*smooth(age/PAD_RAMP):peak+(topSpeed-peak)*smooth((age-PAD_RAMP)/PAD_DECAY);
+  return age<=PAD_RAMP?car.padBoostFrom+(peak-car.padBoostFrom)*Math.min(1,age/PAD_RAMP):peak+(topSpeed-peak)*smooth((age-PAD_RAMP)/PAD_DECAY);
 }
 // Layout only; each room owns independent copies of the readyAt timestamps.
 export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[]}){
@@ -21,7 +21,7 @@ export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[
     for(let d=0;d<=length;d+=step){const a=trackAt((d-12)/length),b=trackAt((d+12)/length),angle=Math.abs(Math.atan2(Math.sin(b.angle-a.angle),Math.cos(b.angle-a.angle))),straight=d<length&&angle<.13;
       if(straight&&start===null)start=d;
       if(!straight&&start!==null){if(d-start>=85)runs.push([start,d]);start=null;}}
-    runs.forEach(([a,b],i)=>{pair((a+12)/length,i%2?1:-1);pair((a+b)/2/length,i%2?1:-1);});
+    runs.forEach(([a,b],i)=>{if(a+12>90)pair((a+12)/length,i%2?1:-1);pair((a+b)/2/length,i%2?1:-1);});
   }else if(id==='ice'){
     const fs=[[-152.4,-40],[152.4,-40],[152.4,40],[-152.4,40]].map(([x,z])=>nearestTrack(x,z).fraction);
     pair(fs[0],1);const p=trackAt(fs[1]);for(const side of [-1,1])add(fs[1],side*(p.halfWidth-width/2-.35));
@@ -30,7 +30,6 @@ export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[
     const zone=DESERT_MOLE_ZONE,start=zone.center-zone.length/2/length;
     for(const t of [.25,.5]){const f=start+zone.length*t/length,p=trackAt(f);add(f,-p.halfWidth+width/2+.6);}
     pair(.163,-1);pair(.19,1);pair(.377,-1);
-    row(DESERT_JUMPS[2].fraction-(DESERT_JUMPS[2].length+12)/length);
     row((DESERT_NARROW.narrowStart+DESERT_NARROW.narrowEnd)/2);
   }
   return pads;
@@ -53,4 +52,9 @@ export function collectBoostPad(car,pads,raceTime,previous=car){
     car.padBoostFrom=Math.max(0,car.vx*Math.cos(car.angle)+car.vz*Math.sin(car.angle));car.padBoostRemaining=PAD_DURATION;pad.readyAt=raceTime+PAD_COOLDOWN;return pad;
   }
   return null;
+}
+
+export function boostExhaustStrength(remaining){
+  if(!(remaining>0))return 0;
+  return remaining>PAD_DECAY?.25+.75*Math.min(1,(PAD_DURATION-remaining)/PAD_RAMP):smooth(remaining/PAD_DECAY);
 }

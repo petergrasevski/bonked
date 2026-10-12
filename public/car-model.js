@@ -71,10 +71,18 @@ function buildTemplate(){
   const bounds=new THREE.Box3().setFromObject(result),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   const fit=new THREE.Matrix4().makeScale(CAR_LENGTH/size.x,1,CAR_WIDTH/size.z).multiply(new THREE.Matrix4().makeTranslation(-center.x,-bounds.min.y,-center.z));
   for(const mesh of result.children)mesh.geometry.applyMatrix4(fit);
+  result.traverse(mesh=>{if(mesh.isMesh){mesh.geometry.userData.sharedCarResource=true;mesh.material.userData.sharedCarResource=true;}});
   return result;
 }
 export function createSportsCar(color){
   template??=buildTemplate();const car=template.clone(true);let paint;
-  for(const mesh of car.children)if(mesh.material.name==='body-paint'){paint=mesh.material.clone();paint.color.set(color);mesh.material=paint;}
+  for(const mesh of car.children)if(mesh.material.name==='body-paint'){paint=mesh.material.clone();delete paint.userData.sharedCarResource;paint.color.set(color);mesh.material=paint;}
   car.userData={paint,baseColor:new THREE.Color(color),chassisSize:{length:CAR_LENGTH,width:CAR_WIDTH}};car.rotation.order='YXZ';return car;
+}
+
+// Chassis buffers are shared by every car and renderer for the page lifetime.
+export function disposeCarInstance(car){
+  if(car.userData.weaponModel)car.remove(car.userData.weaponModel);
+  car.traverse(mesh=>{if(mesh.geometry&&!mesh.geometry.userData.sharedCarResource)mesh.geometry.dispose();});
+  car.userData.paint?.dispose();car.userData.shield?.material.dispose();
 }

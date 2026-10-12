@@ -3,7 +3,7 @@
   "version": "0.7.0",
   "private": true,
   "type": "module",
-  "description": "Six-player, phone-first 3D combat racing",
+  "description": "Eight-player, phone-first 3D combat racing",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",

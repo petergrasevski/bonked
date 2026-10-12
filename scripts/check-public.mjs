@@ -17,9 +17,9 @@ async function connect(){
 try{
   const health=await fetch(new URL('/health',url));assert.equal(health.status,200);
   const host=await connect();host.send({type:'create',name:'Connection check 1'});await until(()=>host.id&&host.state);
-  for(let i=1;i<6;i++){const c=await connect();c.send({type:'join',code:host.state.code,name:`Connection check ${i+1}`});await until(()=>c.id||c.error);if(c.error)throw c.error;}
-  await until(()=>clients.every(c=>c.state?.players.length===6));
-  assert.equal(new Set(host.state.players.map(p=>p.color)).size,6);assert.ok(host.state.players.every(p=>p.health===100));assert.ok(Array.isArray(host.state.mines)&&Array.isArray(host.state.chains));assert.ok(host.state.pickups.every(p=>typeof p.item==='string'));assert.equal((await fetch(new URL('/pickups.js',url))).status,200);assert.equal((await fetch(new URL('/vendor/RoundedBoxGeometry.js',url))).status,200);assert.equal((await fetch(new URL('/shared/combat.js',url))).status,200);assert.equal((await fetch(new URL('/shared/camera.js',url))).status,200);
+  for(let i=1;i<8;i++){const c=await connect();c.send({type:'join',code:host.state.code,name:`Connection check ${i+1}`});await until(()=>c.id||c.error);if(c.error)throw c.error;}
+  await until(()=>clients.every(c=>c.state?.players.length===8));
+  assert.equal(new Set(host.state.players.map(p=>p.color)).size,8);assert.ok(host.state.players.every(p=>p.health===100));assert.ok(Array.isArray(host.state.mines)&&Array.isArray(host.state.chains));assert.ok(host.state.pickups.every(p=>typeof p.item==='string'));assert.equal((await fetch(new URL('/pickups.js',url))).status,200);assert.equal((await fetch(new URL('/vendor/RoundedBoxGeometry.js',url))).status,200);assert.equal((await fetch(new URL('/shared/combat.js',url))).status,200);assert.equal((await fetch(new URL('/shared/camera.js',url))).status,200);
   for(let i=0;i<5;i++){for(const c of clients)c.send({type:'ping',sent:Date.now()});await pause(150);}
   host.send({type:'start'});await until(()=>clients.every(c=>c.state.phase==='racing'));
   assert.ok(host.state.camera.pitch>=26*Math.PI/180&&host.state.camera.pitch<=70*Math.PI/180);assert.ok(Number.isFinite(host.state.camera.from)&&host.state.camera.to>host.state.camera.from);assert.ok(host.state.chase.active);assert.ok(Math.abs((host.state.chase.leaderProgress-host.state.chase.progress)*TRACK_LENGTH-CHASE_DISTANCE)<.001);
@@ -29,5 +29,5 @@ try{
   const after=host.state.players.find(p=>p.id===host.id);assert.ok(Math.hypot(after.x-before.x,after.z-before.z)>1);
   assert.ok(clients.every(c=>!c.error));
   const pings=clients.flatMap(c=>c.pings).sort((a,b)=>a-b);
-  console.log(JSON.stringify({result:'passed',publicHTTPS:true,webSocketClients:6,raceStarted:true,movementReplicated:true,pingSamples:pings.length,medianRoundTripMs:pings[Math.floor(pings.length/2)]},null,2));
+  console.log(JSON.stringify({result:'passed',publicHTTPS:true,webSocketClients:8,raceStarted:true,movementReplicated:true,pingSamples:pings.length,medianRoundTripMs:pings[Math.floor(pings.length/2)]},null,2));
 }finally{for(const c of clients){if(c.ws.readyState===WebSocket.OPEN)c.send({type:'leave'});c.ws.close();}await pause(300);for(const c of clients)c.ws.terminate();}

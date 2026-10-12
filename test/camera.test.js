@@ -39,7 +39,7 @@ test('every car, roof weapon and rear warning strip fit through turns, spread an
   for(const aspect of [1.3,16/9,844/390,3])for(const spread of [0,11,45,100]){
     let previous=null;
     for(let metres=-20;metres<TRACK_LENGTH+80;metres+=9){
-      const cars=Array.from({length:6},(_,i)=>carAt(metres-spread*i/5,i%2?3:-3,i===3?4:0));
+      const cars=Array.from({length:8},(_,i)=>carAt(metres-spread*i/7,i%2?3:-3,i===3?4:0));
       const target=cameraFrame(createChase(cars),cars),frame=stepCamera(previous,target,cars,aspect,.05),camera=projection(frame,aspect);
       cars.forEach(car=>contained(camera,car));
       for(const at of [target.from,target.to]){const p=trackAt(START_FRACTION+at);const v=new THREE.Vector3(p.x,0,p.z).project(camera);assert.ok(Math.abs(v.x)<1&&Math.abs(v.y)<1);}

@@ -1,3 +1,5 @@
+import {initMetalInteractions} from './metal-ui.js';
+import {createTrackPicker} from './track-picker.js';
 import {readController} from './controller.js';
 import {PartyVoice} from './voice.js';
 import {RenderCorrections} from '/shared/netcode.js';
@@ -5,19 +7,19 @@ import { detectDevice, initDisplayGuide } from './display.js';
 import { WeaponAudio } from './weapon-audio.js';
 import { EngineAudio, raceListener } from './engine-audio.js';
 import { World } from './world.js';
-import { TRACKS,selectTrack,activeTrack,NEUTRAL, STEP, clamp, angleDelta, brakeMode, REVERSE_HOLD_MS, damageLevel } from '/shared/game.js';
+import { TRACKS,MAX_PLAYERS,selectTrack,activeTrack,NEUTRAL, STEP, clamp, angleDelta, brakeMode, REVERSE_HOLD_MS, damageLevel } from '/shared/game.js';
 import { predictFleet } from '/shared/prediction.js';
 import { WEAPONS } from '/shared/combat.js';
 import { raceOrder, cameraFrame,createChase,renderedChase } from '/shared/chase.js';
 const $=id=>document.getElementById(id);
+initMetalInteractions();
 const device=detectDevice(navigator);document.body.classList.toggle('mobile',device.mobile);
 const corrections=new RenderCorrections();
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
 function selectWorld(id){if(id===activeTrack.id)return;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);world?.dispose();world=new World($('scene'));corrections.reset();history=[];pending=[];accumulator=0;}
-for(const track of Object.values(TRACKS)){const option=document.createElement('option');option.value=track.id;option.textContent=track.name;$('track-select').append(option);}
-$('track-select').onchange=()=>send({type:'track',trackId:$('track-select').value});
 let world,displayGuide=null;
+const trackPicker=createTrackPicker($('track-picker'),()=>world,id=>send({type:'track',trackId:id}));
 try{world=new World($('scene'));}catch(error){console.error(error);$('dialog').hidden=false;$('dialog-body').innerHTML='<h2>WebGL 2 required.</h2><p>This game needs WebGL 2. Try a recent Safari or Chrome browser with hardware acceleration enabled.</p>';}
 let ws,state=null,myId=null,predicted=null,predictedOthers=[],sequence=0,pending=[],history=[],clockOffset=0,rtt=0,lastState=0,lastFrame=performance.now(),accumulator=0,uiAt=0,retries=0,intent=null,session=null,rosterKey='',phase=null;
 let resuming=false;
@@ -58,9 +60,9 @@ setInterval(()=>send({type:'ping',sent:Date.now()}),2000);
 function setBusy(busy){$('create').disabled=busy;$('join').disabled=busy;}
 function enter(type){voice.prepare();const name=$('name').value.trim()||'Driver';try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
-function clearRoom(){voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
+function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
-$('leave').onclick=leave;$('results-leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('add-bot').onclick=()=>send({type:'bot'});$('remove-bots').onclick=()=>send({type:'remove-bots'});$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
+$('leave').onclick=leave;$('results-leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
 async function getShareURL(){let origin=location.origin;if(['localhost','127.0.0.1'].includes(location.hostname)){try{const config=await fetch('/api/config').then(r=>r.json());origin=config.lanURLs[0]||origin;}catch{}}return origin+(session?`/?room=${session.code}`:'/');}
 $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.clipboard.writeText(link);toast('Invite copied.');}catch{const t=document.createElement('textarea');t.value=link;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Invite link copied.':`Invite: ${link}`);}};
 const itemMeta=WEAPONS;
@@ -97,9 +99,9 @@ function updateUI(now){
   if(!state)return;
   const host=state.host===myId,me=state.players.find(p=>p.id===myId);if(!me)return;
   const key=JSON.stringify([state.players.map(p=>[p.id,p.name,p.color,p.connected]),state.host]);
-  if(key!==rosterKey){rosterKey=key;const roster=$('roster');roster.replaceChildren();for(const p of state.players){const row=node('div','driver');row.append(chip(p.color),node('span','',p.name+(p.id===myId?' (you)':'')),node('span','role',p.bot?'BOT':!p.connected?'REJOINING':p.id===state.host?'HOST':'READY'));roster.append(row);}for(let i=state.players.length;i<6;i++){const row=node('div','driver empty');row.append(node('span','','＋'),node('span','','Open slot'));roster.append(row);}$('room-code').textContent=state.code;}
-  $('start').hidden=!host;$('add-bot').hidden=!host;$('add-bot').disabled=state.players.length>=6;$('remove-bots').hidden=!host||!state.players.some(p=>p.bot);$('host-hint').textContent=host?'':'Waiting for host.';
-  $('track-select').value=state.trackId||'coast';$('track-select').disabled=!host||state.phase!=='lobby';$('track-detail').textContent=TRACKS[state.trackId||'coast'].description;$('map-title').textContent=TRACKS[state.trackId||'coast'].name;
+  if(key!==rosterKey){rosterKey=key;const roster=$('roster');roster.replaceChildren();for(const p of state.players){const row=node('div','driver');row.append(chip(p.color),node('span','',p.name+(p.id===myId?' (you)':'')),node('span','role',p.bot?'BOT':!p.connected?'REJOINING':p.id===state.host?'HOST':'READY'));if(p.bot&&host){const remove=node('button','remove-bot','×');remove.type='button';remove.setAttribute('aria-label','Remove '+p.name);remove.onclick=()=>send({type:'remove-bot',playerId:p.id});row.append(remove);}roster.append(row);}for(let i=state.players.length;i<MAX_PLAYERS;i++){const row=node('div','driver empty');row.append(node('span','','＋'),node('span','','Open slot'));if(host&&i===state.players.length){const add=node('button','add-bot','Add bot');add.id='add-bot';add.type='button';add.onclick=()=>send({type:'bot'});row.append(add);}roster.append(row);}$('room-code').textContent=state.code;}
+  $('start').hidden=!host;$('host-hint').textContent=host?'':'Waiting for host.';
+  trackPicker.sync(state.trackId||'coast',host&&state.phase==='lobby',state.phase==='lobby');$('map-title').textContent=TRACKS[state.trackId||'coast'].name;
   if(state.phase==='lobby')return;
   renderScores();const serverNow=Date.now()+clockOffset;
   $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);
@@ -186,7 +188,7 @@ function renderedState(now,dt){
 }
 function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-lastFrame)/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
   while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<250&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<250){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
-  const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);
+  const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);trackPicker.tick(now);
   if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(now-uiAt>100){uiAt=now;updateUI(now);}
   const listening=raceListener(rendered,world?.follow),audible=soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;

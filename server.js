@@ -29,7 +29,7 @@ const server=http.createServer(async(req,res)=>{
       if(!value||value.length>512||!/^https?:\/\//.test(value)){res.writeHead(400);return res.end();}
       res.setHeader('Content-Type','image/svg+xml');return res.end(await QRCode.toString(value,{type:'svg',margin:1,color:{dark:'#101d26',light:'#ffffff'}}));
     }
-    const routes={'/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
+    const routes={'/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
@@ -93,7 +93,7 @@ function startRound(room,now,next=false){
 function addPlayer(room,ws,name,bot=false){
   selectTrack(room.trackId);const used=new Set([...room.players.values()].map(p=>p.color));
   const options=COLORS.filter(c=>!used.has(c)),color=options[Math.floor(Math.random()*options.length)];
-  const p={id:randomUUID(),token:randomBytes(24).toString('hex'),name:String(name||'Driver').trim().slice(0,18)||'Driver',color,colorName:COLOR_NAMES[COLORS.indexOf(color)],car:spawnCar(room.players.size),ws,bot,score:0,ready:false,input:{...NEUTRAL},seq:0,lastInput:Date.now(),disconnectedAt:null};
+  const p={id:randomUUID(),token:randomBytes(24).toString('hex'),name:String(name||'Driver').trim().slice(0,18)||'Driver',color,colorName:COLOR_NAMES[COLORS.indexOf(color)],car:spawnCar(Array.from({length:MAX_PLAYERS},(_,i)=>i).find(slot=>![...room.players.values()].some(p=>p.car.gridSlot===slot))),ws,bot,score:0,ready:false,input:{...NEUTRAL},seq:0,lastInput:Date.now(),disconnectedAt:null};
   room.players.set(p.id,p);if(!room.host&&!bot)room.host=p.id;return p;
 }
 function removePlayer(room,p){p.voice?.close(1000,'Left lobby');room.players.delete(p.id);if(room.host===p.id)room.host=[...room.players.values()].find(p=>!p.bot&&p.ws)?.id||[...room.players.values()].find(p=>!p.bot)?.id;if(![...room.players.values()].some(p=>!p.bot)){rooms.delete(room.code);return;}publish(room);}
@@ -120,7 +120,7 @@ wss.on('connection',(ws,req)=>{
       if(player){const old=player.ws;player.ws=ws;player.disconnectedAt=null;player.lastInput=now;player.input={...NEUTRAL};if(old&&old!==ws)old.close(4001,'Connected elsewhere');}
       else{
         if(room.phase!=='lobby')return fail(ws,'This race has started. Join after it finishes.');
-        if(room.players.size>=MAX_PLAYERS)return fail(ws,'This room already has six drivers.');
+        if(room.players.size>=MAX_PLAYERS)return fail(ws,'This room already has eight drivers.');
         player=addPlayer(room,ws,msg.name);
       }
       client.room=room;client.player=player;send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code,seq:player.seq});publish(room);return;
@@ -139,9 +139,9 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='track'&&room.phase==='lobby'){if(!Object.hasOwn(TRACKS,msg.trackId))return fail(ws,'Unknown track.');room.trackId=msg.trackId;resetRoom(room);publish(room);return;}
     if(msg.type==='bot'&&room.phase==='lobby'){
       if(room.players.size>=MAX_PLAYERS)return fail(ws,'The grid is full.');
-      addPlayer(room,null,['Nova','Rocco','Mika','Scout','Jett'][room.players.size-1]||'Bot',true);publish(room);
+      addPlayer(room,null,['Nova','Rocco','Mika','Scout','Jett','Cleo','Ash'][room.players.size-1]||'Bot',true);publish(room);
     }
-    if(msg.type==='remove-bots'&&room.phase==='lobby'){for(const player of room.players.values())if(player.bot)room.players.delete(player.id);publish(room);}
+    if(msg.type==='remove-bot'&&room.phase==='lobby'){const bot=room.players.get(msg.playerId);if(!bot?.bot)return fail(ws,'Choose a bot to remove.');room.players.delete(bot.id);publish(room);return;}
     if(msg.type==='start'&&room.phase==='lobby'){
       startRound(room,now);
     }
