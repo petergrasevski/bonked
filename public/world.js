@@ -1,3 +1,5 @@
+import {SkyBeamView} from './sky-beam.js';
+import {skySurfaces} from '/shared/sky-ground.js';
 import {buildCoastalCrabs,updateCoastalCrabs} from './coastal-crabs.js';
 import {boostExhaustStrength} from '/shared/boost-pads.js';
 import {buildBoostPads} from './boost-pads.js';
@@ -30,6 +32,7 @@ export class World{
   constructor(container,{preview=false}={}){
     this.trackId=activeTrack.id;this.previewOnly=preview;
     this.container=container;this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0x8094a3);
+    skySurfaces();this.skyView=new SkyBeamView(this.scene);this.skyMove={x:0,y:0};this.skyAim=null;
     this.scene.fog=new THREE.FogExp2(0x8094a3,.0045);
     this.renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance',alpha:false});
     this.renderer.setPixelRatio(preview?1:Math.min(devicePixelRatio,1.7));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -313,6 +316,7 @@ export class World{
     this.gustTrails?.update(state?.phase==='racing'?state.raceTime:0,visibleCars);
     // Rendering is read-only: physics contacts are solved only on simulation ticks.
     this.followFrame(state?.camera||cameraFrame(previewChase,previewFleet),dt,state?visibleCars:previewFleet);
+    this.skyView.update(state,localId,this.camera,this.follow,this.skyMove,dt);this.skyAim=this.skyView.aim;
     this.boxes.forEach((g,i)=>{const pickup=state?.pickups[i];g.visible=!state||pickup?.readyAt<=state.time;this.setPickupModel(g,pickup?.item||WEAPON_IDS[i%WEAPON_IDS.length]);g.userData.model.rotation.y=now*.00045+i;g.position.y=(PICKUP_LOCATIONS[i]?.y||0)+1.9+Math.sin(now*.0017+i)*.18;g.userData.halo.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.08-g.position.y;g.userData.ring.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.13-g.position.y;});
     this.combatObjects(state,dt,now);this.updateLightning(state,now);animateLandmarks(this,now);this.updateParticles(dt);
     for(let i=this.trails.length-1;i>=0;i--){const t=this.trails[i];t.life-=dt;t.mesh.material.opacity=Math.min(.3,t.life*.15);if(t.life<=0){this.scene.remove(t.mesh);t.mesh.geometry.dispose();t.mesh.material.dispose();this.trails.splice(i,1);}}

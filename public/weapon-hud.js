@@ -26,8 +26,10 @@ export class WeaponHUD{
     this.root=root;this.getWorld=getWorld;this.cache=new Map();this.kind=null;
     this.canvas=root.querySelector('canvas');this.name=root.querySelector('.weapon-name');this.ammo=root.querySelector('.weapon-ammo');this.key=root.querySelector('kbd');
   }
-  update(car,{visible=true,controller=false}={}){
+  update(car,{visible=true,controller=false,sky=false,skyRemaining=0,color='#cbd5df'}={}){
     if(!visible)return;
+    this.root.dataset.sky=String(sky);
+    if(sky){this.kind='sky';this.root.dataset.loaded='true';this.root.style.setProperty('--weapon-color',color);this.name.textContent='Sky beam';this.ammo.textContent=skyRemaining>0?skyRemaining.toFixed(1)+'s':'READY';this.key.textContent=controller?'R1':'Enter ↵';this.root.setAttribute('aria-label','Sky beam, '+this.ammo.textContent);return;}
     const kind=car&&!car.eliminated&&car.ammo>0&&WEAPONS[car.item]?car.item:null,world=this.getWorld();
     this.root.dataset.loaded=String(!!kind);this.key.textContent=controller?'R1':'Enter ↵';
     if(kind!==this.kind||kind&&!this.cache.has(kind)){

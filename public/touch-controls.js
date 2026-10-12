@@ -57,3 +57,13 @@ export function bindTouchSteering(element,{enabled,steer,nudge,activate}){
   });
   return reset;
 }
+
+export function joystickVector(dx,dy,radius){const length=Math.max(radius,Math.hypot(dx,dy));return {x:dx/length,y:-dy/length};}
+export function bindSkyJoystick(element,{enabled,move,activate=()=>{}}){
+  let pointer=null;const knob=element.querySelector('span');
+  const reset=()=>{const id=pointer;pointer=null;move({x:0,y:0});knob.style.transform='translate(0,0)';if(id!==null&&element.hasPointerCapture(id))element.releasePointerCapture(id);};
+  const update=e=>{const r=element.getBoundingClientRect(),v=joystickVector(e.clientX-r.left-r.width/2,e.clientY-r.top-r.height/2,r.width*.32);move(v);knob.style.transform=`translate(${v.x*r.width*.32}px,${-v.y*r.width*.32}px)`;};
+  element.addEventListener('pointerdown',e=>{if(!enabled()||pointer!==null||e.button!==0)return;e.preventDefault();pointer=e.pointerId;element.setPointerCapture(pointer);activate();update(e);});
+  element.addEventListener('pointermove',e=>{if(e.pointerId!==pointer)return;if(!enabled())return reset();e.preventDefault();update(e);});
+  for(const type of ['pointerup','pointercancel','lostpointercapture'])element.addEventListener(type,e=>{if(e.pointerId===pointer)reset();});return reset;
+}

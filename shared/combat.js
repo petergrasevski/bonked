@@ -1,5 +1,6 @@
 import {shotgunRays,weaponBasis,weaponDirection,weaponMuzzle,rayCar3D,sweepTrackWalls,MUZZLE_HEIGHT} from './weapon-geometry.js';
 import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
+import {PULSE_RADIUS,pulsePush} from './shockwave.js';
 export const WEAPONS = {
   pulse:{name:'Pulse',icon:'◎',ammo:1,hint:'two shockwaves, one second apart'},
   rocket:{name:'Homing rocket',icon:'➤',ammo:1,hint:'locks onto the next car ahead'},
@@ -47,8 +48,8 @@ function hit(room,p,amount,now,kick={}){
 }
 function pulse(room,owner,now){
   const c=room.players.get(owner)?.car;if(!c||c.eliminated)return;
-  effect(room,'pulse',c.x,c.z,now,{y:c.y,duration:650,color:'#b681ff',radius:16});
-  for(const p of targets(room,owner)){const dx=p.car.x-c.x,dz=p.car.z-c.z,d=Math.hypot(dx,dz);if(d<16&&Math.abs(p.car.y-c.y)<3){const k=22*(1-d/16)+8;hit(room,p,DAMAGE.pulse,now,{x:dx/(d||1)*k,z:dz/(d||1)*k});}}
+  effect(room,'pulse',c.x,c.z,now,{y:c.y,duration:650,color:'#b681ff',radius:PULSE_RADIUS});
+  for(const p of targets(room,owner)){const dx=p.car.x-c.x,dz=p.car.z-c.z,d=Math.hypot(dx,dz);if(d<PULSE_RADIUS&&Math.abs(p.car.y-c.y)<3){const k=pulsePush(d);hit(room,p,DAMAGE.pulse,now,{x:dx/(d||1)*k,z:dz/(d||1)*k});}}
 }
 function projectile(room,p,kind,angle,now){
   const c=p.car,speed=kind==='plasma'?TOP_SPEED*1.5:kind==='machinegun'?350:65,d=weaponDirection(c),muzzle=weaponMuzzle(c);

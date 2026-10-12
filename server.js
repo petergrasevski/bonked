@@ -1,5 +1,7 @@
 import {ServerDiagnostics} from './server-diagnostics.js';
 import {botControls} from './bots.js';
+import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './shared/sky-beam.js';
+import {skySurfaces} from './shared/sky-ground.js';
 import {NETWORK_VERSION,INPUT_TIMEOUT_MS} from './shared/network-timing.js';
 import {captureMotion,recordMotion} from './shared/prediction.js';
 import {collectBoostPad} from './shared/boost-pads.js';
@@ -34,7 +36,7 @@ const server=http.createServer(async(req,res)=>{
       if(!value||value.length>512||!/^https?:\/\//.test(value)){res.writeHead(400);return res.end();}
       res.setHeader('Content-Type','image/svg+xml');return res.end(await QRCode.toString(value,{type:'svg',margin:1,color:{dark:'#101d26',light:'#ffffff'}}));
     }
-    const routes={'/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/network-timing.js':'shared/network-timing.js','/shared/remote-snapshots.js':'shared/remote-snapshots.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/combat-prediction.js':'shared/combat-prediction.js','/shared/tournament.js':'shared/tournament.js'};
+    const routes={'/shared/sky-ground.js':'shared/sky-ground.js','/shared/sky-beam.js':'shared/sky-beam.js','/shared/shockwave.js':'shared/shockwave.js','/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/network-timing.js':'shared/network-timing.js','/shared/remote-snapshots.js':'shared/remote-snapshots.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/combat-prediction.js':'shared/combat-prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
@@ -82,13 +84,14 @@ function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128
 function fail(ws,message){send(ws,{type:'error',message});}
 function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
 function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
-function snapshot(room){return {type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
+function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
 function resetRoom(room,{newTournament=true,startFraction=START_FRACTION}={}){
   selectTrack(room.trackId);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
   if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
   room.round=newTournament?1:(room.round||1)+1;room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
   room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;
+  resetSkyBeams(room);
   let slot=0;for(const p of room.players.values()){p.car=spawnCar(slot++,startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botState=null;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
   room.chase=createChase([...room.players.values()].map(p=>p.car));room.raceSize=room.players.size;room.winnerId=null;
 }
@@ -136,7 +139,7 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='input'){
       if(!Number.isSafeInteger(msg.seq)||msg.seq<=p.seq||msg.seq-p.seq>10000)return;
       const next=sanitizeInput(msg);if(room.phase==='countdown')recordLaunchInput(p,next,msg.accelPressedAt,now,room.startAt);
-      diagnostics.inputGaps.add(now-p.lastInput);p.seq=msg.seq;p.input=next;p.lastInput=now;return;
+      diagnostics.inputGaps.add(now-p.lastInput);p.seq=msg.seq;p.skyAim=sanitizeSkyAim(msg.skyAim);p.input=next;p.lastInput=now;return;
     }
     if(msg.type==='item')return useItem(room,p,now);
     if(msg.type==='leave'){client.room=null;client.player=null;removePlayer(room,p);return send(ws,{type:'left'});}
@@ -184,6 +187,7 @@ const timer=setInterval(()=>{
         for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}
         const players=[...room.players.values()];
         for(const p of updateChase(room.chase,players,now-room.startAt))room.effects.push({id:randomUUID(),kind:'hit',x:p.car.x,z:p.car.z,until:now+600,color:p.color});
+        updateSkyBeams(room,now);
         for(const p of players)recordMotion(p.car,motionBefore.get(p.id),STEP);
         const survivors=players.filter(p=>!p.car.eliminated),finished=survivors.filter(p=>p.car.finished);
         const lastStanding=room.raceSize>1&&survivors.length<=1;
@@ -203,7 +207,7 @@ const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),1000
 const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
-for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();}selectTrack('coast');
+for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();skySurfaces();}selectTrack('coast');
 server.listen(PORT,HOST,()=>console.log(`\nTOUNCHED\nLocal: http://localhost:${PORT}\n${lanURLs().map(url=>`Wi-Fi: ${url}`).join('\n')}\n`));
 function shutdown(){clearInterval(diagnosticTimer);diagnostics.close();for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

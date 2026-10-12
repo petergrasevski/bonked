@@ -8,7 +8,7 @@ import {updateControlLegend} from './control-legend.js';
 import {initMetalInteractions} from './metal-ui.js';
 import {createTrackPicker} from './track-picker.js';
 import {readController} from './controller.js';
-import {bindTouchSteering,driveThrottle} from './touch-controls.js';
+import {bindTouchSteering,driveThrottle,bindSkyJoystick} from './touch-controls.js';
 import {PartyVoice} from './voice.js';
 import {RenderCorrections,renderFleet} from '/shared/netcode.js';
 import { detectDevice, initDisplayGuide } from './display.js';
@@ -108,8 +108,8 @@ function updateUI(now){
   trackPicker.sync(state.trackId||'coast',host&&state.phase==='lobby',state.phase==='lobby');$('map-title').textContent=TRACKS[state.trackId||'coast'].name;
   if(state.phase==='lobby')return;
   renderScores();const serverNow=Date.now()+clockOffset;
-  $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);
-  const inventory=predicted&&state.phase==='racing'?predicted:me;const item=itemMeta[inventory.item];weaponHud.update(inventory,{visible:!device.mobile,controller:document.body.classList.contains('controller-connected')});$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',taser:'TASER',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[inventory.item]||'—';$('item-count').textContent=item?(['flame','taser'].includes(inventory.item)?inventory.ammo.toFixed(1)+'s':inventory.ammo>1?'×'+inventory.ammo:''):' ';$('item').classList.toggle('loaded',!!item);
+  $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);const sky=skyMode(),cooldown=Math.max(0,((me.skyCooldownUntil||0)-serverNow)/1000);$('race-ui').classList.toggle('sky-beam',sky);$('race-ui').style.setProperty('--sky-color',me.color);if(sky)$('finish-note').textContent='Spectating · Sky beam';
+  const inventory=predicted&&state.phase==='racing'?predicted:me;const item=itemMeta[inventory.item];weaponHud.update(inventory,{visible:!device.mobile,controller:document.body.classList.contains('controller-connected'),sky,skyRemaining:cooldown,color:me.color});$('item-icon').textContent=item?.icon||'✦';$('item-label').textContent=({machinegun:'MG',rocket:'ROCKET',flame:'FLAME',railgun:'RAIL',shotgun:'SHOTGUN',taser:'TASER',plasma:'PLASMA',chain:'CHAIN',shield:'SHIELD',mine:'MINES',pulse:'PULSE'})[inventory.item]||'—';$('item-count').textContent=item?(['flame','taser'].includes(inventory.item)?inventory.ammo.toFixed(1)+'s':inventory.ammo>1?'×'+inventory.ammo:''):' ';$('item').classList.toggle('loaded',!!item||sky);$('item').classList.toggle('cooling',sky&&cooldown>0);$('item').setAttribute('aria-label',sky?'Fire sky beam':'Use weapon');if(sky){$('item-icon').textContent='ϟ';$('item-label').textContent='SKY BEAM';$('item-count').textContent=cooldown>0?cooldown.toFixed(1)+'s':'READY';}
   for(const id of ['nudge-left','nudge-right']){$(id).classList.toggle('cooling',(me.nudgeCooldown||0)>0);$(id).setAttribute('aria-disabled',String(me.eliminated||(me.nudgeCooldown||0)>0));}
   const damage=damageLevel(me.health);$('health-number').textContent=Math.ceil(me.health);$('health-status').textContent=me.overturned&&!me.wrecked?'FLIPPED':'';$('health-ui').dataset.level=String(damage);[...$('health-bars').children].forEach((bar,i)=>bar.classList.toggle('lit',i<Math.ceil(me.health/20)));$('shield-time').textContent=me.shield>0?'SHIELD '+me.shield.toFixed(1)+'s':'';
   const remaining=(state.startAt-serverNow)/1000;$('countdown').textContent=state.phase==='countdown'?String(Math.max(1,Math.ceil(remaining))):state.phase==='racing'&&remaining>-.8?'GO!':'';
@@ -117,12 +117,14 @@ function updateUI(now){
   if(state.phase==='finished')renderResults();
   if(now-lastState>2000){setConnection(false,'CONNECTION LOST');releaseControls();}
 }
+let skyStick={x:0,y:0};
+const skyMode=()=>state?.phase==='racing'&&!!state.players.find(p=>p.id===myId)?.eliminated;
 function controls(){
   const pad=readController(navigator.getGamepads?.());
-  updateControlLegend($('controller-status'),pad.connected);
+  updateControlLegend($('controller-status'),pad.connected,skyMode());
   document.body.classList.toggle('controller-connected',pad.connected);
-  if(!pad.throttle&&!pad.reverse&&!pad.fire&&!pad.left&&!pad.right&&Math.abs(pad.steer)<.1)controllerBlocked=false;
-  if(rotationBlocked()||document.hidden||!document.hasFocus()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()){Object.assign(input,NEUTRAL);controllerBlocked=true;return;}
+  if(!pad.throttle&&!pad.reverse&&!pad.fire&&!pad.left&&!pad.right&&Math.abs(pad.steer)<.1&&Math.abs(pad.aimY)<.1)controllerBlocked=false;
+  if(rotationBlocked()||document.hidden||!document.hasFocus()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()){Object.assign(input,NEUTRAL);delete input.skyAim;if(world)world.skyMove={x:0,y:0};controllerBlocked=true;return;}
   const gamepad=controllerBlocked?readController([]):pad;
   const keyboardSteer=(rightHeld||keys.has('KeyD')?1:0)-(leftHeld||keys.has('KeyA')?1:0);
   input.steer=clamp(keyboardSteer||gamepad.steer,-1,1);
@@ -135,10 +137,13 @@ function controls(){
   input.nudge=performance.now()<nudgeUntil?nudgeDirection:0;
   const wasAccelerating=input.throttle>.1;input.throttle=driveThrottle({mobile:device.mobile,controllerConnected:pad.connected,phase:state?.phase,reverse:input.reverse,accelerating:gasHeld||gamepad.throttle||keys.has('KeyW')||keys.has('ArrowUp')});
   if(input.throttle>.1&&!wasAccelerating)accelPressedAt=Date.now()+clockOffset;if(input.throttle<=.1)accelPressedAt=null;
+  if(world){world.skyMove=skyMode()?{x:keyboardSteer||gamepad.steer||skyStick.x,y:(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0)||gamepad.aimY||skyStick.y}:{x:0,y:0};}
+  if(skyMode()){input.steer=0;input.throttle=0;input.reverse=false;input.nudge=0;input.skyAim=world?.skyAim||null;}else delete input.skyAim;
   $('brake').classList.toggle('held',held);
 }
 function releaseControls(){
   controllerBlocked=true;controllerLeft=false;controllerRight=false;keys.clear();nudgeUntil=0;nudgeDirection=0;leftHeld=false;rightHeld=false;gasHeld=false;brakeHeld=false;fireHeld=false;firePulseUntil=0;accelPressedAt=null;
+  skyStick={x:0,y:0};if(world)world.skyMove={x:0,y:0};delete input.skyAim;
   for(const reset of holdResets)reset();
   Object.assign(input,NEUTRAL);$('steer-left').classList.remove('held');$('steer-right').classList.remove('held');$('gas').classList.remove('held');$('brake').classList.remove('held');if(state)send({type:'input',seq:++sequence,...NEUTRAL});
 }
@@ -159,7 +164,8 @@ if(device.mobile){
 }else{
   holdButton('steer-left',v=>{leftHeld=v;flushControls();});holdButton('steer-right',v=>{rightHeld=v;flushControls();});
 }
-function fire(){if(state?.phase==='racing'&&!rotationBlocked()&&!state.players.find(p=>p.id===myId)?.eliminated){firePulseUntil=performance.now()+70;send({type:'input',seq:++sequence,...input,fire:true});}}
+holdResets.push(bindSkyJoystick($('sky-joystick'),{enabled:()=>skyMode()&&!rotationBlocked()&&document.hasFocus()&&!document.hidden&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen(),move:v=>{skyStick=v;flushControls();},activate:unlockAudio}));
+function fire(){if(state?.phase==='racing'&&!rotationBlocked()){firePulseUntil=performance.now()+70;send({type:'input',seq:++sequence,...input,fire:true});}}
 holdButton('item',held=>{fireHeld=held;if(held)fire();});
 function triggerNudge(direction){if(state?.phase!=='racing'||rotationBlocked()||predicted?.eliminated||predicted?.nudgeCooldown>0)return;nudgeDirection=direction;nudgeUntil=performance.now()+120;}
 function nudge(direction){triggerNudge(direction);flushControls();}
@@ -193,7 +199,7 @@ function renderedState(now,dt){
   return {...state,...(state.phase==='racing'?combatPrediction.view():{}),combatTime:combatPrediction.time,players,camera,raceTime,chase:renderedChase(state.chase,players)};
 }
 function frame(now){requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
-  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);combatPrediction.step(command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
+  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen();const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);combatPrediction.step(command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
   const rendered=renderedState(now,dt);world?.update(rendered,myId,null,dt,now);trackPicker.tick(now);
   if(state&&world){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
