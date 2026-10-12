@@ -18,8 +18,9 @@ export class RenderCorrections {
     for(const car of after){
       const previous=old.get(car.id),e=this.errors.get(car.id)||{},velocity=this.velocities.get(car.id)||{},retained=this.rates.get(car.id);
       if(!previous||previous.eliminated!==car.eliminated||Math.hypot(previous.x-car.x,previous.z-car.z)>12||Math.abs((previous.progress||0)-(car.progress||0))*TRACK_LENGTH>12){this.errors.delete(car.id);this.velocities.delete(car.id);this.rates.delete(car.id);continue;}
-      // A fully acknowledged snapshot may have no replay ticks. Retain measured
-      // slope/rotation/progress rates until the next prediction tick.
+      // Authoritative snapshots carry the same measured rates as prediction,
+      // including when every input is acknowledged and no ticks are replayed.
+      // Retained rates are only a fallback for an older server.
       const rates={};for(const key of rateFields)rates[key]=car[key]??previous[key]??retained?.[key];
       const oldMotion=motionRates(previous,retained),newMotion=motionRates(car,rates),error={},nextVelocity={};
       for(const key of poseFields){

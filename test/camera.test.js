@@ -70,3 +70,16 @@ test('heading anticipates curves, stays independent of car heading and turns smo
   const cars=[carAt(200),carAt(200-CHASE_DISTANCE+5)],f=cameraFrame(createChase(cars),cars);
   assert.ok(f.from<createChase(cars).progress,'a death line five metres behind the tail is inside the rear strip');
 });
+
+
+test('drifting body rotation cannot pump camera zoom while position stays fixed',()=>{
+  const car=carAt(220,7,2),target=cameraFrame(createChase([car]),[car]);
+  for(const aspect of [1.3,852/393,3]){
+    const base=stepCamera(null,target,[car],aspect,1/60);
+    for(let angle=-Math.PI;angle<Math.PI;angle+=.07){
+      const drifting={...car,angle},frame=stepCamera(null,target,[drifting],aspect,1/60);
+      assert.ok(Math.abs(frame.distance-base.distance)<1e-10,'yaw alone must not change framing');
+      contained(projection(frame,aspect),drifting);
+    }
+  }
+});

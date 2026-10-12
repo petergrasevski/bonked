@@ -8,6 +8,10 @@ export function captureTrackPreview(world,canvas,now=0){
   if(id==='coast'){const p=trackAt(.15);target=new THREE.Vector3(p.x+p.nx*18,3,p.z+p.nz*18);camera.position.set(p.x+p.nx*65-Math.cos(p.angle)*32,65,p.z+p.nz*65-Math.sin(p.angle)*32);}
   else if(id==='ice'){target=new THREE.Vector3(0,0,0);camera.position.set(95,140,150);}
   else{const p=trackAt(.25);target=new THREE.Vector3(p.x,24,p.z);camera.position.set(p.x+145,150,p.z+125);}
+  // Pan up the scene so the landmark sits below the title artwork, keeping
+  // the view angle/scale intact. Glacier's framing already clears its title.
+  const north=id==='coast'?16:id==='desert'?38:0;
+  if(north){const pan=target.clone().sub(camera.position);pan.y=0;pan.normalize().multiplyScalar(north);camera.position.add(pan);target.add(pan);}
   camera.lookAt(target);camera.updateMatrixWorld();
   const renderTarget=world.previewTarget??=new THREE.WebGLRenderTarget(SIZE,SIZE);renderTarget.texture.colorSpace=THREE.SRGBColorSpace;
   const previousTarget=world.renderer.getRenderTarget(),sun=world.sun.position.clone(),sunTarget=world.sun.target.position.clone(),hidden=[...world.previewCars,...world.cars.values(),world.deadline].map(o=>[o,o.visible]);

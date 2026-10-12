@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TRACK_LENGTH, spawnCar, brakeMode } from '../shared/game.js';
+import { TRACK_LENGTH, spawnCar } from '../shared/game.js';
 import { CHASE_DISTANCE, createChase, updateChase, raceOrder } from '../shared/chase.js';
 const player=(id,distance)=>({id,car:{...spawnCar(),progress:distance/TRACK_LENGTH}});
 test('line is fixed distance, unaffected by time or a stopped leader',()=>{
@@ -19,9 +19,6 @@ test('grid fits inside the cutoff, including across the lap seam',()=>{
   assert.equal(updateChase(chase,players,0).length,0);
   players[0].car.progress=.99;players[1].car.progress=1.01;
   updateChase(chase,players,5000);assert.equal(chase.leaderId,'1');assert.ok(!players[0].car.eliminated);
-});
-test('short brake hold drifts; 350ms hold reverses; release resets',()=>{
-  assert.deepEqual(brakeMode(-1),{brake:false,reverse:false});assert.deepEqual(brakeMode(349),{brake:true,reverse:false});assert.deepEqual(brakeMode(350),{brake:false,reverse:true});assert.deepEqual(brakeMode(5000),{brake:false,reverse:true});
 });
 test('survivors rank ahead of eliminated players regardless of their frozen progress',()=>{
   const a=player('a',100),b=player('b',150);b.car.eliminated=true;b.car.eliminatedAt=9000;assert.equal([b,a].sort(raceOrder)[0].id,'a');

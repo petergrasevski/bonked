@@ -11,7 +11,7 @@ import { detectDevice, initDisplayGuide } from './display.js';
 import { WeaponAudio } from './weapon-audio.js';
 import { EngineAudio, raceListener } from './engine-audio.js';
 import { World } from './world.js';
-import { TRACKS,MAX_PLAYERS,selectTrack,activeTrack,NEUTRAL, STEP, clamp, angleDelta, brakeMode, REVERSE_HOLD_MS, damageLevel } from '/shared/game.js';
+import { TRACKS,MAX_PLAYERS,selectTrack,activeTrack,NEUTRAL, STEP, clamp, angleDelta, damageLevel } from '/shared/game.js';
 import { predictFleet } from '/shared/prediction.js';
 import { WEAPONS } from '/shared/combat.js';
 import { raceOrder, cameraFrame,createChase,renderedChase } from '/shared/chase.js';
@@ -28,11 +28,11 @@ const resultsScreen=new RoundResults($('results'));
 const trackPicker=createTrackPicker($('track-picker'),()=>world,id=>send({type:'track',trackId:id}));
 try{world=new World($('scene'));}catch(error){console.error(error);$('dialog').hidden=false;$('dialog-body').innerHTML='<h2>WebGL 2 required.</h2><p>This game needs WebGL 2. Try a recent Safari or Chrome browser with hardware acceleration enabled.</p>';}
 let ws,state=null,myId=null,predicted=null,predictedOthers=[],sequence=0,pending=[],history=[],clockOffset=0,rtt=0,lastState=0,lastFrame=performance.now(),accumulator=0,uiAt=0,retries=0,intent=null,session=null,rosterKey='',phase=null;
-let resuming=false;
+let resuming=false,entryBusy=false;
 let savedName='';try{savedName=localStorage.getItem('drift-name')||'';session=JSON.parse(sessionStorage.getItem('drift-room')||'null');}catch{}
 $('name').value=savedName;
 const inviteCode=new URLSearchParams(location.search).get('room');if(inviteCode)$('code').value=inviteCode.toUpperCase().slice(0,3);
-const input={...NEUTRAL},keys=new Set();let leftHeld=false,rightHeld=false,gasHeld=false,brakeHeld=false,brakeSince=null,fireHeld=false,firePulseUntil=0,accelPressedAt=null,nudgeDirection=0,nudgeUntil=0;
+const input={...NEUTRAL},keys=new Set();let leftHeld=false,rightHeld=false,gasHeld=false,brakeHeld=false,fireHeld=false,firePulseUntil=0,accelPressedAt=null,nudgeDirection=0,nudgeUntil=0;
 const holdResets=[];
 const portrait=matchMedia('(orientation: portrait)');
 const rotationBlocked=()=>device.mobile&&portrait.matches;
@@ -63,9 +63,11 @@ function connect(){
 }
 connect();
 setInterval(()=>send({type:'ping',sent:Date.now()}),2000);
-function setBusy(busy){$('create').disabled=busy;$('join').disabled=busy;}
+function updateEntryButtons(){$('create').disabled=entryBusy;$('join').disabled=entryBusy||!/^[A-Z]{3}$/.test($('code').value);}
+function setBusy(busy){entryBusy=busy;updateEntryButtons();}
+updateEntryButtons();
 function enter(type){const name=$('name').value.trim();if(!name){$('name').focus();return toast('Enter your name first.');}voice.prepare();try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
-$('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
+$('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');updateEntryButtons();});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
 function clearRoom(){trackPicker.sync(activeTrack.id,false,false);voice.leave();weaponAudio?.stop();engineAudio?.stop();corrections.reset();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 $('leave').onclick=leave;$('results-lobby').onclick=()=>send({type:'lobby'});$('exit-race').onclick=leave;$('start').onclick=()=>{unlockAudio();send({type:'start'});};$('rematch').onclick=()=>send({type:'rematch'});$('ready').onclick=()=>send({type:'ready',round:state?.round});
@@ -111,29 +113,26 @@ function controls(){
   const pad=readController(navigator.getGamepads?.());
   updateControlLegend($('controller-status'),pad.connected);
   document.body.classList.toggle('controller-connected',pad.connected);
-  if(!pad.throttle&&!pad.brake&&!pad.fire&&!pad.left&&!pad.right&&Math.abs(pad.steer)<.1)controllerBlocked=false;
+  if(!pad.throttle&&!pad.reverse&&!pad.fire&&!pad.left&&!pad.right&&Math.abs(pad.steer)<.1)controllerBlocked=false;
   if(rotationBlocked()||document.hidden||!document.hasFocus()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()){Object.assign(input,NEUTRAL);controllerBlocked=true;return;}
   const gamepad=controllerBlocked?readController([]):pad;
   const keyboardSteer=(rightHeld||keys.has('KeyD')?1:0)-(leftHeld||keys.has('KeyA')?1:0);
   input.steer=clamp(keyboardSteer||gamepad.steer,-1,1);
   $('steer-left').classList.toggle('held',input.steer<0);$('steer-right').classList.toggle('held',input.steer>0);
-  const held=brakeHeld||gamepad.brake||keys.has('KeyS')||keys.has('ArrowDown');
-  if(held&&brakeSince===null)brakeSince=performance.now();if(!held)brakeSince=null;
-  const heldMs=brakeSince===null?-1:performance.now()-brakeSince,mode=brakeMode(heldMs);
-  input.reverse=mode.reverse;input.brake=mode.brake;
+  const held=brakeHeld||gamepad.reverse||keys.has('KeyS')||keys.has('ArrowDown');
+  input.reverse=held;input.brake=false;
   input.fire=fireHeld||gamepad.fire||(keys.has('Enter')||keys.has('NumpadEnter'))||performance.now()<firePulseUntil;
   if(gamepad.left&&!controllerLeft)triggerNudge(-1);if(gamepad.right&&!controllerRight)triggerNudge(1);
   controllerLeft=gamepad.left;controllerRight=gamepad.right;
   input.nudge=performance.now()<nudgeUntil?nudgeDirection:0;
   const wasAccelerating=input.throttle>.1;input.throttle=input.reverse?0:gasHeld||gamepad.throttle||keys.has('KeyW')||keys.has('ArrowUp')?1:0;
   if(input.throttle>.1&&!wasAccelerating)accelPressedAt=Date.now()+clockOffset;if(input.throttle<=.1)accelPressedAt=null;
-  $('brake').style.setProperty('--hold',`${clamp(heldMs/REVERSE_HOLD_MS,0,1)*360}deg`);
-  $('brake').classList.toggle('held',held);$('brake').classList.toggle('reversing',mode.reverse);$('brake-label').textContent=mode.reverse?'REVERSE':held?'DRIFT':'DRIFT/R';
+  $('brake').classList.toggle('held',held);
 }
 function releaseControls(){
-  controllerBlocked=true;controllerLeft=false;controllerRight=false;keys.clear();nudgeUntil=0;nudgeDirection=0;leftHeld=false;rightHeld=false;gasHeld=false;brakeHeld=false;brakeSince=null;fireHeld=false;firePulseUntil=0;accelPressedAt=null;
+  controllerBlocked=true;controllerLeft=false;controllerRight=false;keys.clear();nudgeUntil=0;nudgeDirection=0;leftHeld=false;rightHeld=false;gasHeld=false;brakeHeld=false;fireHeld=false;firePulseUntil=0;accelPressedAt=null;
   for(const reset of holdResets)reset();
-  Object.assign(input,NEUTRAL);$('steer-left').classList.remove('held');$('steer-right').classList.remove('held');$('gas').classList.remove('held');$('brake').classList.remove('held','reversing');$('brake').style.setProperty('--hold','0deg');$('brake-label').textContent='DRIFT/R';if(state)send({type:'input',seq:++sequence,...NEUTRAL});
+  Object.assign(input,NEUTRAL);$('steer-left').classList.remove('held');$('steer-right').classList.remove('held');$('gas').classList.remove('held');$('brake').classList.remove('held');if(state)send({type:'input',seq:++sequence,...NEUTRAL});
 }
 function holdButton(id,set){
   const el=$(id);let pointer=null;
@@ -142,7 +141,7 @@ function holdButton(id,set){
   const end=e=>{if(e.pointerId===pointer)reset();};for(const event of ['pointerup','pointercancel','lostpointercapture'])el.addEventListener(event,end);
 }
 function flushControls(){controls();if(state?.phase==='countdown'||state?.phase==='racing')send({type:'input',seq:++sequence,...input,accelPressedAt});}
-holdButton('gas',v=>{gasHeld=v;flushControls();});holdButton('brake',v=>{brakeHeld=v;brakeSince=v?performance.now():null;});
+holdButton('gas',v=>{gasHeld=v;flushControls();});holdButton('brake',v=>{brakeHeld=v;flushControls();});
 holdButton('steer-left',v=>{leftHeld=v;flushControls();});holdButton('steer-right',v=>{rightHeld=v;flushControls();});
 function fire(){if(state?.phase==='racing'&&!rotationBlocked()&&!state.players.find(p=>p.id===myId)?.eliminated){firePulseUntil=performance.now()+70;send({type:'input',seq:++sequence,...input,fire:true});}}
 holdButton('item',held=>{fireHeld=held;if(held)fire();});

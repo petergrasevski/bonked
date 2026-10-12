@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectTrack,TRACK_LENGTH,START_FRACTION,STEP,NEUTRAL,spawnCar,trackAt} from '../shared/game.js';
+import {selectTrack,TRACK_LENGTH,START_FRACTION,STEP,NEUTRAL,spawnCar,trackAt,stepCar,angleDelta} from '../shared/game.js';
 import {cameraFrame,createChase} from '../shared/chase.js';
 import {RenderCorrections} from '../shared/netcode.js';
-import {predictFleet} from '../shared/prediction.js';
+import {predictFleet,captureMotion,recordMotion} from '../shared/prediction.js';
 
 test('120 Hz cars and route camera advance together between 60 Hz simulation ticks',()=>{
   selectTrack('ice');const corrections=new RenderCorrections(),start=.1,base=trackAt(start),frames=[];
@@ -81,4 +81,41 @@ test('uneven 20 Hz updates do not produce repeated visible speed jumps at 30/60/
     const rms=Math.sqrt(speeds.reduce((s,v)=>s+(v-30)**2,0)/speeds.length),p95=kicks.sort((a,b)=>a-b)[Math.floor(kicks.length*.95)];
     assert.ok(rms<1.2,`${hz} Hz speed-error RMS: ${rms}`);assert.ok(p95<2.2,`${hz} Hz frame speed jumps: ${p95}`);
   }
+});
+
+
+test('fully acknowledged drifting and reverse snapshots preserve pose and use current measured rates at every refresh rate',()=>{
+  for(const track of ['coast','ice','desert'])for(const hz of [30,60,120]){
+    selectTrack(track);const fraction=track==='ice'?.12:.01,p=trackAt(fraction);
+    let car={...spawnCar(),id:'a',x:p.x,z:p.z,y:p.y,groundY:p.y,angle:p.angle,trackFraction:fraction,vx:32*Math.cos(p.angle),vz:32*Math.sin(p.angle)};
+    const smooth=new RenderCorrections(),fields={x:'renderVx',z:'renderVz',y:'renderRise',angle:'renderTurn',pitch:'renderPitch',roll:'renderRoll',progress:'renderProgress'};
+    for(let tick=0;tick<45;tick++){
+      const input={...NEUTRAL,throttle:tick<30?1:0,steer:tick<15?.7:tick<30?-.7:0,reverse:tick>=30};
+      predictFleet(car,[],input,STEP);
+      if(tick%3===2){
+        const previous={...car},next={...car},old=captureMotion(next);
+        // The next packet can differ in steering/velocity from speculative input.
+        stepCar(next,{...input,steer:input.steer*.8},STEP);recordMotion(next,old,STEP);
+        const snapshot=JSON.parse(JSON.stringify(next)),remainder=STEP*.65,view=smooth.render(previous,0,remainder);
+        smooth.reconcile([previous],[snapshot],remainder);
+        const corrected=smooth.render(snapshot,0,remainder),base=smooth.render(snapshot,0,0);
+        for(const [key,rate] of Object.entries(fields)){
+          assert.ok(Math.abs(view[key]-corrected[key])<1e-9,`${track}/${hz}: snapshot must preserve ${key}`);
+          assert.ok(Math.abs(corrected[key]-base[key]-snapshot[rate]*remainder)<1e-9,`${key} must use current authority motion, not stale rates or body heading`);
+        }
+        car=snapshot;
+      }
+      const view=smooth.render(car,1/hz,STEP*.5);
+      assert.ok(Object.keys(fields).every(key=>Number.isFinite(view[key])));
+    }
+  }
+});
+
+test('shared motion measurement follows lateral momentum and unwraps body rotations',()=>{
+  selectTrack('ice');const car={id:'a',x:4,z:2,y:1,angle:0,pitch:Math.PI-.01,roll:Math.PI-.02,progress:.1},old=captureMotion(car);
+  Object.assign(car,{x:4.25,z:2.2,pitch:-Math.PI+.01,roll:-Math.PI+.02,progress:.1+.25/TRACK_LENGTH});recordMotion(car,old,STEP);
+  assert.equal(car.renderVx,15);assert.ok(Math.abs(car.renderVz-12)<1e-10,'lateral velocity is independent of chassis heading');
+  assert.ok(Math.abs(car.renderPitch-1.2)<1e-10);assert.ok(Math.abs(car.renderRoll-2.4)<1e-10);
+  const pose=new RenderCorrections().render(car,0,STEP/2);
+  assert.ok(Math.abs(pose.z-2.3)<1e-10);assert.ok(Math.abs(angleDelta(pose.roll,car.roll)-.02)<1e-10);
 });

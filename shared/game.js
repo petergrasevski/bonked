@@ -36,8 +36,6 @@ export const CAR_WIDTH = 2.1;
 export const NUDGE_DURATION = .1;
 export const TARGET_TRACK_LENGTH = 3466.9092022732743 * .7;
 export const START_FRACTION = .012;
-export const REVERSE_HOLD_MS = 350;
-export const brakeMode = heldMs => ({ brake: heldMs >= 0 && heldMs < REVERSE_HOLD_MS, reverse: heldMs >= REVERSE_HOLD_MS });
 export const COLORS = ['#ff514f', '#388bff', '#ffd139', '#44db89', '#b681ff', '#ff893e', '#45dfef', '#f98bc4'];
 export const COLOR_NAMES = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange', 'Cyan', 'Pink'];
 export const NEUTRAL = Object.freeze({ steer: 0, throttle: 0, reverse: false, brake: false, fire: false, nudge: 0 });
@@ -374,24 +372,30 @@ export function stepCar(car, input, dt=STEP) {
     if(car.finished)input=NEUTRAL;
     let c=Math.cos(car.angle),s=Math.sin(car.angle);
     let forward=car.vx*c+car.vz*s,lateral=-car.vx*s+car.vz*c;
+    // Reverse is immediate input: while rolling forwards it applies braking
+    // and loosens rear grip; through zero it becomes ordinary reverse drive.
+    const braking=input.brake||(input.reverse&&forward>0);
     const speedFactor=healthSpeedFactor(car.health),maxSpeed=Math.max(TOP_SPEED*speedFactor*(car.boost>0?1.1:1),padSpeed??0);
     const force=car.stun>0?0:input.reverse?-24*speedFactor:forward>=maxSpeed&&car.impactTime>0?0:input.throttle*25.2*speedFactor*(car.boost>0?1.35:1);
     const steering=clamp(car.steering+(car.tased>0?(Math.sin(car.tasePhase*19)+.5*Math.sin(car.tasePhase*31))*.3:0),-1,1);
-    forward+=force*dt;forward*=Math.exp(-(input.brake?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
+    forward+=force*dt;forward*=Math.exp(-(braking?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
-    if(padSpeed!==null)forward=Math.max(forward,padSpeed);
+    if(padSpeed!==null&&!input.reverse)forward=Math.max(forward,padSpeed);
     const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
     // At speed, the rear tyres shed grip so the body turns ahead of its
     // momentum: a physical tail-out slide that settles as the rack centres.
-    // Straight-line recovery, low-speed manoeuvres, handbraking and ice retain
-    // their established grip; no extra impulse or visual-only rotation is added.
+    // Dry-road straight-line recovery and low-speed manoeuvres retain their
+    // established grip; no extra impulse or visual-only rotation is added.
     const fast=clamp((Math.abs(forward)-TOP_SPEED*.5)/(TOP_SPEED*.5),0,1);
-    const speedDrift=icy||input.brake?0:fast*fast*(3-2*fast)*Math.min(1,Math.abs(steering)/.65);
-    lateral*=Math.exp(-(car.impactTime>0?.65:input.brake?1.5:(icy?9.5:8.2)*(1-.72*speedDrift)*handling*activeTrack.grip)*dt);
-    const turn=steering*(input.brake?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
+    const speedDrift=icy||braking?0:fast*fast*(3-2*fast)*Math.min(1,Math.abs(steering)/.65);
+    // Ice keeps more momentum under steering load, strongest in tight, fast
+    // U-turns. Straight-line grip and low-speed positioning stay familiar.
+    const iceDrift=icy&&!braking?clamp((Math.abs(forward)-6)/18,0,1)*Math.min(1,Math.abs(steering)/.6):0;
+    lateral*=Math.exp(-(car.impactTime>0?.65:braking?1.5*activeTrack.grip:(icy?9.5*(1-.4*iceDrift):8.2)*(1-.72*speedDrift)*handling*activeTrack.grip)*dt);
+    const turn=steering*(braking?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
-    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(input.brake?.2:icy?.65:.58*(1-.58*speedDrift))*handling*activeTrack.grip;
+    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(braking?.2:icy?.65*(1-.25*iceDrift):.58*(1-.58*speedDrift))*handling*activeTrack.grip;
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }

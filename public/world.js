@@ -37,7 +37,7 @@ export class World{
     this.atmosphere=createAtmosphere(this.renderer,this.scene,activeTrack.id,{mobile:matchMedia('(pointer: coarse)').matches});this.sun=this.atmosphere.sun;this.environment=this.atmosphere.environment;
     this.materials=new Map();this.textures=new Map();this.static=new THREE.Group();this.scene.add(this.static);this.cars=new Map();this.boxes=[];this.rockets=new Map();this.lightning=new Map();this.dangerRings=new Map();this.effects=new Map();this.trails=[];this.frame=0;this.mines=new Map();this.chains=new Map();this.seenEffects=new Set();this.particles=[];this.particleClock=0;
     this.buildTrack();if(activeTrack.id==='coast'){this.buildScenery();this.landmarks=buildLandmarks(this);this.coastalCrabs=buildCoastalCrabs(this.scene);}else{this.landmarks=[];this.buildBiome();}if(activeTrack.id==='ice')this.valley=buildGlacierValley(this);if(activeTrack.id==='desert'){buildDesertScenery(this);this.desertMoles=buildDesertMoles(this);}this.mergeStatic();this.buildWater();this.buildPickups();this.buildEliminationLine();this.buildParticles();this.boostPads=buildBoostPads(this.scene);
-    this.previewCars=COLORS.map((color,i)=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});
+    this.previewCars=COLORS.slice(0,2).map((color,i)=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});
     if(preview)this.renderer.setSize(320,320);else{this.resize();this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(container);this.renderer.compile(this.scene,this.camera);}
   }
   roadMaterial(kind){
@@ -288,7 +288,7 @@ export class World{
     this.deadline.visible=!!state&&state.phase!=='lobby';
     if(state?.chase){const d=state.chase;this.deadline.position.set(d.x,d.y||0,d.z);this.deadline.rotation.order='YXZ';this.deadline.rotation.set(0,-d.angle,Math.atan(d.grade||0));this.deadline.scale.z=((d.halfWidth||6)*2+2)/(ROAD_WIDTH+2);}
     const previewFleet=[];
-    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const p=trackAt(previewProgress-i*5/TRACK_LENGTH);g.position.set(p.x,p.y,p.z);g.rotation.set(0,-p.angle,Math.atan(p.grade||0));previewFleet.push({...p,progress:previewProgress-i*5/TRACK_LENGTH-START_FRACTION});}});
+    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const fraction=previewProgress-i*1.7/TRACK_LENGTH,p=trackAt(fraction),lane=Math.min(p.halfWidth-CAR_WIDTH/2-.5,activeTrack.id==='ice'?iceSplit(p.x)+1.8:1.8),side=i===0?-lane:lane,x=p.x+p.nx*side,z=p.z+p.nz*side;g.position.set(x,p.y,z);g.rotation.set(0,-p.angle,Math.atan(p.grade||0));previewFleet.push({...p,x,z,progress:fraction-START_FRACTION});}});
     const present=new Set();
     if(state)for(const p of state.players){present.add(p.id);let g=this.cars.get(p.id);if(!g){g=this.createCar(p.color);this.scene.add(g);this.cars.set(p.id,g);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;}
       const car=p.id===localId&&localCar&&!p.wrecked?localCar:p;const a=1;g.userData.snap=false;

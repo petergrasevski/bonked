@@ -1,3 +1,4 @@
+import {captureMotion,recordMotion} from './shared/prediction.js';
 import {collectBoostPad} from './shared/boost-pads.js';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -16,7 +17,7 @@ const root=path.dirname(fileURLToPath(import.meta.url));
 const rooms=new Map(),connections=new Map();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
 const MAX_ROOMS=100, GRACE_MS=20000;
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json','.json':'application/json','.mid':'audio/midi'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json','.json':'application/json','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
 function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}
 const server=http.createServer(async(req,res)=>{
   try{
@@ -160,6 +161,7 @@ const timer=setInterval(()=>{
       if(nextRoundDue(room,now))startRound(room,now,true);
       if(room.phase==='countdown'&&now>=room.startAt){room.phase='racing';for(const p of room.players.values())applyLaunch(p.car,!p.bot&&p.input.throttle>.1&&!p.input.reverse&&now-p.lastInput<=250?p.accelPressedAt:null,room.startAt);}
       if(room.phase==='racing'){
+        const motionBefore=new Map([...room.players.values()].map(p=>[p.id,captureMotion(p.car)]));
         room.raceTime=(room.raceTime||0)+STEP;
         for(const p of room.players.values()){
           const input=p.bot?botInput(p.car):now-p.lastInput>250?NEUTRAL:p.input;
@@ -176,6 +178,7 @@ const timer=setInterval(()=>{
         for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}
         const players=[...room.players.values()];
         for(const p of updateChase(room.chase,players,now-room.startAt))room.effects.push({id:randomUUID(),kind:'hit',x:p.car.x,z:p.car.z,until:now+600,color:p.color});
+        for(const p of players)recordMotion(p.car,motionBefore.get(p.id),STEP);
         const survivors=players.filter(p=>!p.car.eliminated),finished=survivors.filter(p=>p.car.finished);
         const lastStanding=room.raceSize>1&&survivors.length<=1;
         if(lastStanding&&!room.survivorEndAt)room.survivorEndAt=now+1800;

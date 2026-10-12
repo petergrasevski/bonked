@@ -21,10 +21,12 @@ export function cameraDistance(frame,cars,aspect){
   }
   for(const car of cars){
     if(car.eliminated)continue;
-    // A conservative box includes the chassis, airborne cars and roof weapons.
-    const ca=Math.cos(car.angle),sa=Math.sin(car.angle);
-    for(const x of [-CAR_LENGTH/2-.65,CAR_LENGTH/2+.65])for(const z of [-CAR_WIDTH/2-.65,CAR_WIDTH/2+.65])for(const y of [-1,4]){
-      include(car.x+x*ca-z*sa,(car.y||0)+y,car.z+x*sa+z*ca,.84,.76,.6);
+    // A camera-aligned envelope contains every chassis heading. A rotating
+    // body box makes zoom breathe as the tail swings during a drift, even when
+    // the car's position is steady. Keep actual position/height containment.
+    const radius=Math.hypot(CAR_LENGTH/2+.65,CAR_WIDTH/2+.65);
+    for(const x of [-radius,radius])for(const z of [-radius,radius])for(const y of [-1,4]){
+      include(car.x+x*c-z*s,(car.y||0)+y,car.z+x*s+z*c,.84,.76,.6);
     }
   }
   return distance;

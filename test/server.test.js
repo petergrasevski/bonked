@@ -27,6 +27,7 @@ test('eight real socket clients: lobby, authority, reconnect, elimination, share
   // The server, not any client, owns the starting signal and positions.
   const gridX=host.state.players[0].x;host.send({type:'input',seq:2,throttle:1,steer:0});await sleep(300);assert.equal(host.state.players[0].x,gridX);
   await until(()=>host.state.phase==='racing',5000);
+  for(const p of host.state.players)for(const key of ['renderVx','renderVz','renderRise','renderTurn','renderPitch','renderRoll','renderProgress'])assert.ok(Number.isFinite(p[key]),`snapshot carries measured ${key}`);
   let snapshots=0,lastTime=0,pickups=0;const driveUntil=Date.now()+6000;
   driving=setInterval(()=>{for(const c of racers){const p=c.state?.players.find(p=>p.id===c.welcome.id);if(!p)continue;if(c!==host&&Date.now()>driveUntil)continue;c.seq=Math.max(c.seq,p.seq)+1;c.send({type:'input',seq:c.seq,...botInput(p)});if(p.item){pickups++;if(c===host)c.send({type:'item'});}}if(host.state.time!==lastTime){snapshots++;lastTime=host.state.time;}},1000/60);
   await until(()=>host.state.phase==='finished',55000);clearInterval(driving);

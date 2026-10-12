@@ -32,14 +32,24 @@ test('normal dry-road drift stays modest and much smaller than Glacier slip',()=
   }
   for(const id of ['coast','desert']){assert.ok(slips[id]>.15);assert.ok(slips[id]<slips.ice*.5);}
 });
-test('Glacier follows its exact pre-change steering and velocity trajectory',()=>{
-  const car=moving('ice');for(let i=0;i<36;i++)stepCar(car,drive(i<18?.3:0));
-  // Recorded before adding the dry-course steering filter / grip adjustments.
-  const expected={x:-228.6020951293549,z:-39.31194132801705,vx:25.535624917795577,vz:2.4965679744981526,angle:.1845,y:1};
-  for(const [key,value]of Object.entries(expected))assert.ok(Math.abs(car[key]-value)<1e-10,key);
+test('Glacier carries more momentum through tight fast turns, then recovers on release',()=>{
+  const probe=steer=>{
+    const car=moving('ice'),p=trackAt(.12);car.vx=Math.cos(car.angle)*36;car.vz=Math.sin(car.angle)*36;
+    for(let i=0;i<30;i++){car.x=p.x;car.z=p.z;const speed=Math.hypot(car.vx,car.vz);car.vx*=36/speed;car.vz*=36/speed;stepCar(car,drive(steer));}
+    return {car,p,slip:Math.abs(angleDelta(car.angle,Math.atan2(car.vz,car.vx)))};
+  };
+  const gentle=probe(.2),tight=probe(.65);
+  assert.ok(tight.slip>27.91*Math.PI/180*1.1,'more tail-out momentum than the previous ice tuning');
+  assert.ok(tight.slip<Math.PI/4,'a sustained turn remains controllable');
+  assert.ok(tight.slip>gentle.slip*3,'tight U-turns carry more slip than gentle adjustments');
+  const before=tight.car.angle;stepCar(tight.car,drive(0));
+  assert.equal(tight.car.steering,0);assert.equal(tight.car.angle,before,'release does not add an artificial spin');
+  assert.ok(Math.abs(angleDelta(tight.car.angle,Math.atan2(tight.car.vz,tight.car.vx)))>tight.slip*.9,'momentum does not snap straight on release');
+  for(let i=0;i<150;i++){tight.car.x=tight.p.x;tight.car.z=tight.p.z;stepCar(tight.car,drive(0));}
+  assert.ok(Math.abs(angleDelta(tight.car.angle,Math.atan2(tight.car.vz,tight.car.vx)))<tight.slip*.1,'slide settles as grip returns');
 });
 test('replicated steering state survives snapshots and predicts the same release and reversal',()=>{
-  for(const id of ['coast','desert'])for(const speed of [20,36]){
+  for(const id of ['coast','desert','ice'])for(const speed of [20,36]){
     const server=moving(id);server.vx=Math.cos(server.angle)*speed;server.vz=Math.sin(server.angle)*speed;let client={...server};
     for(let i=0;i<60;i++){
       const input=drive(i<15?.3:i<30?0:i<45?-.3:0);stepCar(server,input);predictFleet(client,[],input,STEP);

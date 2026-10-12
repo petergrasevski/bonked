@@ -44,7 +44,7 @@ test('track switching restores independent cached geometry',()=>{
 test('standard DualSense mapping, proportional steering, deadzone and disconnect',()=>{
   const pad={connected:true,mapping:'standard',axes:[.57],buttons:Array.from({length:16},()=>({pressed:false,value:0}))};
   for(const i of [0,2,5,6,7])pad.buttons[i]={pressed:true,value:1};const r=readController([null,pad]);
-  assert.ok(Math.abs(r.steer-.5)<1e-10);assert.equal(r.throttle,1);for(const key of ['brake','fire','left','right'])assert.equal(r[key],true);
+  assert.ok(Math.abs(r.steer-.5)<1e-10);assert.equal(r.throttle,1);for(const key of ['reverse','fire','left','right'])assert.equal(r[key],true);
   pad.axes[0]=.1;assert.equal(readController([pad]).steer,0);pad.connected=false;assert.equal(readController([pad]).throttle,0);assert.equal(readController([pad]).connected,false);
 });
 test('replicated steering predicts opponents through turns instead of a straight extrapolation',()=>{
