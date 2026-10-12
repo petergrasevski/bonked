@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {DESERT_MOUNTAIN} from '../shared/desert-features.js';
 import {activeTrack,trackAt,nearestTrack,TRACK_LENGTH,SEGMENTS} from '../shared/game.js';
 const C={sand:0x938d7c,cliff:0x777568,cream:0xc8c6b7,coral:0xae6654,navy:0x263941,teal:0x497475,lime:0xd4f65e};
 const TAU=Math.PI*2;
@@ -146,12 +147,37 @@ export function buildDetailedBiome(w){
       if(Math.abs(x)<490&&Math.abs(z)<62)continue;
       glacier(w,x,z,i);for(let j=0;j<3;j++){const tx=x+Math.sin(i+j*2.1)*13,tz=z+Math.cos(i+j*2.1)*13;if(nearestTrack(tx,tz).distance>15)pine(w,tx,tz,6+rand(i,j)*5,i+j);}
     }else{
+      // Authored mountains and their open bridge canyon replace random mesas here.
+      if(i/100>DESERT_MOUNTAIN.start-.035&&i/100<DESERT_MOUNTAIN.end+.035)continue;
+      if(x>190&&Math.abs(z)<92)continue;
       mesa(w,x,z,i);for(let j=0;j<4;j++){const rx=x+Math.cos(i+j)*14,rz=z+Math.sin(i+j)*14;if(nearestTrack(rx,rz).distance>10)detailedRock(w,rx,rz,1.4+j%3,0xaa7752);}
       const cx=x+14,cz=z+10;if(nearestTrack(cx,cz).distance>15)cactus(w,cx,cz,i);
     }
   }
   if(!ice){
-    for(let i=0;i<SEGMENTS.length;i+=18){const p=SEGMENTS[i];if(p.y<5)continue;for(const side of [-1,1])w.box(p.x+p.nx*(p.halfWidth+1)*side,p.y/2-2,p.z+p.nz*(p.halfWidth+1)*side,1.4,p.y+4,1.4,0x815942);}
-    for(const fraction of [.23,.73]){const p=trackAt(fraction),g=group(w,p.x,p.y+.03,p.z,'ramp');g.rotation.y=-p.angle;w.mesh(geometry([-7,0,-8.5,0,1,-8.5,0,1,8.5,-7,0,-8.5,0,1,8.5,-7,0,8.5]),0xdcb76d,0,0,0,g);for(let j=0;j<5;j++)w.box(-1,.89,(j-2)*3.4,.65,.08,1.8,j%2?0xf9d366:0x47392d,g);}
+    buildDesertPylons(w);
+
   }
+}
+
+export function buildDesertPylons(w){
+  const pylons=[];
+  for(let i=0;i<SEGMENTS.length;i+=18){
+    const p=SEGMENTS[i],fraction=p.start/TRACK_LENGTH;
+    if(p.y<5||(fraction>=DESERT_MOUNTAIN.start-.02&&fraction<=DESERT_MOUNTAIN.end+.02))continue;
+    for(const side of [-1,1]){
+      const x=p.x+p.nx*(p.halfWidth+1)*side,z=p.z+p.nz*(p.halfWidth+1)*side;
+      // Check every deck: the nearest road can be the upper deck and hide the
+      // crossing beneath it. Include the pillar footprint plus 1.5m of verge.
+      const obstructsLowerRoad=SEGMENTS.some(s=>{
+        const t=Math.max(0,Math.min(1,((x-s.x)*s.dx+(z-s.z)*s.dz)/(s.len*s.len)));
+        const y=s.y+s.dy*t;if(y>p.y-3||y< -7)return false;
+        const halfWidth=s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t;
+        return Math.hypot(x-s.x-s.dx*t,z-s.z-s.dz*t)<halfWidth+Math.SQRT2*.7+1.5;
+      });
+      if(obstructsLowerRoad)continue;
+      const pylon=w.box(x,p.y/2-2,z,1.4,p.y+4,1.4,0x815942);pylon.userData.sceneryKind='desert-pylon';pylons.push(pylon);
+    }
+  }
+  return pylons;
 }

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {selectTrack} from '../shared/game.js';
-import {buildDetailedScenery,buildDetailedBiome,detailedPalm,detailedIsland,createRockGeometry,islandContour} from '../public/scenery.js';
+import {selectTrack,trackAt,TRACK_LENGTH,SEGMENTS} from '../shared/game.js';
+import {buildDetailedScenery,buildDetailedBiome,detailedPalm,detailedIsland,createRockGeometry,islandContour,buildDesertPylons} from '../public/scenery.js';
 function world(){return {
   static:new THREE.Group(),materials:new Map(),
   mat(color){if(!this.materials.has(color))this.materials.set(color,new THREE.MeshStandardMaterial({color}));return this.materials.get(color);},
@@ -31,12 +31,31 @@ test('palm leaflets, ringed trunks and eroded rocks add detail within a small pe
   const bounds=new THREE.Box3().setFromObject(palm);assert.ok(bounds.max.y>5.5&&bounds.max.y<7);assert.ok(bounds.max.x-bounds.min.x>6);
   const rock=createRockGeometry(2,11),other=createRockGeometry(2,12);assert.notDeepEqual(rock.attributes.position.array,other.attributes.position.array);assert.ok(rock.attributes.position.array.every(Number.isFinite));rock.dispose();other.dispose();dispose(w);
 });
-test('whole-track scenery fits bounded geometry and batches while preserving both desert ramps',()=>{
+test('whole-track scenery fits bounded geometry and batches without obsolete desert ramp placeholders',()=>{
   for(const id of ['coast','ice','desert']){
     selectTrack(id);const w=world();if(id==='coast')buildDetailedScenery(w,[.025,.15,.275,.40,.525,.65,.775,.90].map(fraction=>({fraction})));else buildDetailedBiome(w);
     const s=stats(w);assert.ok(s.triangles<300000,`${id} full-track triangle budget (${s.triangles})`);assert.ok(s.batches<1000,`${id} spatial/material batches (${s.batches})`);assert.ok(s.batches<s.meshes*.6,'small pieces merge into shared material batches');
     const kinds=[];w.static.traverse(o=>{if(o.userData.sceneryKind)kinds.push(o.userData.sceneryKind);});
-    if(id==='ice')assert.ok(kinds.filter(k=>k==='pine').length>100);if(id==='desert')assert.equal(kinds.filter(k=>k==='ramp').length,2);dispose(w);
+    if(id==='ice')assert.ok(kinds.filter(k=>k==='pine').length>100);if(id==='desert')assert.equal(kinds.filter(k=>k==='ramp').length,0);dispose(w);
   }
   selectTrack('coast');
+});
+
+test('overpass pylons leave the entire lower road and its verges clear',()=>{
+  selectTrack('desert');const w=world(),pylons=buildDesertPylons(w);
+  assert.ok(pylons.length>10,'retain bridge supports away from the crossing');
+  assert.ok(pylons.length<90,'remove the original intersecting supports');
+  const bounds=pylons.map(p=>new THREE.Box3().setFromObject(p));
+  // Sample the lower deck corridor independently of the placement algorithm,
+  // including both shoulders and enough headroom for cars and roof weapons.
+  for(let distance=-60;distance<=60;distance+=.5){
+    const p=trackAt(.5+distance/TRACK_LENGTH);
+    for(let lateral=-p.halfWidth-1.5;lateral<=p.halfWidth+1.5;lateral+=.25){
+      const v=new THREE.Vector3(p.x+p.nx*lateral,p.y+1.5,p.z+p.nz*lateral);
+      for(const box of bounds)assert.equal(box.containsPoint(v),false,'pillar intersects the lower road');
+    }
+  }
+  const crossing=SEGMENTS[0];
+  for(const side of [-1,1])assert.ok(!pylons.some(p=>Math.hypot(p.position.x-crossing.x-crossing.nx*(crossing.halfWidth+1)*side,p.position.z-crossing.z-crossing.nz*(crossing.halfWidth+1)*side)<.01),'both conflicting crossing pylons removed');
+  dispose(w);selectTrack('coast');
 });

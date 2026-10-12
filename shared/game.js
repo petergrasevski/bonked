@@ -1,3 +1,4 @@
+import {DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
 export const MAX_PLAYERS = 6;
 export const LAPS = 3;
 export const STEP = 1 / 60;
@@ -44,9 +45,9 @@ function spline(p0, p1, p2, p3, t) {
 export const TRACKS = Object.freeze({
   coast:{id:'coast',name:'Saltwater Circuit',description:'Coastal causeways · technical turns',grip:1},
   ice:{id:'ice',name:'Glacier Run',description:'2.03 km of ice · split lanes · exposed straights',grip:.12},
-  desert:{id:'desert',name:'Redrock Overpass',description:'Desert figure eight · elevated bridge · two jumps',grip:.85},
+  desert:{id:'desert',name:'Redrock Overpass',description:'Mountain bridge · four jumps · mole flats',grip:.85},
 });
-export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
+export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
 const trackCache=new Map();
 const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
 function icePoints(){
@@ -64,7 +65,10 @@ function icePoints(){
 }
 function desertPoints(){
   // Crossing at t=0 is a 20m bridge; crossing at pi is the road beneath it.
-  return Array.from({length:1500},(_,i)=>{const t=i/1500*Math.PI*2;return {x:270*Math.sin(t),z:170*Math.sin(2*t),y:20*Math.max(0,Math.cos(t))**4};});
+  const points=Array.from({length:1500},(_,i)=>{const t=i/1500*Math.PI*2;return {x:270*Math.sin(t),z:170*Math.sin(2*t),y:20*Math.max(0,Math.cos(t))**4};});
+  const lengths=points.map((p,i)=>Math.hypot(p.x-points[(i+1)%points.length].x,p.z-points[(i+1)%points.length].z)),total=lengths.reduce((a,b)=>a+b,0);
+  let distance=0;for(let i=0;i<points.length;i++){points[i].y=desertElevation(distance/total,points[i].y,total);distance+=lengths[i];}
+  return points;
 }
 export function iceSplit(x){
   if(activeTrack.id!=='ice')return 0;
@@ -80,14 +84,14 @@ export function hasBarrier(fraction,side=0,inner=false){
     return side<0?p.x>-100&&p.x<-40:p.x>40&&p.x<100;
   }
   if(inner)return false;
-  if(activeTrack.id==='desert')return true;
+  if(activeTrack.id==='desert')return desertHasBarrier(fraction);
   const section=Math.floor(((fraction%1+1)%1)*24);return ![3,8,14,19].includes(section);
 }
 export function selectTrack(id='coast'){
   if(!Object.hasOwn(TRACKS,id))throw new Error('Unknown track');
   activeTrack=TRACKS[id];
   if(trackCache.has(id)){
-    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS}=trackCache.get(id));return activeTrack;
+    ({TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS}=trackCache.get(id));return activeTrack;
   }
 TRACK = Array.from({ length: 1500 }, (_, i) => {
   const f = i / 1500 * anchors.length, j = Math.floor(f), t = f - j, n = anchors.length;
@@ -115,13 +119,14 @@ for(let i=0;i<SEGMENTS.length;i++){
   for(const f of PLAZAS){const d=arcDistance(s.start/TRACK_LENGTH,f);if(d<65)halfWidth=Math.max(halfWidth,6+6*(1+Math.cos(Math.PI*d/65))/2);}
   let clearance=Infinity;
   for(let j=0;j<SEGMENTS.length;j+=3){const q=SEGMENTS[j];if(arcDistance(s.start/TRACK_LENGTH,q.start/TRACK_LENGTH)>45)clearance=Math.min(clearance,Math.hypot(s.x-q.x,s.z-q.z));}
-  s.halfWidth=activeTrack.id==='ice'?(9+Math.max(6*clamp((Math.abs(s.x)-420)/40,0,1),5*clamp((155-Math.abs(s.x))/50,0,1))):activeTrack.id==='desert'?9:Math.max(6,Math.min(halfWidth,(clearance-3)/2));
+  s.halfWidth=activeTrack.id==='ice'?(9+Math.max(6*clamp((Math.abs(s.x)-420)/40,0,1),5*clamp((155-Math.abs(s.x))/50,0,1))):activeTrack.id==='desert'?desertHalfWidth(s.start/TRACK_LENGTH,TRACK_LENGTH):Math.max(6,Math.min(halfWidth,(clearance-3)/2));
 }
 for(let i=0;i<SEGMENTS.length;i++)SEGMENTS[i].nextHalfWidth=SEGMENTS[(i+1)%SEGMENTS.length].halfWidth;
 OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
   const f=fraction+offset/TRACK_LENGTH,p=trackAt(f);
   return {id:`island-${index}-${i}`,fraction:f,x:p.x,z:p.z,radius:1.65,height:1.5};
 }));
+MOLES=activeTrack.id==='desert'?desertMoles(TRACK_LENGTH).map(m=>{const p=trackAt(m.fraction);return {...m,x:p.x+p.nx*m.lateral,y:p.y,z:p.z+p.nz*m.lateral,angle:p.angle};}):[];
 PICKUP_ROW_COUNT = Math.round(TRACK_LENGTH/(TOP_SPEED*10));
 PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
   let fraction=START_FRACTION+(90+row*TRACK_LENGTH/PICKUP_ROW_COUNT)/TRACK_LENGTH,p=trackAt(fraction);
@@ -129,7 +134,7 @@ PICKUP_LOCATIONS = Array.from({length:PICKUP_ROW_COUNT},(_,row)=>{
   const count=p.halfWidth>=8?4:3,edge=p.halfWidth-CAR_WIDTH/2-.8;
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
 }).flat();
-  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS});
+  trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,PICKUP_ROW_COUNT,PICKUP_LOCATIONS});
   return activeTrack;
 }
 export function trackAt(fraction) {
@@ -146,7 +151,7 @@ export function nearestTrack(x,z,hint=null) {
     const px=s.x+s.dx*t, pz=s.z+s.dz*t, d=Math.hypot(x-px,z-pz);
     const fraction=(s.start+s.len*t)/TRACK_LENGTH;
     const routePenalty=activeTrack.id==='desert'&&hint!==null?Math.max(0,arcDistance(fraction,hint)-50)*2:0;
-    if(d+routePenalty<bestScore){let rampLift=0;if(activeTrack.id==='desert')for(const ramp of [.23,.73]){const distance=(ramp-fraction)*TRACK_LENGTH;if(distance>=0&&distance<7)rampLift=1-distance/7;}bestScore=d+routePenalty;best={y:s.y+s.dy*t+rampLift,grade:s.dy/s.len,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
+    if(d+routePenalty<bestScore){const rampLift=activeTrack.id==='desert'?desertRampLift(fraction,TRACK_LENGTH):0,rampGrade=activeTrack.id==='desert'?desertRampGrade(fraction,TRACK_LENGTH):0;bestScore=d+routePenalty;best={y:s.y+s.dy*t+rampLift,grade:s.dy/s.len+rampGrade,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
   }
   return best;
 }
@@ -168,10 +173,32 @@ export function constrainObstacles(car){
     if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;car.impactTime=.4;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
   }
 }
+// Timed hazards share the explicit simulation clock with instanced visuals.
+// Retracted holes are completely driveable; airborne cars clear raised heads.
+export function collideDesertMoles(car,raceSeconds=car.raceTime||0,{damage=true}={}){
+  const impacts=[];if(activeTrack.id!=='desert'||car.falling||car.eliminated&&!car.wrecked)return impacts;
+  const c=Math.cos(car.angle),s=Math.sin(car.angle);
+  for(const mole of MOLES){
+    if(Math.hypot(car.x-mole.x,car.z-mole.z)>mole.radius+CAR_LENGTH)continue;
+    const state=moleState(mole,raceSeconds);if(!state.active||car.y>mole.y+mole.height*state.rise+.1||car.y+1.4<mole.y)continue;
+    const ox=(mole.x-car.x)*c+(mole.z-car.z)*s,oz=-(mole.x-car.x)*s+(mole.z-car.z)*c;
+    const qx=clamp(ox,-CAR_LENGTH/2,CAR_LENGTH/2),qz=clamp(oz,-CAR_WIDTH/2,CAR_WIDTH/2);
+    let dx=qx-ox,dz=qz-oz,d=Math.hypot(dx,dz),depth=mole.radius-d;
+    if(depth<=0)continue;
+    if(d<1e-6){const ex=CAR_LENGTH/2-Math.abs(ox),ez=CAR_WIDTH/2-Math.abs(oz);if(ex<ez){dx=ox>0?-1:1;dz=0;depth=mole.radius+ex;}else{dx=0;dz=oz>0?-1:1;depth=mole.radius+ez;}d=1;}
+    const nx=(dx*c-dz*s)/d,nz=(dx*s+dz*c)/d;car.x+=nx*(depth+.002);car.z+=nz*(depth+.002);
+    const impact=-(car.vx*nx+car.vz*nz);if(impact<=0)continue;
+    car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;car.impactTime=Math.max(car.impactTime||0,.5);
+    const amount=Math.min(18,3+impact*.25),canDamage=(car.moleCooldown||0)<=0&&impact>4;
+    if(canDamage){if(damage)damageCar(car,amount);car.moleCooldown=.65;}
+    impacts.push({id:mole.id,speed:impact,damage:canDamage&&damage?amount:0});
+  }
+  return impacts;
+}
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
   const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
-  return { gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
+  return { raceTime:0,moleCooldown:0,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
   return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
@@ -284,7 +311,7 @@ export function constrainRoad(car){
 }
 export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
-  for(const key of ['tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
+  for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
   car.tasePhase=(car.tasePhase||0)+dt;
   verticalStep(car,dt);
   if(car.falling&&car.y< -20){car.vx=0;car.vz=0;return;}
@@ -329,8 +356,8 @@ export function stepCar(car, input, dt=STEP) {
   let diff=track.fraction-car.trackFraction;if(diff>.5)diff-=1;if(diff<-.5)diff+=1;
   if(track.distance<track.halfWidth+5&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
   if(activeTrack.id==='desert'&&!uncontrolled&&Math.hypot(car.vx,car.vz)>12){
-    for(const ramp of [.23,.73])if(car.trackFraction<ramp&&track.fraction>=ramp&&diff>0&&diff<.01){
-      car.y=track.y+1.08;car.vy=8+Math.hypot(car.vx,car.vz)*.15;car.rampFlight=true;
+    for(const ramp of DESERT_JUMPS)if(car.trackFraction<ramp.fraction&&track.fraction>=ramp.fraction&&diff>0&&diff<.01){
+      car.y=Math.max(car.y,trackAt(ramp.fraction).y+ramp.height+.08);car.vy=8+Math.hypot(car.vx,car.vz)*.15;car.rampFlight=true;
     }
   }
   car.trackFraction=track.fraction;car.lap=clamp(Math.floor(Math.max(0,car.progress))+1,1,LAPS);

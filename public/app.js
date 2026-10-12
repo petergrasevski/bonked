@@ -181,7 +181,8 @@ function renderedState(now,dt){
   const cars=[predicted,...predictedOthers].map(car=>corrections.render(car,dt,fresh?accumulator:0));
   const players=state.players.map(p=>({...p,...cars.find(c=>c.id===p.id)}));
   const camera=cameraFrame(createChase(players),players);
-  return {...state,players,camera};
+  const raceTime=Math.max(state.raceTime||0,...cars.map(car=>car.raceTime||0))+(fresh?accumulator:0);
+  return {...state,players,camera,raceTime};
 }
 function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-lastFrame)/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
   while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden){const active=['racing','countdown'].includes(state.phase)&&now-lastState<250&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!predicted?.eliminated;const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<250){predictFleet(predicted,predictedOthers,command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}

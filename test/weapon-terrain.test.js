@@ -1,3 +1,4 @@
+import {DESERT_JUMPS} from '../shared/desert-features.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Vector3,Euler} from 'three';
@@ -83,7 +84,7 @@ test('rockets stay above steep uphill and downhill desert road without cutting a
 });
 
 test('rocket terrain following stays above the desert jump and continues over its launch edge',()=>{
-  selectTrack('desert');const a=player('a',.21),b=player('b',.26),r=room(a,b);fire(r,a,'rocket');let airborne=false;
+  selectTrack('desert');const ramp=DESERT_JUMPS[1],a=player('a',ramp.fraction-.02),b=player('b',ramp.fraction+.04),r=room(a,b);fire(r,a,'rocket');let airborne=false;
   for(let i=1;i<=220&&r.projectiles.length;i++){
     updateCombat(r,STEP,i*STEP*1000);const shot=r.projectiles[0];if(!shot)break;
     const floor=nearestTrack(shot.x,shot.z,shot.trackFraction).y;

@@ -4,6 +4,8 @@ import {buildIceShelf} from './ice-shelf.js';
 import {createIceMaterial} from './ice-surface.js';
 import {buildGlacierValley,updateGlacierValley} from './glacier-valley.js';
 import {buildTrackBarrier} from './track-barriers.js';
+import {buildDesertScenery} from './desert-scenery.js';
+import {buildDesertMoles,updateDesertMoles} from './desert-moles.js';
 import {createDesertMaterial} from './desert-surface.js';
 import {createAtmosphere} from './atmosphere.js';
 import {createCoastalWater} from './water.js';
@@ -30,7 +32,7 @@ export class World{
     this.camera=new THREE.PerspectiveCamera(CAMERA_FOV,1,.2,600);this.camera.position.set(0,90,64);this.camera.lookAt(0,0,0);
     this.atmosphere=createAtmosphere(this.renderer,this.scene,activeTrack.id,{mobile:matchMedia('(pointer: coarse)').matches});this.sun=this.atmosphere.sun;this.environment=this.atmosphere.environment;
     this.materials=new Map();this.textures=new Map();this.static=new THREE.Group();this.scene.add(this.static);this.cars=new Map();this.boxes=[];this.rockets=new Map();this.lightning=new Map();this.dangerRings=new Map();this.effects=new Map();this.trails=[];this.frame=0;this.mines=new Map();this.chains=new Map();this.seenEffects=new Set();this.particles=[];this.particleClock=0;
-    this.buildTrack();if(activeTrack.id==='coast'){this.buildScenery();this.landmarks=buildLandmarks(this);}else{this.landmarks=[];this.buildBiome();}if(activeTrack.id==='ice')this.valley=buildGlacierValley(this);this.mergeStatic();this.buildWater();this.buildPickups();this.buildEliminationLine();this.buildParticles();
+    this.buildTrack();if(activeTrack.id==='coast'){this.buildScenery();this.landmarks=buildLandmarks(this);}else{this.landmarks=[];this.buildBiome();}if(activeTrack.id==='ice')this.valley=buildGlacierValley(this);if(activeTrack.id==='desert'){buildDesertScenery(this);this.desertMoles=buildDesertMoles(this);}this.mergeStatic();this.buildWater();this.buildPickups();this.buildEliminationLine();this.buildParticles();
     this.previewCars=COLORS.map((color,i)=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});
     this.resize();this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(container);
     this.renderer.compile(this.scene,this.camera);
@@ -107,6 +109,7 @@ export class World{
       if(activeTrack.id==='coast'){this.ribbon(p=>side*(p.halfWidth-.18),.28,.045,0xffce32,0,true);
       this.ribbon(p=>side*(p.halfWidth+.16),.55,.06,C.cream,0,true);
       this.ribbon(p=>side*(p.halfWidth+.16),.55,.065,C.coral,3,true);}
+      if(activeTrack.id==='desert')this.ribbon(p=>side*(p.halfWidth-.25),.18,.065,0xf0d6a8,0,'exposed');
       for(let i=0;i<TRACK.length;i+=2){
         const p=SEGMENTS[i],q=SEGMENTS[(i+2)%TRACK.length];if(!hasBarrier(p.start/TRACK_LENGTH,side))continue;
         const x=p.x+p.nx*(p.halfWidth+.28)*side,z=p.z+p.nz*(p.halfWidth+.28)*side,ex=q.x+q.nx*(q.halfWidth+.28)*side,ez=q.z+q.nz*(q.halfWidth+.28)*side;
@@ -274,7 +277,7 @@ export class World{
   }
   resize(){const w=this.container.clientWidth,h=this.container.clientHeight;if(w&&h)this.renderer.setSize(w,h,false);}
   update(state,localId,localCar,dt,now){
-    if(this.valley)updateGlacierValley(this.valley,now);this.waterMaterial.uniforms.time.value=now/1000;if(this.flameMaterial)this.flameMaterial.uniforms.time.value=now/1000;this.frame++;this.particleClock+=dt;this.emitParticles=this.particleClock>=1/30;if(this.emitParticles)this.particleClock%=1/30;
+    if(this.desertMoles)updateDesertMoles(this.desertMoles,state?.raceTime??now/1000);if(this.valley)updateGlacierValley(this.valley,now);this.waterMaterial.uniforms.time.value=now/1000;if(this.flameMaterial)this.flameMaterial.uniforms.time.value=now/1000;this.frame++;this.particleClock+=dt;this.emitParticles=this.particleClock>=1/30;if(this.emitParticles)this.particleClock%=1/30;
     const previewProgress=START_FRACTION+((now/1000*22)%TRACK_LENGTH)/TRACK_LENGTH;
     const previewChase=createChase([{progress:previewProgress-START_FRACTION}]);
     const mode=state?`${state.code}:${state.round||1}`:'preview';if(this.cameraMode!==mode){this.follow=null;this.cameraMode=mode;this.seenEffects.clear();}

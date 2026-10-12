@@ -1,3 +1,4 @@
+import {DESERT_JUMPS} from '../shared/desert-features.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {selectTrack,TRACK,TRACK_LENGTH,SEGMENTS,trackAt,nearestTrack,hasBarrier,spawnCar,stepCar,botInput,NEUTRAL,collideCars,STEP} from '../shared/game.js';
@@ -26,10 +27,10 @@ test('desert crossing stays on its own route and bridge level; stacked cars do n
   const a={...spawnCar(),x:0,z:0,y:20,groundY:20,trackFraction:0},b={...a,y:0,groundY:0,trackFraction:.5};
   collideCars([a,b]);assert.equal(a.x,0);assert.equal(b.x,0);
 });
-test('bots navigate a full lap on each new course, including both desert jumps',()=>{
+test('bots navigate a full lap on each new course, including all four desert jumps',()=>{
   for(const id of ['ice','desert']){selectTrack(id);const c=spawnCar();let jumps=0,wasAir=false;
     for(let i=0;i<20000&&c.progress<1&&!c.eliminated;i++){stepCar(c,botInput(c));if(c.rampFlight&&!wasAir)jumps++;wasAir=!!c.rampFlight;assert.ok(Number.isFinite(c.x)&&Number.isFinite(c.y));}
-    assert.ok(c.progress>=1,`${id} stopped at ${c.progress}`);assert.equal(c.falling,false);assert.equal(c.health,100);if(id==='desert')assert.equal(jumps,2);
+    assert.ok(c.progress>=1,`${id} stopped at ${c.progress}`);assert.equal(c.falling,false);assert.equal(c.health,100);if(id==='desert')assert.equal(jumps,DESERT_JUMPS.length);
   }
 });
 test('pickups on a bridge cannot be collected from the road below',()=>{
