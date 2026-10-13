@@ -16,6 +16,7 @@ import { detectDevice, initDisplayGuide } from './display.js';
 import { WeaponAudio } from './weapon-audio.js';
 import { EngineAudio, raceListener } from './engine-audio.js';
 import { AudioBank } from './audio-bank.js';
+import {readAudioSettings,saveAudioSettings} from './audio-settings.js';
 import { AudioMixer } from './audio-mixer.js';
 import { RoadAudio } from './road-audio.js';
 import { World } from './world.js';
@@ -192,22 +193,36 @@ $('race-settings').onclick=$('settings-open').onclick;
 $('copy-network').onclick=async()=>{const log=network.export();try{await navigator.clipboard.writeText(log);toast('Network log copied.');}catch{const t=document.createElement('textarea');t.value=log;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Network log copied.':'Could not copy. Use the browser console: bonkedNetwork.export()');}};
 $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target===$('settings'))closeSettings();};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
-let audio=null,engineAudio=null,weaponAudio=null,roadAudio=null,audioBank=null,audioMixer=null,soundEnabled=false;
+let audio=null,engineAudio=null,weaponAudio=null,roadAudio=null,audioBank=null,audioMixer=null;
+let audioStorage;try{audioStorage=localStorage;}catch{}
+const audioSettings=readAudioSettings(audioStorage);let soundEnabled=audioSettings.effects>0;
 function stopGameAudio(){weaponAudio?.stop();engineAudio?.stop();roadAudio?.stop();audioMixer?.stop();}
 function unlockAudio(){
-  if(!soundEnabled)return;
+  if(!soundEnabled&&audioSettings.music===0)return;
   if(!audio){
-    audio=new(window.AudioContext||window.webkitAudioContext)();audioBank=new AudioBank(audio);audioMixer=new AudioMixer(audio);
+    audio=new(window.AudioContext||window.webkitAudioContext)();audioBank=new AudioBank(audio);audioMixer=new AudioMixer(audio,audioSettings);
     const options={bank:audioBank,mixer:audioMixer};weaponAudio=new WeaponAudio(audio,options);engineAudio=new EngineAudio(audio,options);roadAudio=new RoadAudio(audio,options);
     loadGameAudio();
   }
   if(audio.state==='suspended')audio.resume().catch(()=>{});
 }
 function loadGameAudio(){
-  audioBank.load().then(({failed})=>{if(failed.length){console.warn('Unavailable audio samples:',failed);if(soundEnabled)toast('Some sounds could not load. Toggle sound to retry.');}});
+  audioBank.load().then(({failed})=>{if(failed.length){console.warn('Unavailable audio samples:',failed);if(soundEnabled)toast('Some sounds could not load. Adjust sound effects volume to retry.');}});
 }
 function beep(freq,duration,volume){if(!audio||!soundEnabled)return;const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=freq;g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audioMixer.bus('ui'));o.onended=()=>{o.disconnect();g.disconnect();};o.start();o.stop(audio.currentTime+duration);}
-$('sound').onclick=()=>{soundEnabled=!soundEnabled;$('sound-state').textContent=soundEnabled?'ON':'OFF';$('sound').setAttribute('aria-label',soundEnabled?'Mute sound':'Enable sound');unlockAudio();if(soundEnabled&&audioBank?.errors.size&&!audioBank.loading)loadGameAudio();if(!soundEnabled){stopGameAudio();}};
+for(const [name,id]of [['effects','effects-volume'],['music','music-volume']]){
+  const slider=$(id),output=$(id+'-value');
+  slider.value=Math.round(audioSettings[name]*100);output.value=slider.value+'%';
+  slider.addEventListener('input',()=>{
+    audioSettings[name]=Number(slider.value)/100;output.value=slider.value+'%';
+    soundEnabled=audioSettings.effects>0;saveAudioSettings(audioStorage,audioSettings);audioMixer?.setVolumes(audioSettings);
+    unlockAudio();if(soundEnabled&&audioBank?.errors.size&&!audioBank.loading)loadGameAudio();
+    if(!soundEnabled){weaponAudio?.stop();engineAudio?.stop();roadAudio?.stop();}
+  });
+}
+// Unlock on the first real interaction, including joining as a non-host or resuming a room.
+for(const event of ['pointerdown','keydown'])document.addEventListener(event,unlockAudio,{passive:true});
+
 function renderedState(now,dt){
   if(!state||!predicted)return state;
   const fresh=now-lastState<PREDICTION_GRACE_MS&&state.phase==='racing';
@@ -226,7 +241,7 @@ function frame(now){requestAnimationFrame(frame);const frameMs=now-lastFrame;net
   if(now-uiAt>100){uiAt=now;updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,presentation:'predicted-fleet',bufferMs:0,underruns:0,server:network.server});}
   const listening=raceListener(rendered,world?.follow),audible=soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible,myId);engineAudio?.update(rendered,listening,audible,myId);roadAudio?.update(rendered,listening,audible,myId);
-  audioMixer?.update(audible&&['countdown','racing'].includes(rendered?.phase),voice.activityLevel());
+  audioMixer?.update(ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000&&['countdown','racing','finished'].includes(rendered?.phase),voice.activityLevel());
 }
 displayGuide=initDisplayGuide({onOpen:()=>{releaseControls();$('settings').hidden=true;},onClose:()=>{accumulator=0;world?.resize();}});
 requestAnimationFrame(frame);

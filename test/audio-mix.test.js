@@ -76,3 +76,37 @@ test('nearby enemy impacts outrank distant owned explosions, with camera listeni
   assert.equal(weaponFocus({kind:'shotgun',owner:'self',x:80,z:0},self),true);
   assert.equal(weaponFocus({kind:'shotgun',owner:'self',x:80,z:0},{...self,eliminated:true}),false);
 });
+
+test('volume controls preserve the original ceiling at 100% and independently mute effects',()=>{
+  const ctx=audioContext(),mixer=new AudioMixer(ctx,{effects:.5,music:.5});mixer.update(true);
+  assert.equal(mixer.master.gain.value,.4);assert.equal(mixer.music.gain.value,.4);
+  mixer.setVolumes({effects:1});mixer.update(true);assert.equal(mixer.master.gain.value,.8);
+  mixer.setVolumes({effects:0});mixer.update(true);assert.equal(mixer.master.gain.value,0);assert.equal(mixer.music.gain.value,.4);
+  mixer.setVolumes({effects:.5,music:0});mixer.update(true);assert.equal(mixer.master.gain.value,.4);assert.equal(mixer.music.gain.value,0);
+  mixer.stop();assert.equal(mixer.master.gain.value,0);assert.equal(mixer.music.gain.value,0);
+});
+test('death-line elimination and one results chime survive the final snapshot and clean up',()=>{
+  const ctx=audioContext(),mixer=new AudioMixer(ctx),fx=new WeaponAudio(ctx,{bank:audioBank(),mixer}),s=state([car('self',150)]);
+  fx.update(s,listener,true,'self');s.phase='finished';s.players[0].eliminated=true;
+  s.sounds=[{id:42,kind:'elimination',owner:'self',x:150,z:0,at:100}];
+  fx.update(s,listener,true,'self');assert.equal(fx.voices.size,2);
+  const boom=[...fx.voices].find(v=>v.kind==='elimination');assert.ok(boom.level.gain.value>=.8);assert.equal(boom.pan.connections[0],mixer.bus('ui'));
+  fx.update(s,listener,true,'self');assert.equal(fx.voices.size,2);assert.ok([...fx.voices].every(v=>!v.stopped));
+  fx.update(s,listener,false,'self');assert.ok([...fx.voices].every(v=>v.stopped));
+  for(const v of [...fx.voices])for(const source of v.sources)source.end();assert.equal(fx.voices.size,0);
+  fx.update(s,listener,true,'self');assert.equal(fx.voices.size,0);
+});
+test('results chime does not replay on reconnect, a muted transition, or a new room',()=>{
+  for(const initial of ['finished','racing']){
+    const fx=new WeaponAudio(audioContext(),{bank:audioBank()}),s=state([car('self')]);s.phase=initial;
+    fx.update(s,listener,initial==='finished','self');s.phase='finished';fx.update(s,listener,false,'self');
+    fx.update(s,listener,true,'self');assert.equal(fx.voices.size,0);
+    s.code='DEF';fx.update(s,listener,true,'self');assert.equal(fx.voices.size,0);
+  }
+});
+test('electrical firing stays continuous across snapshots and releases when firing stops',()=>{
+  const fx=new WeaponAudio(audioContext(),{bank:audioBank()}),s=state([{...car('self'),firing:'taser'}]);
+  fx.update(s,listener,true,'self');const loop=fx.loops.get('self');assert.equal(loop.sources[0].buffer.name,'taser');assert.equal(loop.sources[0].loop,true);
+  for(let i=0;i<30;i++)fx.update(s,listener,true,'self');assert.equal(fx.voices.size,1);assert.equal(fx.loops.get('self'),loop);
+  s.players[0].firing=null;fx.update(s,listener,true,'self');assert.equal(loop.stopped,true);assert.equal(fx.loops.size,0);
+});

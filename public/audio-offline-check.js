@@ -13,12 +13,13 @@ export async function checkAudio(){
     state.time=t*1000;state.raceTime=t;
     players.forEach((car,i)=>{car.vx=Math.min(42,t*10+i);car.vz=t>2&&t<4?8:0;car.firing=i===2&&t>1&&t<4?'flame':i===3&&t>1&&t<4?'taser':null;});
     state.trackId=t<3?'coast':t<5?'ice':'desert';if(t>=6)players[0].eliminated=true;
+    if(t>=6.3){state.phase='finished';state.sounds=[{id:'death-line',kind:'elimination',owner:'0',x:0,z:0,at:6300}];}
     if(t>=7){engines.stop();weapons.stop();road.stop();mixer.stop();return;}
     engines.update(state,listener,true,'0');road.update(state,listener,true,'0');weapons.update(state,listener,true,'0');
     const kinds=Object.keys(WEAPON_SOUNDS).filter(k=>!WEAPON_SOUNDS[k].loop),index=Math.round(t*10);
     if(index%4===0)weapons.voice(kinds[(index/4)%kinds.length],{volume:1,pan:0},{local:true});
     if(index===40)for(let i=0;i<60;i++)weapons.voice(i%8===0?'explosion':'machinegun',{volume:i%8===0?1:.15,pan:0},{local:i%8===0});
-    maxVoices=Math.max(maxVoices,weapons.voices.size);if(t>=6)spectatorEngines=engines.engines.size;
+    maxVoices=Math.max(maxVoices,weapons.voices.size);if(t>=6&&t<6.3)spectatorEngines=engines.engines.size;
     mixer.update(true,t>4.5&&t<5.5?.1:0);
   }
   update(0);

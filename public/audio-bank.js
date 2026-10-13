@@ -1,7 +1,7 @@
 // All samples are local CC0 assets. Provenance and processing live in sounds/sources.json.
 export const SOUND_FILES = [
   'engine-idle','engine-low','engine-mid','engine-high','coast','wind','skid',
-  'gunshot','shotgun','flame','taser','thump',
+  'gunshot','shotgun','flame','taser','thump','rail-body','elimination','round-end',
   ...['plasma','rail','explosion','shield','metal','clank'].flatMap(kind=>[0,1,2].map(i=>`${kind}-${i}`)),
 ];
 export class AudioBank {

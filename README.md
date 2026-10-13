@@ -101,7 +101,7 @@ Mines sample the road at the drop point behind the car, align to its slope and r
 
 Directional weapons use the rendered car’s full pitch/roll/yaw for their muzzle, aim and swept 3D hit detection. Grounded cars align to road slopes; airborne rotation still changes aim. Plasma and tracer visuals predict vertical velocity as well as horizontal movement. Rails and shotgun beams show their actual 3D path; bridge decks stay separate for hits.
 
-Weapon pickups form rows of three or four across the road, spaced about ten seconds apart at full speed. These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its 2-second respawn. Sound is opt-in in **Settings → Engine & effects**. Each weapon has a distinct synthesized sound: shots and impacts play once from server events, while the flamethrower and taser loop only while firing. Nearby opponents are audible with distance attenuation and stereo positioning; muting, leaving, hiding the page or losing connection stops effects. The physics is a lightweight arcade simulation: planar car-to-car impulses, wheel support and 3D terrain contacts at exposed edges, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or is stranded on its roof until the elimination line catches it; it is not a full suspension or general-purpose 3D rigid-body engine.
+Weapon pickups form rows of three or four across the road, spaced about ten seconds apart at full speed. These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its 2-second respawn. Sound effects are on by default at **50%**, with independent **Settings → Sound effects / Music** sliders saved on this device. Effects at 100% retain the original mixer level; 0% mutes them. Music is reserved for a future soundtrack. Each weapon has a distinct layered sound: shots and impacts play once from server events, while the flamethrower and taser loop only while firing. Nearby opponents are audible with distance attenuation and stereo positioning; muting, leaving, hiding the page or losing connection stops effects. The physics is a lightweight arcade simulation: planar car-to-car impulses, wheel support and 3D terrain contacts at exposed edges, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or is stranded on its roof until the elimination line catches it; it is not a full suspension or general-purpose 3D rigid-body engine.
 
 The race uses the full screen, with Settings, ping, and segmented score thermometers in the upper-left on every device. Score segments glow more as players approach the winning total. Results show the same thermometers from highest to lowest leaderboard total, with bright new points and half-opacity lost points. Your result card has a bright car-colour outline, tinted background and YOU badge, and scrolls into view within the leaderboard on narrow screens. Ready ticks appear beside each ready driver (including every bot), and the centred Ready button fills from 70% to full opacity over the five-second wait. Rendering uses worn asphalt and concrete, rounded chassis, softer billboard smoke, muted coastal colours, water highlights, and a light vignette. All textures and models are generated locally; no remote art assets or image processing passes are required.
 
@@ -185,7 +185,7 @@ The cached track registry lives in `shared/game.js`; `selectTrack(room.trackId)`
 
 The road widens smoothly around bends (up to 18m) and three passing plazas (24m). Raised red/concrete walls with dark caps protect the edge; yellow paint alone marks unprotected drops. Six yellow/black solid traffic islands divide the plazas. The server, local prediction, camera, pickups and bots use the same road widths and obstacle positions.
 
-Main menu, lobby, results and settings use the Pit Console design: clipped metal frames, recessed controls, a painted top edge and angled primary buttons. The entry screen starts with the shared Name field, and Join stays disabled until the room code contains three letters (including after editing and while a request is pending). The menu demo uses two cars side by side with a 1.7m longitudinal stagger. Saltwater and Redrock preview cameras pan forwards to leave their volcano and bridge visible below the title artwork. Headings, primary buttons and score totals use the locally hosted Righteous typeface; dense labels and inputs retain the system sans-serif. The font and its SIL Open Font License are in `public/fonts/`. Settings contains engine audio and, during a race, Leave race. The landscape lobby respects both screen safe areas and keeps Start tournament aligned with the circuit cards. Music has been removed. Each car’s engine stops on elimination, falling or finish. Opponent engines and weapons remain audible while spectating; the listening position follows the shared camera instead of the eliminated car. All game audio stops on mute, stale state, disconnection, hiding the page, or leaving the room.
+Main menu, lobby, results and settings use the Pit Console design: clipped metal frames, recessed controls, a painted top edge and angled primary buttons. The entry screen starts with the shared Name field, and Join stays disabled until the room code contains three letters (including after editing and while a request is pending). The menu demo uses two cars side by side with a 1.7m longitudinal stagger. Saltwater and Redrock preview cameras pan forwards to leave their volcano and bridge visible below the title artwork. Headings, primary buttons and score totals use the locally hosted Righteous typeface; dense labels and inputs retain the system sans-serif. The font and its SIL Open Font License are in `public/fonts/`. Settings contains sound effects and music volume sliders and, during a race, Leave race. The landscape lobby respects both screen safe areas and keeps Start tournament aligned with the circuit cards. No music track is bundled yet. Each car’s engine stops on elimination, falling or finish. Opponent engines and weapons remain audible while spectating; the listening position follows the shared camera instead of the eliminated car. All game audio stops on mute, stale state, disconnection, hiding the page, or leaving the room.
 
 ### Tournament and landmarks
 
@@ -263,3 +263,27 @@ uses the same surface triangles for rendering and collision.
 Weapon effects use bounded batches for layered fire, sparks, smoke, shockwaves,
 energy trails and branched arcs. Shields and sky strikes have animated energy
 surfaces. Visual effects leave weapon damage and timing unchanged.
+
+### Sampled audio and volume controls
+
+The local bank contains 33 CC0 effects and loops (about 4.2 MB), with source URLs,
+processing details and SHA-256 hashes in `public/sounds/sources.json`. Engine RPM
+bands, recorded gunfire, rubber skids, wind and coastal ambience feed separate mixer
+buses. Player sounds and nearby threats take priority over distant engines and ambience;
+impacts and party speech duck less important layers. Effects run through compression
+and a bounded output stage before the volume control. The music bus has an independent
+volume, reserved for later. Browser audio unlocks on the first interaction.
+
+The railgun layers its energy crack with a deeper, longer bass impact. Machine gun and
+plasma shots are softer; the taser holds a seamless irregular electric arc while firing.
+Death-line eliminations emit a server event for a bass-drum boom, with the eliminated
+player's own cue kept audible. Results play a short two-note chime once per race
+transition. Final impacts can decay over the results screen; held sounds stop. The
+taser, rail body, elimination and chime samples are original deterministic synthesis
+in `tools/build-audio.py`, included under CC0 with no attribution requirement.
+
+Run `node --test --test-concurrency=1 test/*.test.js` for regressions. Open
+`/audio-check.html` and press Run audio checks for a real Web Audio offline render
+covering the bank, an eight-car mix, weapon bursts, spectator transitions, results
+cues and cleanup. Rebuild assets using `python tools/build-audio.py SOURCE_DIRECTORY`
+with NumPy, SciPy and soundfile installed, and the inputs named in the manifest.

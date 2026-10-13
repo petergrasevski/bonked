@@ -186,7 +186,10 @@ const timer=setInterval(()=>{
         updateCombat(room,STEP,now);
         for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.sounds.push({id:++room.serial,kind:'explosion',owner:p.id,x:p.car.x,y:p.car.y||0,z:p.car.z,at:now});room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}
         const players=[...room.players.values()];
-        for(const p of updateChase(room.chase,players,now-room.startAt))room.effects.push({id:randomUUID(),kind:'hit',x:p.car.x,z:p.car.z,until:now+600,color:p.color});
+        for(const p of updateChase(room.chase,players,now-room.startAt)){
+          room.effects.push({id:randomUUID(),kind:'hit',x:p.car.x,z:p.car.z,until:now+600,color:p.color});
+          room.sounds.push({id:++room.serial,kind:'elimination',owner:p.id,x:p.car.x,y:p.car.y||0,z:p.car.z,at:now});
+        }
         updateSkyBeams(room,now);
         for(const p of players)recordMotion(p.car,motionBefore.get(p.id),STEP);
         const survivors=players.filter(p=>!p.car.eliminated),finished=survivors.filter(p=>p.car.finished);

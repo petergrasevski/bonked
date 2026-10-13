@@ -3,7 +3,7 @@
   "attributionRequired": false,
   "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
   "retrieved": "2026-10-13",
-  "notes": "Freesound inputs use the site\u2019s public HQ MP3 previews (lossy), not original WAV downloads. Weapon designs include Kenney synthesized effects and recorded gunfire. Skid is recorded rubber foley. RPM anchors are authored game tuning, not measured vehicle RPM.",
+  "notes": "Freesound inputs use the site\u2019s public HQ MP3 previews (lossy), not original WAV downloads. Weapon designs include Kenney synthesized effects and recorded gunfire. Taser, rail body, elimination and round-end cues are original synthesis authored by tools/build-audio.py, released under CC0; their inputs are empty. Skid is recorded rubber foley. RPM anchors are authored game tuning, not measured vehicle RPM.",
   "sources": [
     {
       "name": "engine-idle",
@@ -380,16 +380,6 @@
       "peak": 0.84,
       "sha256": "e2dbc3e5a586e6b1eb30c76754a2d02939c6a379a746104885da35db063ffa1b"
     },
-    "taser": {
-      "file": "taser.wav",
-      "inputs": [
-        "sci-fi/Audio/computerNoise_001.ogg"
-      ],
-      "processing": "Mono, bandpass, 120ms loop crossfade, level matched",
-      "duration": 4.88,
-      "peak": 0.3804,
-      "sha256": "ad369eeaa0ec3e6037c41d57d2cb21ba4b2693e5c03f3ade0b5efb29875dc984"
-    },
     "thump": {
       "file": "thump.wav",
       "inputs": [
@@ -399,6 +389,38 @@
       "duration": 1.1996,
       "peak": 0.84,
       "sha256": "a5fc20a6825d5037a22a9ee3de3b060f7e68cafce11deef58b837296db804271"
+    },
+    "taser": {
+      "file": "taser.wav",
+      "inputs": [],
+      "processing": "Original seeded electrical arc synthesis: continuous noise, irregular crackle and 120 Hz buzz, seamless crossfade",
+      "duration": 3.84,
+      "peak": 0.84,
+      "sha256": "9e09921926ed812be1a004fa2d8ea49e564211e86c72977f7d0b2225306db254"
+    },
+    "rail-body": {
+      "file": "rail-body.wav",
+      "inputs": [],
+      "processing": "Original seeded bass-drum synthesis: falling pitch, audible bass harmonics, transient and short rumble",
+      "duration": 1.4,
+      "peak": 0.84,
+      "sha256": "673b65590046dc1129403dcd1bda659bfe523af84f2af66302d8193421776653"
+    },
+    "elimination": {
+      "file": "elimination.wav",
+      "inputs": [],
+      "processing": "Original seeded bass-drum synthesis: falling pitch, audible bass harmonics, transient and short rumble",
+      "duration": 1.25,
+      "peak": 0.84,
+      "sha256": "da3c9f117c9bf1407e1d70b6c11b9eb5e5e06b0353ac10793242e77f401b2672"
+    },
+    "round-end": {
+      "file": "round-end.wav",
+      "inputs": [],
+      "processing": "Original two-note E5/B5 sine chime, soft attacks, clean decaying harmonics",
+      "duration": 1.8,
+      "peak": 0.84,
+      "sha256": "96ca936dbb8de5730972876f523dd3c3dbea7565791a49962ee81d0c23978f74"
     }
   }
 }
