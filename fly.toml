@@ -5,8 +5,8 @@ primary_region = "syd"
   dockerfile = "Dockerfile"
 
 [deploy]
-  # Update the existing machine in place; never use replacement/blue-green VMs.
-  strategy = "immediate"
+  # Update the sole existing machine and wait for it to become healthy.
+  strategy = "rolling"
 
 [env]
   NODE_ENV = "production"
