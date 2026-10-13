@@ -17,6 +17,6 @@ test('mainland stays on one side of the coast with beaches, high cliffs and moun
 test('backdrops use bounded opaque render batches without physics changes or shadow passes',()=>{
   for(const id of ['coast','desert','ice']){selectTrack(id);const before=JSON.stringify(OBSTACLES),scene=new THREE.Scene(),group=buildLandscapeBackdrop(scene,id);let draws=0,triangles=0;
     group.traverse(o=>{if(!o.isMesh)return;draws++;triangles+=(o.geometry.index?.count??o.geometry.attributes.position.count)/3*(o.count||1);assert.equal(o.castShadow,false);assert.equal(o.material.transparent,false);for(const a of Object.values(o.geometry.attributes))assert.ok(a.array.every(Number.isFinite));});
-    assert.equal(draws,id==='coast'?3:id==='desert'?1:0);assert.ok(triangles<100000);assert.equal(JSON.stringify(OBSTACLES),before);dispose(group);
+    if(id==='coast'){assert.ok(draws>3&&draws<160);let instances=0;group.traverse(o=>{if(o.isInstancedMesh){instances+=o.count;assert.equal(o.frustumCulled,true);assert.ok(o.boundingSphere.radius<100);}});assert.equal(instances,3600);}else assert.equal(draws,id==='desert'?1:0);assert.ok(triangles<100000);assert.equal(JSON.stringify(OBSTACLES),before);dispose(group);
   }
 });

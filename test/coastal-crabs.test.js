@@ -30,3 +30,9 @@ test('twelve animated crabs stay within three shared draws and finite transforms
   for(const time of [0,.5,1,8,500]){updateCoastalCrabs(group,time);for(const m of group.children){assert.ok([...m.instanceMatrix.array].every(Number.isFinite));assert.ok([...m.geometry.attributes.position.array].every(Number.isFinite));}}
   group.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
 });
+
+test('offscreen crab instances are omitted without changing their simulation descriptors',()=>{
+  selectTrack('coast');const group=buildCoastalCrabs(new THREE.Scene()),before=JSON.stringify(group.userData.descriptors),camera=new THREE.PerspectiveCamera(58,1,.2,260);
+  camera.position.set(10000,100,10000);camera.lookAt(10000,0,10100);camera.updateMatrixWorld();updateCoastalCrabs(group,.5,camera);assert.deepEqual(group.children.map(m=>m.count),[0,0,0]);assert.equal(JSON.stringify(group.userData.descriptors),before);
+  updateCoastalCrabs(group,.5);assert.deepEqual(group.children.map(m=>m.count),[12,12,96]);group.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});
+});

@@ -36,7 +36,7 @@ test('railgun instantly pierces multiple aligned cars and leaves a lingering tra
 });
 test('three separate mine presses, near-immediate arming and ballistic launch',()=>{
   const a=player('a'),b=player('b',-3.5,1),r=room(a,b);giveWeapon(a.car,'mine');assert.ok(pressWeapon(r,a,0));assert.equal(a.car.ammo,2);
-  updateCombat(r,STEP,99);assert.equal(b.car.health,100);updateCombat(r,STEP,100);assert.equal(b.car.health,72);assert.ok(b.car.vy>=15);assert.notEqual(b.car.rollVelocity,0);
+  updateCombat(r,STEP,99);assert.equal(b.car.health,100);updateCombat(r,STEP,100);assert.equal(b.car.health,72);assert.ok(b.car.vy>=5&&b.car.vy<6);assert.notEqual(b.car.rollVelocity,0);
   r.players.delete('b');run(r,.25,100);assert.ok(pressWeapon(r,a,350));run(r,.25,350);assert.ok(pressWeapon(r,a,600));assert.equal(a.car.item,null);assert.equal(r.mines.length,2);
 });
 test('mine-like launches can land upright or stranded on their roof',()=>{

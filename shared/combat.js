@@ -1,5 +1,5 @@
 import {shotgunRays,weaponBasis,weaponDirection,weaponMuzzle,rayCar3D,sweepTrackWalls,MUZZLE_HEIGHT} from './weapon-geometry.js';
-import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
+import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, mineImpulse, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
 import {PULSE_RADIUS,pulsePush} from './shockwave.js';
 export const WEAPONS = {
   pulse:{name:'Pulse',icon:'◎',ammo:1,hint:'two shockwaves, one second apart'},
@@ -41,7 +41,8 @@ function hit(room,p,amount,now,kick={}){
   if(protectedByShield)effect(room,'shield-hit',c.x,c.z,now,{y:c.y,color:'#66dcff',duration:160});
   if(!damaged)return false;
   c.vx+=kick.x||0;c.vz+=kick.z||0;c.impactTime=Math.max(c.impactTime,.8);
-  if(kick.up)launchCar(c,kick.up,kick.side||0,kick.fore||0);
+  if(kick.mine)mineImpulse(c,kick.side||0,kick.fore||0);
+  else if(kick.up)launchCar(c,kick.up,kick.side||0,kick.fore||0);
   if(!wasWreck&&c.wrecked){c.eliminatedAt=now-room.startAt;c.explosionShown=true;sound(room,'explosion',c,now);effect(room,'explosion',c.x,c.z,now,{y:c.y,duration:1100});}
   else if(amount>=8)effect(room,'hit',c.x,c.z,now,{y:c.y,duration:220});
   return true;
@@ -190,7 +191,7 @@ export function updateCombat(room,dt,now){
     const c=p.car,along=(c.x-mine.x)*Math.cos(mine.angle||0)+(c.z-mine.z)*Math.sin(mine.angle||0),surfaceY=(mine.y||0)+along*Math.tan(mine.pitch||0);
     if(Math.abs(c.y-surfaceY)>1.4||c.eliminated||Math.hypot(c.x-mine.x,c.z-mine.z)>3)continue;
     const dx=mine.x-c.x,dz=mine.z-c.z,side=-dx*Math.sin(c.angle)+dz*Math.cos(c.angle),fore=dx*Math.cos(c.angle)+dz*Math.sin(c.angle);
-    hit(room,p,DAMAGE.mine,now,{up:15,side:side+.35*Math.sin(c.angle),fore:fore+Math.hypot(c.vx,c.vz)*.09,x:-dx*3,z:-dz*3});mine.until=0;sound(room,'explosion',mine,now);effect(room,'explosion',mine.x,mine.z,now,{y:mine.y,duration:850});break;
+    hit(room,p,DAMAGE.mine,now,{mine:true,side,fore,x:-dx*.65,z:-dz*.65});mine.until=0;sound(room,'explosion',mine,now);effect(room,'explosion',mine.x,mine.z,now,{y:mine.y,duration:850});break;
   }}room.mines=room.mines.filter(m=>m.until>now);
   for(const ball of room.chains){
     const owner=room.players.get(ball.owner),c=owner?.car;if(!c||c.eliminated){ball.dead=true;continue;}

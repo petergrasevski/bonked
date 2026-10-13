@@ -169,7 +169,7 @@ body.mobile #party-bar{bottom:8px}
 #you-label{width:30px;height:22px;padding:0;background:none;color:#ecf4fc;filter:drop-shadow(0 2px 2px #07151f);border-radius:0}#you-label svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
 /* Roster on the left, circuit cards on the right, no separate bot toolbar. */
 #lobby:has(#room-panel:not([hidden])),body.mobile #lobby:has(#room-panel:not([hidden])){left:max(24px,env(safe-area-inset-left));right:max(24px,env(safe-area-inset-right));width:auto;max-width:1040px;bottom:64px;overflow:auto}
-#room-panel,body.mobile #room-panel{display:grid;grid-template-columns:240px minmax(0,1fr);grid-template-rows:40px auto 48px;gap:14px 22px}
+#room-panel,body.mobile #room-panel{display:grid;grid-template-columns:280px minmax(0,1fr);grid-template-rows:40px auto 48px;gap:14px 22px}
 #room-panel>*{min-width:0}#room-panel .card-heading{grid-column:1;grid-row:1;height:auto;margin:0}
 #room-panel .room-code-row{grid-column:2;grid-row:1;display:flex;align-items:center;justify-content:space-between;margin:0;padding:0;border:0}#room-panel .room-code-row>div{display:flex;gap:12px;align-items:center}#room-panel .room-code-row label{margin:0;font-size:10px}#room-panel .room-code-row strong{font-size:22px}#room-panel .room-code-row .small{min-height:36px;padding:7px 12px}
 #room-panel #roster,body.mobile #room-panel #roster{grid-column:1;grid-row:2/4;max-height:320px;overflow-y:auto;align-self:stretch;scrollbar-width:thin;scrollbar-color:#7c929f55 transparent;padding-right:4px}
@@ -253,7 +253,7 @@ h1,h2,h3,.entry-title,.primary,#copy,.weapon-name,.result-score,.score-total,#co
 .remove-bot:before,.remove-bot:after,.modal .close:before,.modal .close:after{content:'';grid-area:1/1;width:18px;height:2px;background:currentColor;pointer-events:none;transform:rotate(45deg)}
 .remove-bot:after,.modal .close:after{transform:rotate(-45deg)}
 
-/* Ping stays visible beside the race settings cog on phones and computers. */
+/* Optional diagnostics beside the settings cog on phones and computers. */
 .network-ping{font-size:11px;font-variant-numeric:tabular-nums;letter-spacing:0;white-space:nowrap;color:#cbd5df}
 .network-ping[data-quality=fair],#connection-label[data-quality=fair]{color:#f1be79}
 .network-ping[data-quality=poor],#connection-label[data-quality=poor]{color:#ff9990}
@@ -316,3 +316,43 @@ body.playing .grain{background:radial-gradient(ellipse at center,transparent 55%
 @media(hover:hover) and (pointer:fine){#room-panel #start{width:calc(100% - 64px);margin-inline:32px}}
 /* Keep race status below the scores, clear of the shared camera's racing line. */
 body.playing #race-hud #finish-note{position:static;transform:none;margin-top:8px;width:fit-content;max-width:100%;white-space:normal;font-size:11px;padding:7px 10px}
+
+.circuit-heading{display:flex;align-items:center;gap:10px;min-height:24px;margin-bottom:7px;flex-wrap:wrap}.circuit-heading .circuit-label{margin:0}#circuit-status{display:flex;align-items:center;gap:6px;font-size:11px;line-height:1.4;color:#dae4ec}#circuit-status.loading::before,#race-circuit-status.loading::before{content:'';width:11px;height:11px;flex-shrink:0;border:2px solid #ffffff30;border-top-color:#e9aa64;border-radius:50%;animation:circuit-spin .85s linear infinite}#circuit-retry{font-size:12px;text-decoration:underline}@keyframes circuit-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){#circuit-status.loading::before,#race-circuit-status.loading::before{animation:none}}
+
+body:not(.dev-logs) .dev-stat{display:none!important}
+body.playing #menu-fps{display:none}
+.dev-setting{cursor:pointer}.dev-setting input{width:36px;height:22px;min-height:0;margin:0;accent-color:var(--accent);cursor:pointer}
+.dev-setting input{appearance:none;border:1px solid #9ab1c066;border-radius:12px;padding:2px;background:#0e202c;box-shadow:none;transition:background .15s}
+.dev-setting input:before{content:'';display:block;width:16px;height:16px;border-radius:50%;background:#cbd5df;transition:transform .15s}
+.dev-setting input:checked{background:#446a73}.dev-setting input:checked:before{transform:translateX(12px);background:#f2f4ed}
+.dev-setting input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.dev-setting input,.dev-setting input:before{transition:none}}
+
+.track-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}.track-card canvas{position:relative}
+#room-panel .room-actions{margin-left:auto;gap:8px}#room-panel .room-code-row{gap:12px}
+#reset-scores{font-size:12px;white-space:nowrap}#reset-scores:disabled{opacity:.4}
+.driver:not(.empty),body.mobile .driver:not(.empty){display:grid;grid-template-columns:23px minmax(0,1fr) 32px 44px 24px;gap:6px}
+.driver .role{margin:0;text-align:right;letter-spacing:0}.driver .remove-bot{width:24px;min-width:24px;height:28px}
+.lobby-score{text-align:right;font-variant-numeric:tabular-nums;color:#e5edf2;font-size:14px}
+.roster-columns{display:grid;grid-template-columns:23px minmax(0,1fr) 32px 44px 24px;gap:6px;align-items:center;font-size:9px;color:#94a4a6;margin-bottom:3px}.roster-columns span:first-child{grid-column:2}.roster-columns span:last-child{text-align:right}
+.pending-bot{opacity:.7}.pending-bot .role{font-size:9px}#race-circuit-status{display:inline-flex;align-items:center;gap:6px}
+
+.graphics-control{border:1px solid #ffffff22;background:#ffffff08;padding:10px 12px}.graphics-setting{padding:0;min-height:30px;border:0;background:none;margin:0 0 6px;letter-spacing:0;font-weight:600}
+#graphics-quality{font:inherit;font-size:13px;color:#eef1e7;border:1px solid #9ab1c066;border-radius:3px;background:#142632;padding:6px 9px;max-width:150px}#graphics-quality:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#graphics-resolution{display:block;color:#d1dfe8;font-size:12px;font-variant-numeric:tabular-nums}.graphics-control #graphics-hint{font-size:11px;line-height:1.4;margin:5px 0 0;color:#9db0bd}
+.settings-card{overflow-y:auto}
+@media(orientation:landscape) and (max-height:560px){.settings-card .settings-grid{gap:6px}.settings-card .audio-volume{padding:6px 10px}.settings-card .audio-volume input{min-height:20px}.settings-card .setting-row{min-height:36px;padding:6px 10px}.settings-card .graphics-setting{padding:0;min-height:28px}.settings-card .graphics-control{padding:6px 10px}.settings-card h2{margin-bottom:10px}.graphics-control #graphics-hint{margin-top:2px}}
+
+/* Keep race/audio actions together, with rendering controls on the right. */
+.settings-card{width:720px;max-width:100%}
+.settings-card .settings-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.settings-column{display:grid;gap:10px;min-width:0}
+.settings-column .setting-row{margin:0;width:100%}
+.settings-graphics{border-left:1px solid #ffffff20;padding-left:20px}
+.settings-graphics .graphics-setting{flex-wrap:wrap;gap:8px;margin-bottom:8px}
+@media(orientation:landscape) and (max-height:560px){.settings-column{gap:8px}.settings-card .settings-grid{gap:16px}.settings-graphics{padding-left:16px}}
+@media(max-width:560px) and (orientation:portrait){.settings-card .settings-grid{grid-template-columns:1fr;gap:16px}.settings-graphics{border-left:0;border-top:1px solid #ffffff20;padding:16px 0 0}}
+
+#render-debug{display:grid;gap:8px}#render-debug .setting-row{letter-spacing:0}
+#render-stats{white-space:pre-line;font-size:11px;line-height:1.5;color:#cbd7df;font-variant-numeric:tabular-nums}
+.settings-card .render-help{font-size:10px;line-height:1.4;color:#9db0bd;margin:0}

@@ -79,7 +79,7 @@ export function createPickupModel(kind){
   // Each material is one draw call, rather than one for every barrel, fin and ring.
   g.updateMatrixWorld(true);const parts=new Map(),batched=new THREE.Group();batched.name=g.name;batched.userData.kind=kind;
   g.traverse(mesh=>{if(!mesh.isMesh)return;let geometry=mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);if(geometry.index){const flat=geometry.toNonIndexed();geometry.dispose();geometry=flat;}if(!parts.has(mesh.material))parts.set(mesh.material,[]);parts.get(mesh.material).push(geometry);});
-  for(const [material,geometries] of parts){const mesh=new THREE.Mesh(mergeGeometries(geometries),material);mesh.castShadow=!material.transparent;mesh.receiveShadow=true;batched.add(mesh);for(const geometry of geometries)geometry.dispose();}
+  for(const [material,geometries] of parts){const mesh=new THREE.Mesh(mergeGeometries(geometries),material);mesh.geometry.userData.sharedCarResource=true;mesh.castShadow=!material.transparent;mesh.receiveShadow=true;batched.add(mesh);for(const geometry of geometries)geometry.dispose();}
   g.traverse(mesh=>{if(mesh.isMesh)mesh.geometry.dispose();});
   // Baked rotations tighten bounding boxes; keep the canonical pickup size.
   const mergedSize=new THREE.Box3().setFromObject(batched).getSize(new THREE.Vector3());batched.scale.setScalar(3.3/Math.max(mergedSize.x,mergedSize.y,mergedSize.z));

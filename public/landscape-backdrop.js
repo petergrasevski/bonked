@@ -1,3 +1,4 @@
+import {spatialInstances} from './scenery-lod.js';
 import {weatherSurface} from './surface-detail.js';
 import * as THREE from 'three';
 const TAU=Math.PI*2;
@@ -76,7 +77,7 @@ function forest(mat){
     dummy.position.set(x,y+height*.32,z);dummy.rotation.set(0,a,0);dummy.scale.set(1,height*.7,1);dummy.updateMatrix();trunks.setMatrixAt(i,dummy.matrix);trunks.setColorAt(i,new THREE.Color(0x544d37));
     for(let j=0;j<2;j++){dummy.position.set(x+j*width*.5,y+height*(j?.7:.85),z+j*width*.15);dummy.scale.set(width,height*.55,width*.85);dummy.updateMatrix();crowns.setMatrixAt(i*2+j,dummy.matrix);crowns.setColorAt(i*2+j,new THREE.Color([0x29493c,0x385844,0x4c6946,0x547347][i%4]));}
   }
-  for(const mesh of [crowns,trunks]){mesh.frustumCulled=false;group.add(mesh);}return group;
+  for(const mesh of [crowns,trunks])group.add(...spatialInstances(mesh));return group;
 }
 export function buildLandscapeBackdrop(scene,trackId){
   const group=new THREE.Group();group.name='landscape-backdrop';

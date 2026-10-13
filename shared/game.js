@@ -1,7 +1,8 @@
 import {COAST_BEACH_SECTIONS,coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
 import {boostLayout,boostSpeed} from './boost-pads.js';
-import {wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
+import {SEA_LEVEL} from './beach-profile.js';
+import {bodyOffset,WHEEL_POINTS,wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
 import {createLandscape} from './landscape.js';
 import {DESERT_CACTI,DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
 export const MAX_PLAYERS = 8;
@@ -296,6 +297,15 @@ export function launchCar(car,up,side=0,fore=0){
   car.pitchVelocity=clamp(car.pitchVelocity+fore*up*.45,-10,10);
   car.yawVelocity+=side*.8;car.impactTime=1.5;
 }
+// Mines add momentum instead of resetting the launch speed. A single hit is a
+// short hop; a cluster builds height and angular momentum before the car lands.
+export function mineImpulse(car,side=0,fore=0){
+  if(car.shield>0||car.wrecked||car.eliminated)return;
+  car.y=Math.max(car.y,(car.groundY||0)+.08);car.vy=Math.min(car.vy+5.2,17);
+  car.rollVelocity=clamp(car.rollVelocity+clamp(side,-2,2)*.55,-5,5);
+  car.pitchVelocity=clamp(car.pitchVelocity+.65+clamp(fore,-2,2)*.25,-5,5);
+  car.yawVelocity+=clamp(side,-2,2)*.12;car.mineFlight=true;car.edgeBalance=false;car.impactTime=.8;
+}
 function verticalStep(car,dt){
   if(car.edgeBalance&&!car.falling&&car.vy<=0)return;
   const floor=car.groundY||0;
@@ -307,8 +317,8 @@ function verticalStep(car,dt){
       car.y=floor;car.vy=0;
       const upsideDown=Math.cos(car.roll)*Math.cos(car.pitch)<-.15;
       car.overturned=upsideDown;car.roll=upsideDown?Math.PI:0;car.pitch=0;car.rollVelocity=0;car.pitchVelocity=0;
-      const landingDrag=car.rampFlight&&!upsideDown?.98:car.wrecked?.5:.18;
-      car.vx*=landingDrag;car.vz*=landingDrag;car.rampFlight=false;car.impactTime=.8;
+      const landingDrag=car.rampFlight&&!upsideDown?.98:car.mineFlight&&!car.wrecked&&!upsideDown?.88:car.wrecked?.5:.18;
+      car.vx*=landingDrag;car.vz*=landingDrag;car.rampFlight=false;car.mineFlight=false;car.impactTime=.8;
     }
   }
 }
@@ -317,23 +327,37 @@ export function roadSurfaceAt(x,z,hint){
   const t=nearestTrack(x,z,hint),gap=iceSplit(t.x),lateral=Math.abs((x-t.x)*t.nx+(z-t.z)*t.nz);
   return t.distance<=t.halfWidth+.6&&(gap<.01||lateral>=gap)?t:null;
 }
+// Only the coast's visible, dry, reasonably shallow banks extend tyre support.
+// Ice gaps, desert cliffs, submerged sand and empty space remain real edges.
+export function drivingSurfaceAt(x,z,hint){
+  const road=roadSurfaceAt(x,z,hint);if(road)return road;
+  if(activeTrack.id!=='coast')return null;
+  const t=nearestTrack(x,z,hint);if(t.distance>t.halfWidth+12)return null;
+  const surface=terrainAt(x,z,t.y+.5);
+  return surface&&surface.y>SEA_LEVEL+.15&&surface.ny>.7?{...t,y:surface.y,surface}:null;
+}
+function coastalSupportFloor(car,surface){
+  let floor=surface.y;
+  for(const [x,z]of WHEEL_POINTS){const p=bodyOffset(car,x,0,z),s=drivingSurfaceAt(car.x+p.x,car.z+p.z,car.trackFraction);if(s)floor=Math.max(floor,s.y-p.y);}
+  return floor;
+}
 function supportRoad(car,t){
   if(car.falling)return;
   // A ramp or weapon launch releases the tyre pivot. Losing contact while
   // rising is flight, not an irreversible fall off the road.
-  if(car.vy>0||car.y>t.y+.5&&!car.edgeBalance){car.edgeBalance=false;return;}
+  if(car.vy>0||car.y>car.groundY+.5&&!car.edgeBalance){car.edgeBalance=false;return;}
   // Interior driving retains the existing cheap path. Only edge contacts sample
-  // individual tyres, never the scenery mesh or a second physics engine.
+  // individual tyres against the shared road and coastal terrain surfaces.
   const lateral=Math.abs((car.x-t.x)*t.nx+(car.z-t.z)*t.nz),gap=iceSplit(t.x),extent=CAR_LENGTH/2;
   if(t.distance+extent<t.halfWidth+.6&&(gap<.01||lateral-extent>gap)){car.supportedWheels=4;car.edgeBalance=false;return;}
-  let wheelsOverRoad=0;
-  const support=wheelSupports(car,(x,z)=>{const surface=roadSurfaceAt(x,z,car.trackFraction);if(surface)wheelsOverRoad++;return surface;});
+  let supportedFootprints=0;
+  const support=wheelSupports(car,(x,z)=>{const surface=drivingSurfaceAt(x,z,car.trackFraction);if(surface)supportedFootprints++;return surface;});
   // A ramp lip can put front and rear tyres at different surface heights.
-  // Only a missing road footprint is an edge; a height mismatch alone is not.
-  if(wheelsOverRoad===4){car.supportedWheels=4;car.edgeBalance=false;return;}
+  // Only a missing driving surface is an edge; a height mismatch alone is not.
+  if(supportedFootprints===4){car.supportedWheels=4;car.edgeBalance=false;return;}
   car.supportedWheels=support.length;
   car.edgeBalance=support.length>0&&support.length<4;
-  if(!support.length||car.edgeBalance&&car.y<t.y-.4){
+  if(!support.length||car.edgeBalance&&car.y<car.groundY-.4){
     car.falling=true;car.edgeBalance=false;car.offRoadTime=0;car.vy=Math.min(car.vy,car.edgeVy||0);
     // Releasing the contact pivot carries its angular COM velocity into the fall.
     car.vx+=(-Math.sin(car.angle)*car.rollVelocity-Math.cos(car.angle)*car.pitchVelocity)*.5;
@@ -342,9 +366,16 @@ function supportRoad(car,t){
 }
 export function constrainRoad(car){
   const t=nearestTrack(car.x,car.z,car.trackFraction);
+  const support=activeTrack.id==='coast'?drivingSurfaceAt(car.x,car.z,car.trackFraction):null;
+  if(support?.surface)t.surface=support.surface;
+  const floor=support?.surface?coastalSupportFloor(car,support):activeTrack.id==='coast'&&t.distance>t.halfWidth+.6?(car.groundY||0):t.y;
+  // A ballistic fall can be recovered by landing upright on actual dry sand.
+  if(car.falling&&support?.surface&&!car.wrecked&&car.vy<=0&&car.y<=floor+.15&&car.y>floor-1.5&&Math.cos(car.roll)*Math.cos(car.pitch)>.35){
+    car.falling=false;car.edgeBalance=false;car.offRoadTime=0;car.vy=0;car.y=floor;car.rollVelocity=0;car.pitchVelocity=0;car.mineFlight=false;car.rampFlight=false;
+  }
   if(car.falling)return t;
-  const oldFloor=car.groundY||0;car.groundY=t.y;
-  if(!car.edgeBalance&&car.y<=oldFloor+.001&&car.vy<=0)car.y=t.y;
+  const oldFloor=car.groundY||0;car.groundY=floor;
+  if(!car.edgeBalance&&car.y<=oldFloor+.001&&car.vy<=0)car.y=floor;
   // Barriers still stop grounded cars; exposed edges use individual tyre support.
   if(activeTrack.id==='ice'){
     const lateral=(car.x-t.x)*t.nx+(car.z-t.z)*t.nz,side=lateral<0?-1:1,gap=iceSplit(t.x);
@@ -435,16 +466,17 @@ export function stepCar(car, input, dt=STEP) {
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
   advanceNudge(car,dt);
   const track=constrainRoad(car);
-  if(car.edgeBalance&&!car.falling){balanceOnWheels(car,wheelSupports(car,(x,z)=>roadSurfaceAt(x,z,car.trackFraction)),dt);supportRoad(car,nearestTrack(car.x,car.z,car.trackFraction));}
+  if(car.edgeBalance&&!car.falling){balanceOnWheels(car,wheelSupports(car,(x,z)=>drivingSurfaceAt(x,z,car.trackFraction)),dt);supportRoad(car,nearestTrack(car.x,car.z,car.trackFraction));}
   if(car.falling){
     car.offRoadTime=(car.offRoadTime||0)+dt;collideTerrain(car,terrainAt,dt);
-    // A fall remains a lost race, but its wreck keeps colliding and tumbling.
-    if(!car.wrecked&&(car.offRoadTime>1.2||activeTrack.id==='coast'&&car.y< -2.1)){car.shield=0;damageCar(car,100);}
+    // Unsupported falls still eliminate; recoverable dry sand is handled above.
+    if(!car.wrecked&&(car.offRoadTime>1.2||activeTrack.id==='coast'&&car.y<SEA_LEVEL)){car.shield=0;damageCar(car,100);}
   }
   if(!car.edgeBalance&&!car.falling&&!car.overturned&&!car.wrecked&&car.y<=car.groundY+.001&&car.vy<=0){
     // Match the actual road normal in the same YXZ body basis as the renderer.
     // Airborne impact rotations remain entirely ballistic.
-    const grade=track.grade||0,along=grade*(Math.cos(car.angle)*track.nz-Math.sin(car.angle)*track.nx),across=grade*(-Math.sin(car.angle)*track.nz-Math.cos(car.angle)*track.nx),blend=1-Math.exp(-dt*14);
+    const grade=track.grade||0,normal=track.surface;
+    const along=normal?-(normal.nx*Math.cos(car.angle)+normal.nz*Math.sin(car.angle))/normal.ny:grade*(Math.cos(car.angle)*track.nz-Math.sin(car.angle)*track.nx),across=normal?-(-normal.nx*Math.sin(car.angle)+normal.nz*Math.cos(car.angle))/normal.ny:grade*(-Math.sin(car.angle)*track.nz-Math.cos(car.angle)*track.nx),blend=1-Math.exp(-dt*14);
     car.pitch+=(Math.atan2(along,Math.sqrt(1+across*across))-car.pitch)*blend;
     car.roll+=(Math.atan(-across)-car.roll)*blend;
   }

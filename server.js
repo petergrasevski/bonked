@@ -81,22 +81,22 @@ voiceWss.on('connection',ws=>{
   ws.on('close',()=>{clearTimeout(authTimeout);if(player?.voice===ws)player.voice=null;});
 });
 function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(typeof data==='string'?data:JSON.stringify(data));else if(ws?.readyState===WebSocket.OPEN)diagnostics.backpressure++;}
-function fail(ws,message){send(ws,{type:'error',message});}
+function fail(ws,message,requestId){send(ws,{type:'error',message,...(typeof requestId==='string'?{requestId:requestId.slice(0,80)}:{})});}
 function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
 function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
-function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
+function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
-function resetRoom(room,{newTournament=true,startFraction=START_FRACTION}={}){
+function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION}={}){
   selectTrack(room.trackId);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
   if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
-  room.round=newTournament?1:(room.round||1)+1;room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
+  room.round=newTournament?1:(room.round||1)+(advanceRound?1:0);room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
   room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;
   resetSkyBeams(room);
   let slot=0;for(const p of room.players.values()){p.car=spawnCar(slot++,startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botState=null;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
   room.chase=createChase([...room.players.values()].map(p=>p.car));room.raceSize=room.players.size;room.winnerId=null;
 }
 function startRound(room,now,next=false){
-  resetRoom(room,{newTournament:!next,startFraction:next?room.nextStartFraction:START_FRACTION});room.phase='countdown';room.startAt=now+3300;publish(room);
+  resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:next,startFraction:next?room.nextStartFraction:START_FRACTION});room.phase='countdown';room.startAt=now+3300;publish(room);
 }
 function addPlayer(room,ws,name,bot=false){
   selectTrack(room.trackId);const used=new Set([...room.players.values()].map(p=>p.color));
@@ -123,7 +123,7 @@ wss.on('connection',(ws,req)=>{
       let room;
       if(msg.type==='create'){
         if(rooms.size>=MAX_ROOMS)return fail(ws,'The server is full. Try again shortly.');
-        room={trackId:Object.hasOwn(TRACKS,msg.trackId)?msg.trackId:'coast',code:roomCode(),players:new Map(),host:null,createdAt:now};resetRoom(room);rooms.set(room.code,room);
+        room={trackId:Object.hasOwn(TRACKS,msg.trackId)?msg.trackId:'coast',code:roomCode(),players:new Map(),host:null,createdAt:now};resetRoom(room,{newTournament:true});rooms.set(room.code,room);
       }else room=rooms.get(String(msg.code||'').toUpperCase());
       if(!room)return fail(ws,'Room not found. Check the three-letter code.');
       let player=[...room.players.values()].find(p=>!p.bot&&typeof msg.token==='string'&&p.token===msg.token);
@@ -144,12 +144,16 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='item')return useItem(room,p,now);
     if(msg.type==='leave'){client.room=null;client.player=null;removePlayer(room,p);return send(ws,{type:'left'});}
     if(msg.type==='ready'){if(room.phase==='finished'&&!room.tournamentComplete&&msg.round===room.round){p.ready=true;publish(room);}return;}
-    if(p.id!==room.host)return fail(ws,'Only the room host can do that.');
-    if(msg.type==='lobby'&&room.phase==='finished'){resetRoom(room);publish(room);return;}
-    if(msg.type==='track'&&room.phase==='lobby'){if(!Object.hasOwn(TRACKS,msg.trackId))return fail(ws,'Unknown track.');room.trackId=msg.trackId;resetRoom(room);publish(room);return;}
-    if(msg.type==='bot'&&room.phase==='lobby'){
-      if(room.players.size>=MAX_PLAYERS)return fail(ws,'The grid is full.');
-      addPlayer(room,null,['Nova','Rocco','Mika','Scout','Jett','Cleo','Ash'][room.players.size-1]||'Bot',true);publish(room);
+    if(p.id!==room.host)return fail(ws,'Only the room host can do that.',msg.requestId);
+    if(msg.type==='lobby'){if(room.phase!=='lobby')resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:room.phase==='finished'&&!room.tournamentComplete});publish(room);return;}
+    if(msg.type==='reset-scores'&&room.phase==='lobby'){resetRoom(room,{newTournament:true});publish(room);return;}
+    if(msg.type==='track'&&room.phase==='lobby'){if(!Object.hasOwn(TRACKS,msg.trackId))return fail(ws,'Unknown track.');if(room.trackId===msg.trackId)return;room.trackId=msg.trackId;resetRoom(room);publish(room);return;}
+    if(msg.type==='bot'){
+      const requestId=typeof msg.requestId==='string'?msg.requestId.slice(0,80):undefined;
+      if(room.phase!=='lobby')return fail(ws,'Return to the lobby to add bots.',requestId);
+      if(requestId&&[...room.players.values()].some(p=>p.botRequestId===requestId)){publish(room);return;}
+      if(room.players.size>=MAX_PLAYERS)return fail(ws,'The grid is full.',requestId);
+      const bot=addPlayer(room,null,['Nova','Rocco','Mika','Scout','Jett','Cleo','Ash'][room.players.size-1]||'Bot',true);bot.botRequestId=requestId;publish(room);return;
     }
     if(msg.type==='remove-bot'&&room.phase==='lobby'){const bot=room.players.get(msg.playerId);if(!bot?.bot)return fail(ws,'Choose a bot to remove.');room.players.delete(bot.id);publish(room);return;}
     if(msg.type==='start'&&room.phase==='lobby'){
