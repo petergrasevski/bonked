@@ -28,10 +28,10 @@ test('survivors rank ahead of eliminated players regardless of their frozen prog
 test('rendered death line moves every display frame with corrected leader progress, including lap seams',async()=>{
   const {renderedChase}=await import('../shared/chase.js');
   const {TRACK_LENGTH}=await import('../shared/game.js');
-  const snapshot={active:true,progress:.99,leaderProgress:.99+108/TRACK_LENGTH},copy={...snapshot};let last=-Infinity;
+  const snapshot={active:true,progress:.99,leaderProgress:.99+CHASE_DISTANCE/TRACK_LENGTH},copy={...snapshot};let last=-Infinity;
   for(let frame=0;frame<120;frame++){
     const leader={progress:snapshot.leaderProgress+frame*30/120/TRACK_LENGTH},line=renderedChase(snapshot,[leader]);
-    assert.ok(line.progress>last);assert.ok(Math.abs((leader.progress-line.progress)*TRACK_LENGTH-108)<1e-8);last=line.progress;
+    assert.ok(line.progress>last);assert.ok(Math.abs((leader.progress-line.progress)*TRACK_LENGTH-CHASE_DISTANCE)<1e-8);last=line.progress;
   }
   assert.deepEqual(snapshot,copy);assert.equal(renderedChase(snapshot,[{eliminated:true,progress:5}]),snapshot);
 });

@@ -1,6 +1,6 @@
 import { START_FRACTION, TRACK_LENGTH, TOP_SPEED, trackAt } from './game.js';
 export const CAMERA_LOOKAHEAD = 10; // Road metres ahead of the leader.
-export const CHASE_DISTANCE = TOP_SPEED * 3; // Fixed road distance, not a timer.
+export const CHASE_DISTANCE = TOP_SPEED * 2.25; // Fixed road distance, not a timer.
 // Race progress is unwrapped across the start line. Never compare wrapped fractions.
 export function createChase(cars) {
   const leaderProgress=cars.length?Math.max(...cars.map(c=>c.progress)):-6/TRACK_LENGTH;
