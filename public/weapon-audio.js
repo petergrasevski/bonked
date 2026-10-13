@@ -12,7 +12,7 @@ export const WEAPON_SOUNDS={
   shotgun:{samples:['shotgun'],layer:variants('clank'),gain:.85,layerGain:.35,rate:.88,duration:.72,priority:65},
   flame:{samples:['flame'],gain:.42,rate:.9,loop:true,priority:40},
   taser:{samples:['taser'],gain:.32,rate:1,loop:true,priority:40},
-  elimination:{samples:['elimination'],gain:.85,rate:1,duration:1.25,priority:95,bus:'ui'},
+  elimination:{samples:['elimination'],layer:['rail-body'],gain:1,layerGain:.4,layerRate:1.3,rate:1,duration:1.25,priority:95,bus:'ui'},
   'round-end':{samples:['round-end'],gain:.6,rate:1,duration:1.8,priority:100,bus:'ui'},
   impact:{samples:variants('metal'),gain:.45,rate:1.3,duration:.25,priority:30},
   explosion:{samples:variants('explosion'),layer:['thump'],gain:.95,layerGain:.55,rate:.85,duration:1.2,priority:80},
@@ -23,7 +23,8 @@ export function soundPosition(source,listener){
   return {volume:Math.max(0,1-d/100)**2,pan:Math.max(-.85,Math.min(.85,(-dx*Math.sin(listener.angle||0)+dz*Math.cos(listener.angle||0))/30))};
 }
 export function weaponFocus(event,player){
-  if(event.kind==='elimination')return !!player&&event.owner===player.id;
+  // Death-line losses are global round cues, including while spectating.
+  if(event.kind==='elimination')return true;
   if(!player||player.eliminated||player.wrecked||player.falling||player.finished)return false;
   const impact=event.kind==='explosion'||event.kind==='impact';
   // A nearby threat matters even when the shared camera has moved away. Ownership
@@ -80,7 +81,7 @@ export class WeaponAudio {
     this.phase=state?.phase;
     // Consume events even while muted/loading, so unlocking audio never replays old shots.
     for(const event of state?.sounds||[]){if(this.seen.has(event.id))continue;this.seen.add(event.id);
-      if((active||ending)&&(state.combatTime??state.time)-event.at<500){const p=soundPosition(event,listener),local=weaponFocus(event,player);
+      if((active||ending)&&(state.combatTime??state.time)-event.at<500){const p=event.kind==='elimination'?{volume:1,pan:0}:soundPosition(event,listener),local=weaponFocus(event,player);
         if(local||p.volume>.002)this.voice(event.kind,p,{local});}}
     if(this.seen.size>512)this.seen=new Set([...this.seen].slice(-256));
     const wanted=new Set();

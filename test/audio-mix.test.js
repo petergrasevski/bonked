@@ -110,3 +110,19 @@ test('electrical firing stays continuous across snapshots and releases when firi
   for(let i=0;i<30;i++)fx.update(s,listener,true,'self');assert.equal(fx.voices.size,1);assert.equal(fx.loops.get('self'),loop);
   s.players[0].firing=null;fx.update(s,listener,true,'self');assert.equal(loop.stopped,true);assert.equal(fx.loops.size,0);
 });
+
+test('death-line boom is centered and audible for distant rivals and spectators, once per event',()=>{
+  for(const self of [car('self'),{...car('self'),eliminated:true}]){
+    const ctx=audioContext(),mixer=new AudioMixer(ctx,{effects:.4,music:1}),fx=new WeaponAudio(ctx,{bank:audioBank(),mixer});
+    const s=state([self,{...car('rival',250),eliminated:true}]);
+    s.sounds=[{id:100,kind:'elimination',owner:'rival',x:250,z:150,at:100}];
+    fx.update(s,listener,true,'self');
+    const boom=[...fx.voices][0];assert.ok(boom,'distant elimination must not be culled');
+    assert.equal(boom.kind,'elimination');assert.equal(boom.level.gain.value,1);assert.equal(boom.pan.pan.value,0);
+    assert.equal(boom.pan.connections[0],mixer.bus('ui'));assert.equal(boom.sources.length,2);
+    mixer.update(true,0,{musicEnabled:true});assert.ok(mixer.music.gain.value<.8,'boom ducks music');
+    fx.update(s,listener,true,'self');assert.equal(fx.voices.size,1,'snapshot repeats must not replay');
+    fx.update({...s,sounds:[{...s.sounds[0],id:101}]},listener,false,'self');
+    fx.update({...s,sounds:[{...s.sounds[0],id:101}]},listener,true,'self');assert.equal(fx.voices.size,1,'muted events must not replay');
+  }
+});

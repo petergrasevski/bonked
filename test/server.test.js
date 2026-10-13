@@ -32,9 +32,11 @@ test('eight real socket clients: lobby, authority, reconnect, elimination, share
   const gridX=host.state.players[0].x;host.send({type:'input',seq:2,throttle:1,steer:0});await sleep(300);assert.equal(host.state.players[0].x,gridX);
   await until(()=>host.state.phase==='racing',5000);
   for(const p of host.state.players)for(const key of ['renderVx','renderVz','renderRise','renderTurn','renderPitch','renderRoll','renderProgress'])assert.ok(Number.isFinite(p[key]),`snapshot carries measured ${key}`);
+  const eliminations=new Set();
   let snapshots=0,lastTime=0,pickups=0;const driveUntil=Date.now()+6000;
-  driving=setInterval(()=>{for(const c of racers){const p=c.state?.players.find(p=>p.id===c.welcome.id);if(!p)continue;if(c!==host&&Date.now()>driveUntil)continue;c.seq=Math.max(c.seq,p.seq)+1;c.send({type:'input',seq:c.seq,...botInput(p)});if(p.item){pickups++;if(c===host)c.send({type:'item'});}}if(host.state.time!==lastTime){snapshots++;lastTime=host.state.time;}},1000/60);
+  driving=setInterval(()=>{for(const c of racers){const p=c.state?.players.find(p=>p.id===c.welcome.id);if(!p)continue;if(c!==host&&Date.now()>driveUntil)continue;c.seq=Math.max(c.seq,p.seq)+1;c.send({type:'input',seq:c.seq,...botInput(p)});if(p.item){pickups++;if(c===host)c.send({type:'item'});}}for(const event of host.state.sounds||[])if(event.kind==='elimination')eliminations.add(event.owner);if(host.state.time!==lastTime){snapshots++;lastTime=host.state.time;}},1000/60);
   await until(()=>host.state.phase==='finished',55000);clearInterval(driving);
+  assert.ok(eliminations.size>0,'death-line eliminations must reach clients as sound events');
   assert.ok(snapshots>100,'server should continuously send snapshots');assert.ok(pickups>0,'drivers collect and use items');assert.equal(host.state.players.filter(p=>p.eliminated).length,7);assert.equal(host.state.winnerId,host.welcome.id);assert.ok(host.state.players.find(p=>p.id===host.welcome.id).finished);assert.ok(host.state.camera.pitch>=26*Math.PI/180&&host.state.camera.pitch<=70*Math.PI/180);assert.ok(Number.isFinite(host.state.camera.from)&&host.state.camera.to>host.state.camera.from);assert.ok(host.state.chase.active);
   assert.ok(host.state.players.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.z)));
   assert.ok(host.state.players.find(p=>p.id===host.welcome.id).finishTime>3000);
