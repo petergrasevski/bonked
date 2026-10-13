@@ -24,8 +24,15 @@ export class PartyVoice {
       const node=new AudioWorkletNode(this.context,'party-voice',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
       node.port.onmessage=({data})=>{if(data.type==='packet'&&!this.muted&&!document.hidden&&this.socket?.readyState===WebSocket.OPEN&&this.authenticated&&this.socket.bufferedAmount<4096)this.socket.send(data.buffer);};
       node.connect(this.context.destination);this.node=node;
+      // Read incoming playback energy only; no microphone access or recording for ducking.
+      if(this.context.createAnalyser){this.analyser=this.context.createAnalyser();this.analyser.fftSize=256;this.analysis=new Float32Array(256);node.connect(this.analyser);}
     })().finally(()=>{this.loading=null;});
     await this.loading;
+  }
+  activityLevel(){
+    if(!this.analyser||!this.session||document.hidden||!this.authenticated)return 0;
+    this.analyser.getFloatTimeDomainData(this.analysis);let sum=0;for(const value of this.analysis)sum+=value*value;
+    return Math.sqrt(sum/this.analysis.length);
   }
   async enable(){
     if(this.requesting||!this.session)return;this.requesting=true;

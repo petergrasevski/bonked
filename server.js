@@ -23,7 +23,7 @@ const rooms=new Map(),connections=new Map();
 const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
 const MAX_ROOMS=100, GRACE_MS=20000;
-const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json','.json':'application/json','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json','.json':'application/json','.wav':'audio/wav','.mp3':'audio/mpeg','.ogg':'audio/ogg','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
 function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}
 const server=http.createServer(async(req,res)=>{
   try{
@@ -184,7 +184,7 @@ const timer=setInterval(()=>{
         resolveNudges([...room.players.values()].map(p=>p.car));
         collideCars([...room.players.values()].map(p=>p.car),{road:true});
         updateCombat(room,STEP,now);
-        for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}
+        for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.sounds.push({id:++room.serial,kind:'explosion',owner:p.id,x:p.car.x,y:p.car.y||0,z:p.car.z,at:now});room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}
         const players=[...room.players.values()];
         for(const p of updateChase(room.chase,players,now-room.startAt))room.effects.push({id:randomUUID(),kind:'hit',x:p.car.x,z:p.car.z,until:now+600,color:p.color});
         updateSkyBeams(room,now);

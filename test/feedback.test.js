@@ -53,7 +53,7 @@ test('taser releases cars leaving its radius and disrupts steering as well as la
   const copy={...base,tased:1,tasePhase:.08};stepCar(copy,NEUTRAL);assert.deepEqual(copy,tased);
 });
 test('taser can wreck a low-health car and cannot keep arcing to wrecks',()=>{
-  const a=player('a'),b=player('b',5),r=room(a,b);b.car.health=1;giveWeapon(a.car,'taser');a.input.fire=true;run(r,.2);assert.equal(b.car.health,0);assert.equal(b.car.wrecked,true);assert.equal(r.arcs.length,0);
+  const a=player('a'),b=player('b',5),r=room(a,b);b.car.health=1;giveWeapon(a.car,'taser');a.input.fire=true;run(r,.2);assert.equal(b.car.health,0);assert.equal(b.car.wrecked,true);assert.ok(r.sounds.some(s=>s.kind==='explosion'&&s.owner==='b'));assert.equal(r.arcs.length,0);
 });
 test('projectiles move every display frame without rewinding at 20Hz snapshots, including jitter',()=>{
   for(const hz of [60,120])for(const jitter of [false,true]){
@@ -72,18 +72,18 @@ test('shotgun silhouette spans both sides; taser is tall and reflective stainles
   const s=size(shotgun),t=size(taser);assert.ok(s.z>s.x*2);assert.ok(t.y>t.x*1.5);assert.ok(taser.children.some(m=>m.material.metalness>.9&&m.material.roughness<.2));
 });
 // A small Web Audio fake checks scheduling and lifecycle, not the browser's DSP.
-function audioContext(){const param=()=>({value:0,setValueAtTime(){},exponentialRampToValueAtTime(){},setTargetAtTime(){},cancelScheduledValues(){}});const nodes=[];const node=()=>{const n={gain:param(),frequency:param(),pan:param(),connect(){},disconnect(){this.disconnected=true;},start(){this.started=true;},stop(){this.stopped=true;}};nodes.push(n);return n;};return {nodes,currentTime:0,sampleRate:48000,destination:{},createGain:node,createOscillator:node,createBufferSource:node,createBiquadFilter:node,createStereoPanner:node,createBuffer:()=>({getChannelData:()=>new Float32Array(48000)})};}
+import {audioContext,audioBank} from './audio-helpers.js';
 test('every weapon has a distinct sound, and distance reduces nearby weapon volume',()=>{
   const specs=WEAPON_IDS.map(id=>{assert.ok(WEAPON_SOUNDS[id]);return JSON.stringify(WEAPON_SOUNDS[id]);});assert.equal(new Set(specs).size,WEAPON_IDS.length);
   assert.equal(soundPosition({x:0,z:0},{x:0,z:0}).volume,1);assert.equal(soundPosition({x:100,z:0},{x:0,z:0}).volume,0);assert.ok(soundPosition({x:0,z:10},{x:0,z:0}).pan>0);
 });
 test('sound events deduplicate across snapshots and mute/room exit stops held effects',()=>{
-  const ctx=audioContext(),fx=new WeaponAudio(ctx),listener={x:0,z:0},state={code:'ABC',round:1,phase:'racing',time:100,sounds:[{id:1,kind:'plasma',x:0,z:0,at:100}],players:[]};
+  const ctx=audioContext(),fx=new WeaponAudio(ctx,{bank:audioBank()}),listener={x:0,z:0},state={code:'ABC',round:1,phase:'racing',time:100,sounds:[{id:1,kind:'plasma',x:0,z:0,at:100}],players:[]};
   fx.update(state,listener,true);assert.equal(fx.voices.size,1);fx.update({...state,time:150},listener,true);assert.equal(fx.voices.size,1);
   fx.update({...state,players:[{id:'a',x:0,z:0,firing:'taser'}]},listener,true);assert.equal(fx.loops.size,1);
   fx.update({...state,sounds:[{id:2,kind:'rocket',x:0,z:0,at:150}]},listener,false);assert.equal(fx.loops.size,0);assert.ok([...fx.voices].every(v=>v.stopped));const count=fx.voices.size;fx.update({...state,sounds:[{id:2,kind:'rocket',x:0,z:0,at:150}]},listener,true);assert.equal(fx.voices.size,count);
   fx.update(null,listener,false);assert.equal(fx.room,null);assert.equal(fx.seen.size,0);
 });
 test('server sound events describe real shots, reject cooldown presses, and expire',()=>{
-  const a=player('a'),r=room(a);giveWeapon(a.car,'plasma');pressWeapon(r,a,100);assert.equal(r.sounds.length,1);assert.equal(r.sounds[0].kind,'plasma');pressWeapon(r,a,101);assert.equal(r.sounds.length,1);updateCombat(r,STEP,1700);assert.equal(r.sounds.length,0);
+  const a=player('a'),r=room(a);giveWeapon(a.car,'plasma');pressWeapon(r,a,100);assert.equal(r.sounds.length,1);assert.equal(r.sounds[0].kind,'plasma');assert.equal(r.sounds[0].owner,'a');pressWeapon(r,a,101);assert.equal(r.sounds.length,1);updateCombat(r,STEP,1700);assert.equal(r.sounds.length,0);
 });

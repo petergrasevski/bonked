@@ -1,0 +1,404 @@
+{
+  "licence": "CC0-1.0",
+  "attributionRequired": false,
+  "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "retrieved": "2026-10-13",
+  "notes": "Freesound inputs use the site\u2019s public HQ MP3 previews (lossy), not original WAV downloads. Weapon designs include Kenney synthesized effects and recorded gunfire. Skid is recorded rubber foley. RPM anchors are authored game tuning, not measured vehicle RPM.",
+  "sources": [
+    {
+      "name": "engine-idle",
+      "author": "GiocoSound",
+      "id": 401552,
+      "url": "https://freesound.org/people/GiocoSound/sounds/401552/",
+      "download": "https://cdn.freesound.org/previews/401/401552_5820033-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 73632
+    },
+    {
+      "name": "engine-low",
+      "author": "GiocoSound",
+      "id": 401556,
+      "url": "https://freesound.org/people/GiocoSound/sounds/401556/",
+      "download": "https://cdn.freesound.org/previews/401/401556_5820033-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 50688
+    },
+    {
+      "name": "engine-mid",
+      "author": "GiocoSound",
+      "id": 401555,
+      "url": "https://freesound.org/people/GiocoSound/sounds/401555/",
+      "download": "https://cdn.freesound.org/previews/401/401555_5820033-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 66624
+    },
+    {
+      "name": "engine-high",
+      "author": "GiocoSound",
+      "id": 401551,
+      "url": "https://freesound.org/people/GiocoSound/sounds/401551/",
+      "download": "https://cdn.freesound.org/previews/401/401551_5820033-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 49152
+    },
+    {
+      "name": "coast",
+      "author": "Noted451",
+      "id": 531015,
+      "url": "https://freesound.org/people/Noted451/sounds/531015/",
+      "download": "https://cdn.freesound.org/previews/531/531015_9818404-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 1594099
+    },
+    {
+      "name": "wind",
+      "author": "florianreichelt",
+      "id": 459977,
+      "url": "https://freesound.org/people/florianreichelt/sounds/459977/",
+      "download": "https://cdn.freesound.org/previews/459/459977_6253486-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 796213
+    },
+    {
+      "name": "gunshot",
+      "author": "BlacklightKabuki",
+      "id": 368805,
+      "url": "https://freesound.org/people/BlacklightKabuki/sounds/368805/",
+      "download": "https://cdn.freesound.org/previews/368/368805_6803591-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 75350
+    },
+    {
+      "name": "shotgun",
+      "author": "michorvath",
+      "id": 427595,
+      "url": "https://freesound.org/people/michorvath/sounds/427595/",
+      "download": "https://cdn.freesound.org/previews/427/427595_3094998-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 41120
+    },
+    {
+      "name": "skid-foley",
+      "author": "johnnydekk",
+      "id": 614627,
+      "url": "https://freesound.org/people/johnnydekk/sounds/614627/",
+      "download": "https://cdn.freesound.org/previews/614/614627_5790048-hq.mp3",
+      "licence": "CC0-1.0",
+      "bytes": 1997301
+    }
+  ],
+  "packs": [
+    {
+      "author": "Kenney",
+      "url": "https://kenney.nl/assets/sci-fi-sounds",
+      "licence": "CC0-1.0"
+    },
+    {
+      "author": "Kenney",
+      "url": "https://kenney.nl/assets/impact-sounds",
+      "licence": "CC0-1.0"
+    }
+  ],
+  "assets": {
+    "engine-idle": {
+      "file": "engine-idle.wav",
+      "inputs": [
+        "engine-idle.mp3"
+      ],
+      "processing": "Mono, DC removal, 32 kHz, bandpass 45\u20136500 Hz, 80 ms loop crossfade, level matched",
+      "duration": 2.9177,
+      "peak": 0.5234,
+      "sha256": "740359403e97ca1cd704510030a526af2e207e955895892ae790e3fdfccbf459"
+    },
+    "engine-low": {
+      "file": "engine-low.wav",
+      "inputs": [
+        "engine-low.mp3"
+      ],
+      "processing": "Mono, DC removal, 32 kHz, bandpass 45\u20136500 Hz, 80 ms loop crossfade, level matched",
+      "duration": 1.9105,
+      "peak": 0.4743,
+      "sha256": "33b810e86079d0b0648350dbcdb28e7df0471db2797e3eef9e064b2d81ad404e"
+    },
+    "engine-mid": {
+      "file": "engine-mid.wav",
+      "inputs": [
+        "engine-mid.mp3"
+      ],
+      "processing": "Mono, DC removal, 32 kHz, bandpass 45\u20136500 Hz, 80 ms loop crossfade, level matched",
+      "duration": 2.6044,
+      "peak": 0.5594,
+      "sha256": "ecaa74c4750f7857875085e584394a74ba5965129ceea022a4401afc664bf86e"
+    },
+    "engine-high": {
+      "file": "engine-high.wav",
+      "inputs": [
+        "engine-high.mp3"
+      ],
+      "processing": "Mono, DC removal, 32 kHz, bandpass 45\u20136500 Hz, 80 ms loop crossfade, level matched",
+      "duration": 1.8363,
+      "peak": 0.7224,
+      "sha256": "946884c74aee2adf45fbd11de1f4b1687159e2b94ec0894816504e054a12fd2f"
+    },
+    "coast": {
+      "file": "coast.wav",
+      "inputs": [
+        "coast.mp3"
+      ],
+      "processing": "Mono extract 12\u201327s, bandpass, 1s loop crossfade, level matched",
+      "duration": 14.0,
+      "peak": 0.84,
+      "sha256": "1b95d83a1c5cf7557c4e46b7791b3be451f4d688cfb90ccc82703fa190a08c25"
+    },
+    "wind": {
+      "file": "wind.wav",
+      "inputs": [
+        "wind.mp3"
+      ],
+      "processing": "Mono extract 4\u201319s, bandpass, 1s loop crossfade, level matched",
+      "duration": 14.0,
+      "peak": 0.84,
+      "sha256": "4eb112b7c90968f8015adc13ee2d8a196c66cd4d2246f5a83a98bcdecdb1e0af"
+    },
+    "skid": {
+      "file": "skid.wav",
+      "inputs": [
+        "skid-foley.mp3"
+      ],
+      "processing": "Sustained rubber foley at 27.25s, 480\u20136200Hz, 120ms loop crossfade",
+      "duration": 1.88,
+      "peak": 0.8226,
+      "sha256": "3e7978ee70e136d9953154820e5d7ec95e452376037e9603beb312d814579eb4"
+    },
+    "gunshot": {
+      "file": "gunshot.wav",
+      "inputs": [
+        "gunshot.mp3"
+      ],
+      "processing": "Mono, trimmed attack/silence, bandpass, 32 kHz, peak headroom",
+      "duration": 1.502,
+      "peak": 0.84,
+      "sha256": "3494c98a087ab42c77b5efc0fb095f068a215a3d9fe2bd4654d24996e107a20a"
+    },
+    "shotgun": {
+      "file": "shotgun.wav",
+      "inputs": [
+        "shotgun.mp3"
+      ],
+      "processing": "Mono, trimmed attack/silence, bandpass, 32 kHz, peak headroom",
+      "duration": 1.0584,
+      "peak": 0.84,
+      "sha256": "b9ba58c444c9a88c0245fc0148018cb5337ef6c668999c2262e1e5afa3f53e16"
+    },
+    "plasma-0": {
+      "file": "plasma-0.wav",
+      "inputs": [
+        "sci-fi/Audio/laserSmall_000.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.2392,
+      "peak": 0.8239,
+      "sha256": "aa27bc5d6bc67253f114cd229178e3711f5a718441f4ceffd81d0c6f076a8323"
+    },
+    "plasma-1": {
+      "file": "plasma-1.wav",
+      "inputs": [
+        "sci-fi/Audio/laserSmall_001.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.2474,
+      "peak": 0.84,
+      "sha256": "e6cb6cbb817c75e43a17979723d8535254f88688dc495fa96661d945393e045a"
+    },
+    "plasma-2": {
+      "file": "plasma-2.wav",
+      "inputs": [
+        "sci-fi/Audio/laserSmall_002.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.3443,
+      "peak": 0.84,
+      "sha256": "5f2b66b6ed2f00ad78ec466cf212bea9fb13d1e8ec5ee15413baa30301b8d776"
+    },
+    "rail-0": {
+      "file": "rail-0.wav",
+      "inputs": [
+        "sci-fi/Audio/laserLarge_000.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.4413,
+      "peak": 0.8015,
+      "sha256": "ec9156ba279c0e9876400d1282ec5459077364d227f5a43e42b21b07782e5369"
+    },
+    "rail-1": {
+      "file": "rail-1.wav",
+      "inputs": [
+        "sci-fi/Audio/laserLarge_001.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.4865,
+      "peak": 0.7916,
+      "sha256": "2e7e3ad47f7c73eb9b7fa782c3316c3fcb3a743190561ed4a71f77e68324e13e"
+    },
+    "rail-2": {
+      "file": "rail-2.wav",
+      "inputs": [
+        "sci-fi/Audio/laserLarge_002.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.5058,
+      "peak": 0.84,
+      "sha256": "627a96351f4e1577143985494dc3c222d96f9f0856e366d3602f3996581d5c10"
+    },
+    "explosion-0": {
+      "file": "explosion-0.wav",
+      "inputs": [
+        "sci-fi/Audio/explosionCrunch_000.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.7628,
+      "peak": 0.84,
+      "sha256": "c4e32f9361821a40345d61d7fc4315b118448629a2c4dae0791fa6ab5776ec7e"
+    },
+    "explosion-1": {
+      "file": "explosion-1.wav",
+      "inputs": [
+        "sci-fi/Audio/explosionCrunch_001.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 1.3338,
+      "peak": 0.84,
+      "sha256": "2cec8620b0caa03e7653e8954ce3630526f64be17eeac2b82f36b5471c2a219d"
+    },
+    "explosion-2": {
+      "file": "explosion-2.wav",
+      "inputs": [
+        "sci-fi/Audio/explosionCrunch_002.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 1.2379,
+      "peak": 0.84,
+      "sha256": "f3ffcc6d36528a71e56dd70a955afee887cfd42c112cb71dfbdf86a4e831a7c5"
+    },
+    "shield-0": {
+      "file": "shield-0.wav",
+      "inputs": [
+        "sci-fi/Audio/forceField_000.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.7142,
+      "peak": 0.6661,
+      "sha256": "71156d1658748ac4e6fd21cd90c8b6fc900c7502acce08eb10815b7c565eba95"
+    },
+    "shield-1": {
+      "file": "shield-1.wav",
+      "inputs": [
+        "sci-fi/Audio/forceField_001.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.7131,
+      "peak": 0.6508,
+      "sha256": "70172fdba6cb204c2dd694ebb16a67164ef4685f82452594778ba956e2f71d50"
+    },
+    "shield-2": {
+      "file": "shield-2.wav",
+      "inputs": [
+        "sci-fi/Audio/forceField_002.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.7131,
+      "peak": 0.6483,
+      "sha256": "52acc3007c271d6cf8779eb2bb90e02422afeb39fbb29d5b705475f6b277aabd"
+    },
+    "metal-0": {
+      "file": "metal-0.wav",
+      "inputs": [
+        "sci-fi/Audio/impactMetal_000.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.3185,
+      "peak": 0.84,
+      "sha256": "7b15ef5cab50cc51f694f582d06c292792d211cdaa0757f407aa3690cd28f8f9"
+    },
+    "metal-1": {
+      "file": "metal-1.wav",
+      "inputs": [
+        "sci-fi/Audio/impactMetal_001.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.453,
+      "peak": 0.84,
+      "sha256": "fff78ad6aebda81acac8b21ebcc466bca4091be27c40fcf92b6eb0e3e112411c"
+    },
+    "metal-2": {
+      "file": "metal-2.wav",
+      "inputs": [
+        "sci-fi/Audio/impactMetal_002.ogg"
+      ],
+      "processing": "Mono, trimmed attack, DC removal, level matched, 32 kHz PCM",
+      "duration": 0.2395,
+      "peak": 0.84,
+      "sha256": "b59f186d4c3e68fdbc58bf9848ef08bee3ecb42e9620ff81943b1d0a3c92d82f"
+    },
+    "clank-0": {
+      "file": "clank-0.wav",
+      "inputs": [
+        "impact/Audio/impactMetal_medium_000.ogg"
+      ],
+      "processing": "Mono, trimmed, bandpass, level matched",
+      "duration": 0.1565,
+      "peak": 0.84,
+      "sha256": "755ddfa543dc09d51f387714ca32507c2d99e977c9f49e92bee40538af30b682"
+    },
+    "clank-1": {
+      "file": "clank-1.wav",
+      "inputs": [
+        "impact/Audio/impactMetal_medium_001.ogg"
+      ],
+      "processing": "Mono, trimmed, bandpass, level matched",
+      "duration": 0.0907,
+      "peak": 0.84,
+      "sha256": "2e12aa4c4f4af5303898b8b5852109c81493caa3f8ad0ec327d5b21fe3fb1a2d"
+    },
+    "clank-2": {
+      "file": "clank-2.wav",
+      "inputs": [
+        "impact/Audio/impactMetal_medium_002.ogg"
+      ],
+      "processing": "Mono, trimmed, bandpass, level matched",
+      "duration": 0.0747,
+      "peak": 0.84,
+      "sha256": "27647f2e8944edb65e313ce0be9237074efca0b65663d25e15c6736b4b9fa83a"
+    },
+    "flame": {
+      "file": "flame.wav",
+      "inputs": [
+        "sci-fi/Audio/thrusterFire_000.ogg"
+      ],
+      "processing": "Mono, bandpass, 120ms loop crossfade, level matched",
+      "duration": 4.88,
+      "peak": 0.84,
+      "sha256": "e2dbc3e5a586e6b1eb30c76754a2d02939c6a379a746104885da35db063ffa1b"
+    },
+    "taser": {
+      "file": "taser.wav",
+      "inputs": [
+        "sci-fi/Audio/computerNoise_001.ogg"
+      ],
+      "processing": "Mono, bandpass, 120ms loop crossfade, level matched",
+      "duration": 4.88,
+      "peak": 0.3804,
+      "sha256": "ad369eeaa0ec3e6037c41d57d2cb21ba4b2693e5c03f3ade0b5efb29875dc984"
+    },
+    "thump": {
+      "file": "thump.wav",
+      "inputs": [
+        "sci-fi/Audio/lowFrequency_explosion_000.ogg"
+      ],
+      "processing": "Mono, low body layer, trimmed, level matched",
+      "duration": 1.1996,
+      "peak": 0.84,
+      "sha256": "a5fc20a6825d5037a22a9ee3de3b060f7e68cafce11deef58b837296db804271"
+    }
+  }
+}

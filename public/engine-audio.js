@@ -1,4 +1,5 @@
 import {soundPosition} from './weapon-audio.js';
+import {sampleLoop} from './audio-bank.js';
 import {engineAudible} from './audio.js';
 
 // Listen at the camera's ground target, so the race stays audible after death.
@@ -17,50 +18,54 @@ export function engineParameters(car,previousGear=0){
   const rpm=Math.min(6700,850+speed*(forward<-.5?340:ratios[gear])+throttle*220);
   return {gear,rpm,load:throttle,speed,shifted:gear!==previousGear};
 }
-export class EngineAudio{
-  constructor(context){
-    this.context=context;this.engines=new Map();this.room=null;
-    this.master=context.createGain();this.master.gain.value=0;
-    this.compressor=context.createDynamicsCompressor();this.compressor.threshold.value=-18;this.compressor.knee.value=12;this.compressor.ratio.value=3;this.compressor.attack.value=.012;this.compressor.release.value=.18;
-    this.master.connect(this.compressor);this.compressor.connect(context.destination);
-    // Rounded, uneven combustion pulses rather than a raw sawtooth buzz.
-    const real=new Float32Array(25),imag=new Float32Array(25);
-    for(let h=1;h<25;h++){const amplitude=Math.exp(-h*.24)/Math.sqrt(h)*(h%2?.8:1);real[h]=amplitude*Math.cos(h*.31);imag[h]=amplitude*Math.sin(h*.31);}
-    this.wave=context.createPeriodicWave(real,imag);
-    this.noise=context.createBuffer(1,context.sampleRate*2,context.sampleRate);const data=this.noise.getChannelData(0);let last=0;
-    for(let i=0;i<data.length;i++){last=.82*last+.18*(Math.random()*2-1);data[i]=last*2;}
+// These are artistic RPM anchors for the four recordings, not measured BMW telemetry.
+export const ENGINE_BANDS=[['engine-idle',850],['engine-low',2200],['engine-mid',4200],['engine-high',6500]];
+export function engineBlend(rpm,bands=ENGINE_BANDS){
+  const weights=bands.map(()=>0);if(!bands.length)return weights;
+  if(rpm<=bands[0][1]){weights[0]=1;return weights;}
+  if(rpm>=bands.at(-1)[1]){weights[weights.length-1]=1;return weights;}
+  for(let i=0;i<bands.length-1;i++)if(rpm>=bands[i][1]&&rpm<bands[i+1][1]){
+    const blend=(rpm-bands[i][1])/(bands[i+1][1]-bands[i][1]);weights[i]=Math.cos(blend*Math.PI/2);weights[i+1]=Math.sin(blend*Math.PI/2);break;
   }
-  create(id){
-    const c=this.context,t=c.currentTime,nodes=[],node=type=>{const n=c[type]();nodes.push(n);return n;};
-    const exhaust=node('createOscillator'),rumble=node('createOscillator'),intake=node('createBufferSource'),filter=node('createBiquadFilter'),rumbleGain=node('createGain'),airFilter=node('createBiquadFilter'),airGain=node('createGain'),level=node('createGain'),pan=node('createStereoPanner');
-    exhaust.setPeriodicWave(this.wave);rumble.type='sine';intake.buffer=this.noise;intake.loop=true;
-    filter.type='lowpass';filter.Q.value=.65;airFilter.type='bandpass';airFilter.Q.value=.6;rumbleGain.gain.value=.35;airGain.gain.value=.035;level.gain.value=0;
-    exhaust.connect(filter);rumble.connect(rumbleGain);rumbleGain.connect(filter);filter.connect(level);intake.connect(airFilter);airFilter.connect(airGain);airGain.connect(level);level.connect(pan);pan.connect(this.master);
-    exhaust.frequency.value=30;rumble.frequency.value=30;filter.frequency.value=500;airFilter.frequency.value=900;
-    exhaust.start(t);rumble.start(t);intake.start(t);
-    const timbre=1+([...String(id)].reduce((n,ch)=>n+ch.charCodeAt(0),0)%11-5)*.004;
-    const engine={gear:0,shiftUntil:0,timbre,exhaust,rumble,filter,airFilter,airGain,level,pan};
-    engine.stop=()=>{level.gain.cancelScheduledValues(c.currentTime);level.gain.setTargetAtTime(.00001,c.currentTime,.008);for(const source of [exhaust,rumble,intake])source.stop(c.currentTime+.05);exhaust.onended=()=>nodes.forEach(n=>n.disconnect());};
-    return engine;
+  return weights;
+}
+export class EngineAudio {
+  constructor(context,{bank,mixer}={}){this.context=context;this.bank=bank;this.mixer=mixer;this.engines=new Map();this.room=null;}
+  create(id,local,bands){
+    const c=this.context,filter=c.createBiquadFilter(),level=c.createGain(),pan=c.createStereoPanner();
+    filter.type='lowpass';filter.Q.value=.65;level.gain.value=0;filter.connect(level);level.connect(pan);
+    pan.connect(this.mixer?.bus(local?'playerEngine':'rivalEngines')||c.destination);
+    const seed=[...String(id)].reduce((n,ch)=>n+ch.charCodeAt(0),0),timbre=1+(seed%9-4)*.005;
+    const layers=bands.map(([name])=>sampleLoop(c,this.bank.get(name),filter,{offset:(seed%97)/97*this.bank.get(name).duration}));
+    const e={gear:0,shiftUntil:0,timbre,filter,level,pan,layers,bands,local};
+    e.stop=()=>{for(const l of layers)l.stop();level.gain.setTargetAtTime(0,c.currentTime,.01);
+      // Keep the graph connected for the short release, then free the downstream nodes.
+      layers[0].source.addEventListener('ended',()=>{filter.disconnect();level.disconnect();pan.disconnect();},{once:true});};
+    return e;
   }
-  update(state,listener,enabled){
+  update(state,listener,enabled,playerId=null){
     const c=this.context,key=state?`${state.code}:${state.round}`:null;if(this.room!==key){this.stop();this.room=key;}
-    const active=enabled&&['countdown','racing'].includes(state?.phase);this.master.gain.setTargetAtTime(active?.8:0,c.currentTime,.025);
-    const wanted=new Set();
-    if(active)for(const car of state.players){
+    const active=enabled&&['countdown','racing'].includes(state?.phase),wanted=new Set();
+    const bands=ENGINE_BANDS.filter(([name])=>this.bank?.get(name));
+    if(active&&bands.length)for(const car of state.players||[]){
       if(!engineAudible('racing',car,true,true,true))continue;
-      const spatial=soundPosition(car,listener);if(spatial.volume<.003)continue;
-      wanted.add(car.id);let e=this.engines.get(car.id);if(!e){e=this.create(car.id);e.gear=engineParameters(car).gear;this.engines.set(car.id,e);}
+      const local=car.id===playerId,spatial=soundPosition(car,listener);if(!local&&spatial.volume<.003)continue;
+      wanted.add(car.id);let e=this.engines.get(car.id);
+      if(e&&(e.local!==local||e.bands.length!==bands.length)){e.stop();this.engines.delete(car.id);e=null;}
+      if(!e){e=this.create(car.id,local,bands);e.gear=engineParameters(car).gear;this.engines.set(car.id,e);}
       const p=engineParameters(car,e.gear);if(p.shifted)e.shiftUntil=c.currentTime+.12;e.gear=p.gear;
-      const shift=c.currentTime<e.shiftUntil,load=shift?.2:p.load,rpm=p.rpm*e.timbre;
-      e.exhaust.frequency.setTargetAtTime(rpm/30,c.currentTime,shift?.045:.1);
-      e.rumble.frequency.setTargetAtTime(rpm/60,c.currentTime,.13);
-      e.filter.frequency.setTargetAtTime(320+rpm*.16+load*650,c.currentTime,.08);
-      e.airFilter.frequency.setTargetAtTime(420+rpm*.15,c.currentTime,.12);e.airGain.gain.setTargetAtTime(.025+load*.16,c.currentTime,.1);
-      e.level.gain.setTargetAtTime(spatial.volume*(.032+load*.024+Math.min(p.speed/36,1)*.013)*(shift?.7:1),c.currentTime,.06);
-      e.pan.pan.setTargetAtTime(spatial.pan,c.currentTime,.07);
+      const shift=c.currentTime<e.shiftUntil,load=shift?.15:p.load,weights=engineBlend(p.rpm,bands);
+      for(let i=0;i<e.layers.length;i++){
+        e.layers[i].source.playbackRate.setTargetAtTime(Math.max(.72,Math.min(1.35,p.rpm/bands[i][1]))*e.timbre,c.currentTime,.09);
+        e.layers[i].gain.gain.setTargetAtTime(weights[i],c.currentTime,.07);
+      }
+      // Throttle opens the intake/exhaust colour; coasting keeps its quieter mechanical texture.
+      e.filter.frequency.setTargetAtTime((1100+p.rpm*.7+load*2400)*(local?1:.45+.55*spatial.volume),c.currentTime,.08);
+      const focus=local?.85+.15*spatial.volume:spatial.volume;
+      e.level.gain.setTargetAtTime(focus*(.23+load*.18+Math.min(p.speed/36,1)*.04)*(shift?.63:1),c.currentTime,.055);
+      e.pan.pan.setTargetAtTime(spatial.pan*(local?.3:1),c.currentTime,.07);
     }
-    for(const[id,e]of this.engines)if(!wanted.has(id)){e.stop();this.engines.delete(id);}
+    for(const [id,e]of this.engines)if(!wanted.has(id)){e.stop();this.engines.delete(id);}
   }
-  stop(){for(const e of this.engines.values())e.stop();this.engines.clear();this.master.gain.cancelScheduledValues(this.context.currentTime);this.master.gain.setValueAtTime(0,this.context.currentTime);}
+  stop(){for(const e of this.engines.values())e.stop();this.engines.clear();}
 }

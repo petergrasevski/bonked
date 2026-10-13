@@ -33,7 +33,7 @@ const players=room=>[...room.players.values()];
 const targets=(room,owner)=>players(room).filter(p=>p.id!==owner&&!p.car.finished&&(!p.car.eliminated||p.car.wrecked)&&!p.car.falling);
 function eventId(room,kind){const event=room.shotEvent;if(!event)return ++room.serial;const n=event.counts[kind]||0;event.counts[kind]=n+1;return `${event.key}:${kind}:${n}`;}
 function effect(room,kind,x,z,now,extra={}){if(room.visualOnly&&!room.shotEvent)return;room.effects.push({id:eventId(room,'effect-'+kind),kind,x,z,until:now+(extra.duration||500),color:extra.color||'#ff993d',...extra});if(room.effects.length>160)room.effects.shift();}
-function sound(room,kind,car,now){if(room.visualOnly&&!room.shotEvent)return;room.sounds??=[];room.sounds.push({id:eventId(room,'sound-'+kind),kind,x:car.x,y:car.y||0,z:car.z,at:now});if(room.sounds.length>96)room.sounds.shift();}
+function sound(room,kind,car,now){if(room.visualOnly&&!room.shotEvent)return;room.sounds??=[];room.sounds.push({id:eventId(room,'sound-'+kind),kind,owner:car.owner??players(room).find(p=>p.car===car)?.id??null,x:car.x,y:car.y||0,z:car.z,at:now});if(room.sounds.length>96)room.sounds.shift();}
 function hit(room,p,amount,now,kick={}){
   if(room.visualOnly)return false; // Only the server can award damage or weapon impulses.
   const c=p.car,protectedByShield=c.shield>0,wasWreck=c.wrecked;
@@ -42,7 +42,7 @@ function hit(room,p,amount,now,kick={}){
   if(!damaged)return false;
   c.vx+=kick.x||0;c.vz+=kick.z||0;c.impactTime=Math.max(c.impactTime,.8);
   if(kick.up)launchCar(c,kick.up,kick.side||0,kick.fore||0);
-  if(!wasWreck&&c.wrecked){c.eliminatedAt=now-room.startAt;c.explosionShown=true;effect(room,'explosion',c.x,c.z,now,{y:c.y,duration:1100});}
+  if(!wasWreck&&c.wrecked){c.eliminatedAt=now-room.startAt;c.explosionShown=true;sound(room,'explosion',c,now);effect(room,'explosion',c.x,c.z,now,{y:c.y,duration:1100});}
   else if(amount>=8)effect(room,'hit',c.x,c.z,now,{y:c.y,duration:220});
   return true;
 }
