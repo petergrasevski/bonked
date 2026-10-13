@@ -233,9 +233,9 @@ h1,h2,h3,.entry-title,.primary,#copy,.weapon-name,.result-score,.score-total,#co
 .lobby-card:before,.modal:before{content:'';position:absolute;inset:0;z-index:-2;pointer-events:none;background:linear-gradient(135deg,#8d9ba3,#d0d9df 28%,#4b6474 66%,#9baab4)}
 .lobby-card:after,.modal:after{content:'';position:absolute;inset:1px;z-index:-1;pointer-events:none;clip-path:polygon(0 0,calc(100% - var(--panel-cut)) 0,100% var(--panel-cut),100% 100%,var(--panel-cut) 100%,0 calc(100% - var(--panel-cut)));border-top:4px solid #e9aa64;background:linear-gradient(135deg,#253844,#152630)}
 .lobby-card input,.modal input{border-radius:2px;border-color:#738b9b40;background:#0d1b25;box-shadow:inset 0 2px 6px #0005}
-.primary{border-radius:0;clip-path:polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%);background-image:repeating-linear-gradient(0deg,#ffffff14 0px,#ffffff14 1px,#34485708 1px,#34485708 2px),linear-gradient(115deg,#8299a8,#e1e9ed 38%,#afc0ca 70%,#dce5eb);background-size:100% 2px,100% 100%}
+.primary{border-radius:0;clip-path:none;background-image:repeating-linear-gradient(0deg,#ffffff14 0px,#ffffff14 1px,#34485708 1px,#34485708 2px),linear-gradient(115deg,#8299a8,#e1e9ed 38%,#afc0ca 70%,#dce5eb);background-size:100% 2px,100% 100%}
 .primary:focus-visible{outline:2px solid #153e59;outline-offset:-5px}.primary:disabled{transform:none;box-shadow:none;opacity:.38}.primary:disabled:before{display:none}
-.secondary,.setting-row,.results-heading #results-lobby{border-radius:2px;border-color:#8ba3b444;background:linear-gradient(#3a526244,#0b1b2788);box-shadow:inset 0 1px 0 #e1eff511}
+.secondary,.add-bot,.setting-row,.results-heading #results-lobby{border-radius:0;border-color:#8ba3b444;background:linear-gradient(#3a526244,#0b1b2788);box-shadow:inset 0 1px 0 #e1eff511}
 .track-card{border-radius:3px}.result-player{border-radius:2px;background:#09172155}.result-player.me{background:#36516655}.settings-card .close,.modal .close{right:16px;top:16px;width:30px;height:30px;border:1px solid #9ab1c03b;border-radius:2px;background:#10212c;line-height:1}
 #entry-panel>label{margin-top:4px}.entry-options{border-top-color:#9db1bf30}
 @media(max-height:560px){.lobby-card,.modal{--panel-cut:18px}.settings-card .close,.modal .close{top:12px;right:14px}.lobby-card:after,.modal:after{border-top-width:3px}}
@@ -292,3 +292,9 @@ body.mobile #race-ui.sky-beam #sky-joystick{display:flex}#race-ui.sky-beam #item
 
 #opponent-name{position:fixed;left:0;top:0;z-index:3;pointer-events:none;will-change:transform;max-width:min(220px,75vw);padding:7px 12px;border:1px solid var(--car-color,#cbd5df);border-radius:8px;background:#10202bef;color:#f2f6fa;box-shadow:0 3px 12px #0006;font-size:13px;font-weight:700;line-height:1.3;overflow-wrap:anywhere;text-align:center}
 #opponent-name::after{content:'';position:absolute;left:50%;top:100%;margin-left:-4px;border:4px solid transparent;border-top-color:var(--car-color,#cbd5df)}
+
+/* Roster actions follow the flat rectangular lobby controls. */
+.add-bot{font-family:Righteous,Inter,sans-serif;font-weight:400;color:inherit}
+.add-bot:hover{background:#ffffff12}
+.remove-bot{border:0;border-radius:0;background:transparent;box-shadow:none}
+.remove-bot:hover{background:transparent;color:#ff8a76}

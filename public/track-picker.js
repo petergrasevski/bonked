@@ -6,12 +6,12 @@ const SIZE=320;
 export const SELECTED_PREVIEW_INTERVAL=100;
 export function captureTrackPreview(world,canvas,now=0){
   const id=world.trackId,camera=new THREE.PerspectiveCamera(48,1,.2,1400);let target;
-  if(id==='coast'){const p=trackAt(.15);target=new THREE.Vector3(p.x+p.nx*18,3,p.z+p.nz*18);camera.position.set(p.x+p.nx*65-Math.cos(p.angle)*32,65,p.z+p.nz*65-Math.sin(p.angle)*32);}
+  if(id==='coast'){const p=trackAt(14.5/24);target=new THREE.Vector3(p.x+p.nx*4,0,p.z+p.nz*4);camera.position.set(p.x+p.nx*43-Math.cos(p.angle)*22,39,p.z+p.nz*43-Math.sin(p.angle)*22);}
   else if(id==='ice'){target=new THREE.Vector3(0,0,0);camera.position.set(95,140,150);}
   else{const p=trackAt(.25);target=new THREE.Vector3(p.x,24,p.z);camera.position.set(p.x+145,150,p.z+125);}
   // Pan up the scene so the landmark sits below the title artwork, keeping
   // the view angle/scale intact. Glacier's framing already clears its title.
-  const north=id==='coast'?16:id==='desert'?38:0;
+  const north=id==='coast'?7:id==='desert'?38:0;
   if(north){const pan=target.clone().sub(camera.position);pan.y=0;pan.normalize().multiplyScalar(north);camera.position.add(pan);target.add(pan);}
   camera.lookAt(target);camera.updateMatrixWorld();
   const renderTarget=world.previewTarget??=new THREE.WebGLRenderTarget(SIZE,SIZE);renderTarget.texture.colorSpace=THREE.SRGBColorSpace;
@@ -19,11 +19,11 @@ export function captureTrackPreview(world,canvas,now=0){
   try{
     for(const [o]of hidden)o.visible=false;
     const [sx,sy,sz]=world.atmosphere.profile.sunOffset;world.sun.position.copy(target).add(new THREE.Vector3(sx,sy,sz));world.sun.target.position.copy(target);world.sun.target.updateMatrixWorld();world.atmosphere.update(camera,now,target.y);
-    world.renderer.setRenderTarget(renderTarget);world.renderer.render(world.scene,camera);
+    world.cullDistantScenery(camera);world.renderer.setRenderTarget(renderTarget);world.renderer.render(world.scene,camera);
     const pixels=world.previewPixels??=new Uint8Array(SIZE*SIZE*4);world.renderer.readRenderTargetPixels(renderTarget,0,0,SIZE,SIZE,pixels);
     if(canvas.width!==SIZE){canvas.width=SIZE;canvas.height=SIZE;}
     const ctx=canvas.getContext('2d'),data=canvas.previewImageData??=ctx.createImageData(SIZE,SIZE);for(let y=0;y<SIZE;y++)data.data.set(pixels.subarray((SIZE-y-1)*SIZE*4,(SIZE-y)*SIZE*4),y*SIZE*4);ctx.putImageData(data,0,0);
-  }finally{world.renderer.setRenderTarget(previousTarget);world.sun.position.copy(sun);world.sun.target.position.copy(sunTarget);world.sun.target.updateMatrixWorld();for(const [o,visible]of hidden)o.visible=visible;}
+  }finally{world.renderer.setRenderTarget(previousTarget);world.sun.position.copy(sun);world.sun.target.position.copy(sunTarget);world.sun.target.updateMatrixWorld();for(const [o,visible]of hidden)o.visible=visible;world.cullDistantScenery(world.camera);}
 }
 export function createTrackPicker(root,getWorld,onSelect){
   const cards=new Map(),rendered=new Set();let visible=false,queued=false,lastCapture=-Infinity;
