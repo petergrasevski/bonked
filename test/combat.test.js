@@ -39,8 +39,8 @@ test('three separate mine presses, near-immediate arming and ballistic launch',(
   updateCombat(r,STEP,99);assert.equal(b.car.health,100);updateCombat(r,STEP,100);assert.equal(b.car.health,72);assert.ok(b.car.vy>=15);assert.notEqual(b.car.rollVelocity,0);
   r.players.delete('b');run(r,.25,100);assert.ok(pressWeapon(r,a,350));run(r,.25,350);assert.ok(pressWeapon(r,a,600));assert.equal(a.car.item,null);assert.equal(r.mines.length,2);
 });
-test('mine-like launches can land upright or stranded on their roof',()=>{
-  const land=side=>{const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x,z:p.z,angle:p.angle});launchCar(c,15,side,0);for(let i=0;i<120;i++)stepCar(c,NEUTRAL);return c;};const upright=land(0),roof=land(.3);assert.equal(upright.overturned,false);assert.equal(roof.overturned,true);assert.equal(roof.health,100);const {x,z}=roof;for(let i=0;i<120;i++)stepCar(roof,{...NEUTRAL,throttle:1,steer:1});assert.equal(roof.x,x);assert.equal(roof.z,z);
+test('mine-like launches can land upright or on a recoverable roof',()=>{
+  const land=side=>{const c=spawnCar(),p=trackAt(.01);Object.assign(c,{x:p.x,z:p.z,angle:p.angle});launchCar(c,15,side,0);for(let i=0;i<120;i++)stepCar(c,NEUTRAL);return c;};const upright=land(0),roof=land(.3);assert.equal(upright.overturned,false);assert.equal(roof.overturned,true);assert.equal(roof.health,100);const {x,z}=roof;for(let i=0;i<120;i++)stepCar(roof,{...NEUTRAL,throttle:1,steer:1});assert.equal(roof.overturned,false);assert.ok(Math.hypot(roof.x-x,roof.z-z)>1);
 });
 test('ball and chain obeys its tether and transfers motion through turns',()=>{
   const a=player('a'),r=room(a);fire(r,a,'chain');const ball=r.chains[0];for(let i=1;i<600;i++){a.car.x+=.3;a.car.z=Math.sin(i*.02)*4;a.car.angle=Math.atan2(Math.cos(i*.02)*.08,.3);a.car.vx=18;a.car.vz=Math.cos(i*.02)*4.8;updateCombat(r,STEP,i*STEP*1000);assert.ok(Math.hypot(ball.x-ball.anchorX,ball.z-ball.anchorZ)<=ball.length+.001);assert.ok(Number.isFinite(ball.vx)&&Math.abs(ball.vx)<100);}assert.ok(Math.abs(ball.vz)>1);

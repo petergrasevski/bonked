@@ -172,7 +172,8 @@ export function botAvoidance(room,p,options={},previous=null){
 export function botControls(room,p,now,random=Math.random){
   const c=p.car;
   const state=p.botState??={preferredLane:(c.gridSlot%2?1:-1)*(.55+random()*.35),side:c.gridSlot%2?-1:1,lane:0,desiredLane:0,nextPlan:0,nextFire:0,nextNudge:0,nextAvoid:0,avoidLane:null,avoidance:null,fire:false,item:null,ammo:0,lastUse:room.raceTime,forceUse:false,target:null,approaches:new Map()};
-  if(!live(c)||c.overturned)return {...botInput(c),fire:false,nudge:0};
+  if(!live(c))return {...botInput(c),fire:false,nudge:0};
+  if(c.overturned)return {steer:Math.sign(c.rollVelocity)||-Math.sign(angleDelta(c.roll,0))||1,throttle:1,reverse:false,brake:false,fire:false,nudge:0};
   const time=room.raceTime;
   if(time>=state.nextPlan){state.desiredLane=chooseLane(room,p,now,state,random);state.nextPlan=time+.18+random()*.04;}
   state.lane+=clamp(state.desiredLane-state.lane,-2*STEP,2*STEP);

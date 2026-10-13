@@ -2,6 +2,7 @@ import {COAST_BEACH_SECTIONS,coastalCrabs,collideCrabs} from './coastal-crabs.js
 import {applyDesertWind} from './desert-storm.js';
 import {boostLayout,boostSpeed} from './boost-pads.js';
 import {wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
+import {stepRollover,shoveRollover} from './rollover.js';
 import {createLandscape} from './landscape.js';
 import {DESERT_CACTI,DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
 export const MAX_PLAYERS = 8;
@@ -272,6 +273,7 @@ export function resolveNudges(cars,{damage=true}={}){
         const impulse=clamp((va-vb)*1.12/(2+(ta*ta+tb*tb)/inertia),0,13);
         // Powered shove stability absorbs half the initiating car's recoil.
         a.vx-=nx*impulse*.5;a.vz-=nz*impulse*.5;b.vx+=nx*impulse;b.vz+=nz*impulse;
+        shoveRollover(a,-nx*impulse*.5,-nz*impulse*.5);shoveRollover(b,nx*impulse,nz*impulse);
         a.yawVelocity+=(clamp(a.yawVelocity-ta*impulse/inertia,-3,3)-a.yawVelocity)*.5;b.yawVelocity=clamp(b.yawVelocity+tb*impulse/inertia,-3,3);
         a.impactTime=Math.max(a.impactTime,.11);b.impactTime=Math.max(b.impactTime,.65);
         a.contactCooldown=b.contactCooldown=.2;
@@ -381,6 +383,7 @@ export function stepCar(car, input, dt=STEP) {
   car.tasePhase=(car.tasePhase||0)+dt;
   const padSpeed=boostSpeed(car,dt,TOP_SPEED);
   verticalStep(car,dt);
+  stepRollover(car,input,dt);
   if(car.falling&&car.y< -20){car.vx=0;car.vz=0;return;}
   car.nudgeMoved=false;
   const direction=input.nudge===-1?-1:input.nudge===1?1:0;
@@ -486,12 +489,14 @@ export function collideCars(cars,{road=false,damage=true}={}){
     const push=(hit.depth+.002)/(ma+mb);a.x-=nx*push*ma;a.z-=nz*push*ma;b.x+=nx*push*mb;b.z+=nz*push*mb;
     if(speed>0){const impulse=speed*1.08/(ma+mb+ta*ta*ma/inertia+tb*tb*mb/inertia);
       a.vx-=nx*impulse*ma;a.vz-=nz*impulse*ma;b.vx+=nx*impulse*mb;b.vz+=nz*impulse*mb;
+      shoveRollover(a,-nx*impulse*ma,-nz*impulse*ma);shoveRollover(b,nx*impulse*mb,nz*impulse*mb);
       a.yawVelocity=clamp(a.yawVelocity-ta*impulse*ma/inertia,-3,3);b.yawVelocity=clamp(b.yawVelocity+tb*impulse*mb/inertia,-3,3);
       // A little contact friction makes rubbing doors and clipping a rear
       // quarter transfer sideways motion, while retaining deliberate drift.
       const tx=-nz,tz=nx,tangentSpeed=(b.vx-a.vx)*tx+(b.vz-a.vz)*tz;
       const friction=clamp(-tangentSpeed/(ma+mb),-impulse*.25,impulse*.25);
       a.vx-=tx*friction*ma;a.vz-=tz*friction*ma;b.vx+=tx*friction*mb;b.vz+=tz*friction*mb;
+      shoveRollover(a,-tx*friction*ma,-tz*friction*ma);shoveRollover(b,tx*friction*mb,tz*friction*mb);
       a.impactTime=b.impactTime=.65;
       if(damage&&pass===0&&speed>7){if(a.contactCooldown<=0){damageCar(a,(speed-7)*.35);a.contactCooldown=.2;}if(b.contactCooldown<=0){damageCar(b,(speed-7)*.35);b.contactCooldown=.2;}}
     }

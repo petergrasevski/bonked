@@ -9,6 +9,7 @@ import {createTyreTracks} from './tyre-tracks.js';
 import {createNudgeEffects} from './nudge-effects.js';
 import {SkyBeamView} from './sky-beam.js';
 import {skySurfaces} from '/shared/sky-ground.js';
+import {rolloverLift} from '/shared/rollover.js';
 import {buildCoastalCrabs,updateCoastalCrabs} from './coastal-crabs.js';
 import {boostExhaustStrength} from '/shared/boost-pads.js';
 import {buildBoostPads} from './boost-pads.js';
@@ -293,7 +294,7 @@ export class World{
     if(state)for(const p of state.players){present.add(p.id);let g=this.cars.get(p.id);if(!g){g=this.createCar(p.color);this.scene.add(g);this.cars.set(p.id,g);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;}
       const car=p.id===localId&&localCar&&!p.wrecked?localCar:p;const a=1;g.userData.snap=false;
       g.position.x+=(car.x-g.position.x)*a;g.position.z+=(car.z-g.position.z)*a;g.rotation.y+=angleDelta(-car.angle,g.rotation.y)*a;
-      g.position.y=(car.y||0)+(1-Math.cos(car.roll||0)*Math.cos(car.pitch||0))*.5;g.rotation.x=car.roll||0;g.rotation.z=car.pitch||0;g.visible=(!p.eliminated||p.wrecked)&&g.position.y>-15;
+      g.position.y=(car.y||0)+(1-Math.cos(car.roll||0)*Math.cos(car.pitch||0))*.5+rolloverLift(car);g.rotation.x=car.roll||0;g.rotation.z=car.pitch||0;g.visible=(!p.eliminated||p.wrecked)&&g.position.y>-15;
       updateCarVisuals(g,car,dt);
       syncCarWeapon(g,p);
       g.userData.flame.visible=p.firing==='flame'&&!p.eliminated;
