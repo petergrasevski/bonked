@@ -13,9 +13,9 @@ test('shove momentum gives half recoil to the initiator, with opposite yaw for f
     const [a,b]=hit(offset,direction);
     assert.ok(b.vz*direction>7);assert.ok(Math.abs(a.vz+b.vz*.5)<1e-9);
     assert.equal(a.vx+b.vx,0);assert.equal(Math.sign(b.yawVelocity),Math.sign(offset*direction)||0);
-    assert.equal(a.yawVelocity,b.yawVelocity*.5);assert.ok(a.impactTime<=.11);assert.ok(b.impactTime>=.6);assert.equal(b.health,92);
+    assert.equal(a.yawVelocity,b.yawVelocity*.5);assert.ok(a.impactTime<=.11);assert.ok(b.impactTime>=.6);assert.equal(b.health,95);
     const velocity=b.vz,yaw=b.yawVelocity;
-    resolveNudges([a,b]);assert.equal(b.health,92);assert.equal(b.vz,velocity);assert.equal(b.yawVelocity,yaw);
+    resolveNudges([a,b]);assert.equal(b.health,95);assert.equal(b.vz,velocity);assert.equal(b.yawVelocity,yaw);
   }
 });
 test('shove contact respects the target relative velocity instead of overwriting it',()=>{

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectTrack,TRACK_LENGTH,TRACK,trackAt,nearestTrack,hasBarrier,spawnCar,stepCar,botInput,collideDesertMoles,MOLES,STEP,NEUTRAL,CAR_LENGTH,CAR_WIDTH,TOP_SPEED} from '../shared/game.js';
+import {selectTrack,TRACK_LENGTH,TRACK,trackAt,nearestTrack,hasBarrier,spawnCar,stepCar,launchCar,collideCars,botInput,collideDesertMoles,MOLES,STEP,NEUTRAL,CAR_LENGTH,CAR_WIDTH,TOP_SPEED} from '../shared/game.js';
+import {predictFleet} from '../shared/prediction.js';
 import {DESERT_JUMPS,DESERT_MOUNTAIN,DESERT_MOLE_ZONE,desertRampLift,desertRampGrade,desertHalfWidth,moleState} from '../shared/desert-features.js';
 
 const atMole=(mole)=>{const c=spawnCar(),d=CAR_LENGTH/2+mole.radius-.25;return {...c,x:mole.x-Math.cos(mole.angle)*d,z:mole.z-Math.sin(mole.angle)*d,y:mole.y,groundY:mole.y,angle:mole.angle,trackFraction:mole.fraction,vx:Math.cos(mole.angle)*30,vz:Math.sin(mole.angle)*30,pitch:0,roll:0};};
@@ -92,4 +93,25 @@ test('extra moles target the centre and inside shortcut while leaving room betwe
 test('narrower mole field preserves all longitudinal positions and only moves the outermost hazards',()=>{
   selectTrack('desert');const cluster=MOLES.filter(m=>m.id.startsWith('desert-mole-cluster-')),original=[[-42,-1],[42,1.5],[-66,14],[-38,10],[-10,15],[18,11],[46,14],[74,10]];
   cluster.forEach((m,i)=>{assert.ok(Math.abs((m.fraction-DESERT_MOLE_ZONE.center)*TRACK_LENGTH-original[i][0])<1e-8);assert.ok(Math.abs(m.lateral-original[i][1])<=2.24);if(Math.abs(original[i][1])<12)assert.equal(m.lateral,original[i][1]);});
+});
+
+
+test('last desert jump lands from either side of the ramp, including weapon impacts on approach',()=>{
+  selectTrack('desert');
+  for(const metres of [8,3,.2])for(const lateral of [-3,3])for(const up of [0,2,6]){
+    const f=DESERT_JUMPS.at(-1).fraction-metres/TRACK_LENGTH,p=trackAt(f),floor=nearestTrack(p.x,p.z,f);
+    const car={...spawnCar(),x:p.x+p.nx*lateral,z:p.z+p.nz*lateral,y:floor.y,groundY:floor.y,trackFraction:f,angle:p.angle,pitch:Math.atan(floor.grade),vx:Math.cos(p.angle)*30,vz:Math.sin(p.angle)*30};
+    if(up)launchCar(car,up,Math.sign(lateral),.3);
+    const predicted={...car};let airborne=false;
+    for(let i=0;i<150;i++){
+      stepCar(car,NEUTRAL);car.raceTime+=STEP;collideDesertMoles(car,car.raceTime);collideCars([car],{road:true});
+      predictFleet(predicted,[],NEUTRAL,STEP);
+      airborne ||= car.y>car.groundY+.5;
+      assert.equal(car.falling,false,`false fall: ${metres}m before lip, lane ${lateral}, impulse ${up}, step ${i}`);
+      for(const key of ['x','y','z','vy','roll','pitch','falling','edgeBalance'])assert.equal(predicted[key],car[key],`prediction ${key}`);
+    }
+    if(!up)assert.ok(airborne,'crosses the ramp airborne');
+    assert.equal(car.health,100);assert.equal(car.eliminated,false);
+    assert.ok(Math.abs(car.y-car.groundY)<.001,'lands back on the road');
+  }
 });

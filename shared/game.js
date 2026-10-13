@@ -260,7 +260,7 @@ export function resolveNudges(cars,{damage=true}={}){
     for(const b of cars){
       if(a===b||Math.abs(a.y-b.y)>1.3||b.eliminated||b.finished||b.falling||b.y-(b.groundY||0)>.05||b.shield>0||a.nudgeHits.includes(b.gridSlot))continue;
       const contact=carContact(a,b);if((b.x-a.x)*nx+(b.z-a.z)*nz<=0||!contact)continue;
-      a.nudgeHits=[...a.nudgeHits,b.gridSlot];if(damage)damageCar(b,8);
+      a.nudgeHits=[...a.nudgeHits,b.gridSlot];if(damage)damageCar(b,5);
       if(!b.eliminated){
         // The powered sidestep contributes contact velocity. Apply a rigid-body
         // impulse at the contact patch: quarter hits turn a car, door hits slide it.
@@ -297,7 +297,7 @@ export function launchCar(car,up,side=0,fore=0){
   car.yawVelocity+=side*.8;car.impactTime=1.5;
 }
 function verticalStep(car,dt){
-  if(car.edgeBalance&&!car.falling)return;
+  if(car.edgeBalance&&!car.falling&&car.vy<=0)return;
   const floor=car.groundY||0;
   if(car.y>floor+.001||car.vy>0||car.falling){
     car.vy-=22*dt;car.y+=car.vy*dt;car.roll+=car.rollVelocity*dt;car.pitch+=car.pitchVelocity*dt;
@@ -318,12 +318,20 @@ export function roadSurfaceAt(x,z,hint){
   return t.distance<=t.halfWidth+.6&&(gap<.01||lateral>=gap)?t:null;
 }
 function supportRoad(car,t){
-  if(car.falling||car.y>t.y+.5&&!car.edgeBalance)return;
+  if(car.falling)return;
+  // A ramp or weapon launch releases the tyre pivot. Losing contact while
+  // rising is flight, not an irreversible fall off the road.
+  if(car.vy>0||car.y>t.y+.5&&!car.edgeBalance){car.edgeBalance=false;return;}
   // Interior driving retains the existing cheap path. Only edge contacts sample
   // individual tyres, never the scenery mesh or a second physics engine.
   const lateral=Math.abs((car.x-t.x)*t.nx+(car.z-t.z)*t.nz),gap=iceSplit(t.x),extent=CAR_LENGTH/2;
   if(t.distance+extent<t.halfWidth+.6&&(gap<.01||lateral-extent>gap)){car.supportedWheels=4;car.edgeBalance=false;return;}
-  const support=wheelSupports(car,(x,z)=>roadSurfaceAt(x,z,car.trackFraction));car.supportedWheels=support.length;
+  let wheelsOverRoad=0;
+  const support=wheelSupports(car,(x,z)=>{const surface=roadSurfaceAt(x,z,car.trackFraction);if(surface)wheelsOverRoad++;return surface;});
+  // A ramp lip can put front and rear tyres at different surface heights.
+  // Only a missing road footprint is an edge; a height mismatch alone is not.
+  if(wheelsOverRoad===4){car.supportedWheels=4;car.edgeBalance=false;return;}
+  car.supportedWheels=support.length;
   car.edgeBalance=support.length>0&&support.length<4;
   if(!support.length||car.edgeBalance&&car.y<t.y-.4){
     car.falling=true;car.edgeBalance=false;car.offRoadTime=0;car.vy=Math.min(car.vy,car.edgeVy||0);
@@ -444,7 +452,7 @@ export function stepCar(car, input, dt=STEP) {
   if(track.distance<track.halfWidth+5&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
   if(activeTrack.id==='desert'&&!uncontrolled&&Math.hypot(car.vx,car.vz)>12){
     for(const ramp of DESERT_JUMPS)if(car.trackFraction<ramp.fraction&&track.fraction>=ramp.fraction&&diff>0&&diff<.01){
-      car.y=Math.max(car.y,trackAt(ramp.fraction).y+ramp.height+.08);car.vy=8+Math.hypot(car.vx,car.vz)*.15;car.rampFlight=true;
+      car.y=Math.max(car.y,trackAt(ramp.fraction).y+ramp.height+.08);car.vy=8+Math.hypot(car.vx,car.vz)*.15;car.rampFlight=true;car.edgeBalance=false;
     }
   }
   car.trackFraction=track.fraction;car.lap=clamp(Math.floor(Math.max(0,car.progress))+1,1,LAPS);
