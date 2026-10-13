@@ -1,6 +1,6 @@
 // One decoded, gapless loop shared across menu, races and results. Loaded after a gesture.
 export class MusicAudio {
-  constructor(context,{mixer,fetcher=globalThis.fetch,format='ogg'}={}){
+  constructor(context,{mixer,fetcher=globalThis.fetch.bind(globalThis),format='ogg'}={}){
     this.context=context;this.mixer=mixer;this.fetcher=fetcher;this.format=format;
     this.buffer=null;this.loading=null;this.error=null;this.loop=null;this.offset=0;
   }
