@@ -86,7 +86,7 @@ test('nudges connect, release, and avoid edges, shields and other decks',()=>{
   assert.equal(botNudge(room,a),1);
   const input={steer:0,throttle:0,nudge:1};
   for(let i=0;i<6;i++){stepCar(a.car,input);resolveNudges([a.car,b.car]);input.nudge=botNudge(room,a);}
-  assert.equal(b.car.health,92);assert.equal(input.nudge,0);
+  assert.equal(b.car.health,95);assert.equal(input.nudge,0);
   a.car.nudgeCooldown=0;a.car.nudgeHeld=0;b.car.shield=1;assert.equal(botNudge(room,a),0);
   b.car.shield=0;b.car.y+=20;assert.equal(botNudge(room,a),0);
   Object.assign(a.car,{...road,x:road.x+road.nx*(road.halfWidth-1.2),z:road.z+road.nz*(road.halfWidth-1.2)});

@@ -1,9 +1,10 @@
+import {createBeachBands} from './beach-profile.js';
 import {DESERT_MOUNTAIN,DESERT_MOLE_ZONE} from './desert-features.js';
 const tri=(v,a,b,c)=>v.push(...a,...b,...c);
 const quad=(v,a,b,c,d)=>{tri(v,a,b,c);tri(v,a,c,d);};
 const along=(p,offset,y=p.y)=>[p.x+p.nx*offset,y,p.z+p.nz*offset];
 const contour=(a,seed)=>1+.045*Math.sin(a*3+seed)+.024*Math.cos(a*7-seed);
-export const COASTAL_LAND=[{kind:'volcano',fraction:.15,radius:17},{kind:'geyser',fraction:.275,radius:11},{kind:'ruins',fraction:.525,radius:11},{kind:'waterfall',fraction:.65,radius:13}];
+export const COASTAL_LAND=[{kind:'volcano',fraction:.175,radius:17},{kind:'geyser',fraction:.275,radius:11},{kind:'ruins',fraction:.50,radius:11},{kind:'waterfall',fraction:.75,radius:13}];
 // A spatially indexed triangle surface is shared by renderer and simulation.
 // Only terrain contact uses this grid; normal road driving does no mesh queries.
 export class TerrainSurface {
@@ -40,11 +41,7 @@ function connectedLand(ctx,landmark){
   const shoreline=Array.from({length:64},(_,i)=>{const a=i/64*Math.PI*2,r=contour(a,seed),[px,pz]=point(Math.cos(a)*length*r,center+Math.sin(a)*across*r);return [px,-2.05,pz];});
   return {...landmark,...best,bands,shoreline,roadAnchor:{x:road.x,z:road.z},featureAnchor:{x,z}};
 }
-function beaches(ctx){const bands=[[],[]];for(const side of [-1,1])for(let i=0;i<ctx.segments.length;i++){
-  const a=ctx.segments[i],b=ctx.segments[(i+1)%ctx.segments.length];if(ctx.hasBarrier((a.start+a.len*.5)/ctx.trackLength,side))continue;
-  const point=(p,t)=>{const width=5.5+1.1*Math.sin(p.start*.071)+.65*Math.cos(p.start*.133),off=p.halfWidth+.59+width*t,drop=t<=.3?2*t/.3:2+.9*(t-.3)/.7;return [p.x+p.nx*off*side,p.y-.19-drop,p.z+p.nz*off*side];};
-  for(const [band,lo,hi]of [[0,0,.3],[1,.3,1]])quad(bands[band],point(a,lo),point(b,lo),point(b,hi),point(a,hi));
-}return bands;}
+function beaches(ctx){return createBeachBands(ctx);}
 function mountainTerrain(ctx,start,end,index){
   const {trackAt,nearestTrack,trackLength:TRACK_LENGTH}=ctx;
   // Bury both outer skirt rings below the -4m ground plane, including where

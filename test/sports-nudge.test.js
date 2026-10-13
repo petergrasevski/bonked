@@ -26,8 +26,9 @@ test('sports body keeps collision dimensions, wheel ground contact and roof weap
   const car=createSportsCar('#ef384d'),bounds=new THREE.Box3().setFromObject(car),size=bounds.getSize(new THREE.Vector3());
   assert.ok(Math.abs(size.x-CAR_LENGTH)<1e-6);assert.ok(Math.abs(size.z-CAR_WIDTH)<1e-6);
   assert.equal(bounds.min.y,0);assert.ok(bounds.max.y<1.05);
-  assert.ok(car.children.length<=7);
-  for(const mesh of car.children)for(const attribute of Object.values(mesh.geometry.attributes))assert.ok(attribute.array.every(Number.isFinite));
+  const meshes=[];car.traverse(o=>{if(o.isMesh)meshes.push(o);});
+  assert.ok(meshes.length<=9,'batched chassis plus two instanced wheel draws');
+  for(const mesh of meshes)for(const attribute of Object.values(mesh.geometry.attributes))assert.ok(attribute.array.every(Number.isFinite));
   car.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(new THREE.Vector3(0,3,0),new THREE.Vector3(0,-1,0)),roof=ray.intersectObject(car)[0];
   assert.ok(roof.point.y>.95,'roof visible from above with outward normals');assert.ok(roof.face.normal.y>.8);

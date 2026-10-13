@@ -1,14 +1,15 @@
 import * as THREE from 'three';
+import {WATER_WISPS_GLSL,buildVolcanicMassif,buildFallsMassif,bringVolcanoToLife,bringHarbourToLife,bringTempleToLife,bringFallsToLife,bringGeyserToLife} from './landmark-life.js';
 import {addConnectedLand,buildCoastalBeaches} from './coastal-terrain.js';
 import {createIslandBand} from './scenery.js';
 import {trackAt,nearestTrack,TRACK_LENGTH,hasBarrier,getLandscape} from '../shared/game.js';
 export const LANDMARKS=[
   {kind:'island',name:'Palm Island',fraction:.025},
-  {kind:'volcano',name:'Ember Caldera',fraction:.15},
+  {kind:'volcano',name:'Ember Caldera',fraction:.175},
   {kind:'geyser',name:'Geyser Springs',fraction:.275},
-  {kind:'harbour',name:'Cargo Harbour',fraction:.40},
-  {kind:'ruins',name:'Sunken Temple',fraction:.525},
-  {kind:'waterfall',name:'Twin Falls',fraction:.65},
+  {kind:'harbour',name:'Cargo Harbour',fraction:.35},
+  {kind:'ruins',name:'Sunken Temple',fraction:.50},
+  {kind:'waterfall',name:'Twin Falls',fraction:.75},
   {kind:'lighthouse',name:'Beacon Point',fraction:.775},
   {kind:'shipwreck',name:'Wreck Bay',fraction:.90},
 ];
@@ -79,50 +80,40 @@ export function buildLandmarks(w){
     // Broken coastal edges catch the low sun without turning islands into round drums.
     for(let i=0;i<18;i++){const a=i*2.39996,r=radius-.3+(i%3)*.35;rock(Math.cos(a)*r,-.75,Math.sin(a)*r,1.2+(i%4)*.24,i%3?0x625c51:0x998778,i);}
     if(landmark.kind==='volcano'){
-      // Many radial ribs and irregular layers form eroded lava channels, not a cone.
-      const mountain=new THREE.CylinderGeometry(5.2,17,15.2,56,10,true),mp=mountain.attributes.position;
-      for(let i=0;i<mp.count;i++){const px=mp.getX(i),py=mp.getY(i),pz=mp.getZ(i),a=Math.atan2(pz,px),t=(py+7.6)/15.2,rib=1+.05*Math.sin(a*14)+.035*Math.sin(a*23+t*2);mp.setXYZ(i,px*rib,py+Math.sin(a*9)*(.16+t*.34),pz*rib);}
-      mountain.computeVertexNormals();mesh(mountain,0x443f42,0,6.9,0);
-      for(let i=0;i<28;i++){const a=i*2.39996,t=.15+(i%7)*.105,r=17-11.8*t;const stone=rock(Math.cos(a)*r, -.2+t*15,Math.sin(a)*r, .6+(i%3)*.25,i%2?0x292a31:0x625c51,i);stone.scale.y=.5;}
-      const crater=mesh(new THREE.CylinderGeometry(5.2,3.9,2.6,48,2,true),0x292a31,0,13.3,0);crater.material.side=THREE.DoubleSide;
-      const rim=mesh(new THREE.TorusGeometry(5.1,.65,7,22),0x292a31,0,14.45,0);rim.rotation.x=-Math.PI/2;
-      const lava=mesh(new THREE.CircleGeometry(4.65,24),glow(0xff5b13),0,14.42,0);lava.rotation.x=-Math.PI/2;
-      const core=mesh(new THREE.CircleGeometry(2.8,20),glow(0xffbe22),0,14.44,0);core.rotation.x=-Math.PI/2;
-      for(let i=0;i<7;i++){
-        const a=i*Math.PI*2/7,points=[];for(let j=0;j<=8;j++){const t=j/8,r=5.7+10.4*t,angle=a+Math.sin(t*7+i)*.035;points.push(new THREE.Vector3(Math.cos(angle)*r,14.1-12.9*t,Math.sin(angle)*r));}
-        mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),24,.18,5,false),glow(i%2?0xff7918:0xef3d0e));
-      }
-      for(let i=0;i<12;i++){const a=i*2.39996;rock(Math.cos(a)*8,9.5,Math.sin(a)*8,1.3,0x292a31,i);}
+      buildVolcanicMassif(w,g);
+      const lava=mesh(new THREE.CircleGeometry(3.8,64),glow(0xff5b13),0,13.12,0);lava.rotation.x=-Math.PI/2;
+      const core=mesh(new THREE.CircleGeometry(2.4,48),glow(0xffbe22),0,13.14,0);core.rotation.x=-Math.PI/2;
       // The pulsing core must remain outside the static geometry merge.
       g.updateWorldMatrix(true,false);w.scene.attach(core);
-      animated.push({kind:'volcano',x,z,y:15,phase:0,mesh:core});
+      animated.push({kind:'volcano',x,z,y:15+g.position.y,phase:0,mesh:core,life:bringVolcanoToLife(w,g)});
     }else if(landmark.kind==='geyser'){
       for(let i=0;i<4;i++){const r=11-i*2.25;mesh(createIslandBand(r,2.4,[[1.05,-.15+i*.14],[1,.12+i*.14],[.89,.17+i*.14]],48),i%2?0xd7c499:0xe2d6b5);}
       for(let i=0;i<24;i++){const a=i*2.4,r=9.4+(i%3)*.3;rock(Math.cos(a)*r,.1,Math.sin(a)*r,.35+(i%4)*.13,0xe2d6b5,i);}
       const pool=mesh(new THREE.CircleGeometry(8.8,32),glow(0x3eafbc),0,.48,0);pool.rotation.x=-Math.PI/2;
       for(const r of [3,5.8,8.5])mesh(createIslandBand(r,2.4,[[1,.49],[.92,.58],[.84,.50]],48),0xbad8c7);
       cylinder(0,.8,0,1.7,2.6,1.5,0xe2d6b5);
-      const jet=new THREE.Group();jet.position.set(x,1,z);w.scene.add(jet);
+      const jet=new THREE.Group();jet.position.set(x,g.position.y+1,z);w.scene.add(jet);
       const jetMaterial=new THREE.MeshStandardMaterial({color:0xc6f4ee,roughness:.2,transparent:true,opacity:.78,depthWrite:false}),jets=[];
       for(let i=0;i<7;i++){const a=i*2.4,water=w.mesh(new THREE.CylinderGeometry(.10,.38,1,8,5),jetMaterial,Math.sin(a)*.45,0,Math.cos(a)*.45,jet);water.rotation.z=Math.sin(a)*.035;jets.push(water);}
       const droplets=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.08,0),jetMaterial,48);droplets.instanceMatrix.setUsage(THREE.DynamicDrawUsage);droplets.frustumCulled=false;jet.add(droplets);
-      animated.push({kind:'geyser',x,z,y:1,mesh:jet,jets,droplets,dropletMatrix:new THREE.Matrix4(),phase:1});
+      animated.push({kind:'geyser',x,z,y:1,mesh:jet,jets,droplets,dropletMatrix:new THREE.Matrix4(),phase:1,life:bringGeyserToLife(w,g)});
     }else if(landmark.kind==='harbour'){
       box(0,.05,0,27,.65,22,0x998778);
       for(let row=0;row<2;row++)for(let i=0;i<3;i++){const color=[0x308d94,0xc25e39,0xdbba49][i];box((i-1)*6,1.5+row*2.8,3,5.5,2.7,10,color);for(let j=-4;j<=4;j++)box((i-1)*6,1.5+row*2.8,3+j,5.6,.07,.08,0x354650);}
-      for(const a of [-8,8])box(a,8,-6,.9,16,.9,0xe5af31);box(0,16,-6,20,.9,1.4,0xe5af31);box(0,17,-6,.6,2.5,.6,0xe5af31);box(3,11,-6,.16,9,.16,0x27353b);box(3,6.5,-6,2,.4,2,0x27353b);
+      for(const a of [-8,8])box(a,8,-6,.9,16,.9,0xe5af31);box(0,16,-6,20,.9,1.4,0xe5af31);box(0,17,-6,.6,2.5,.6,0xe5af31);
       for(let i=-10;i<=10;i+=4){cylinder(i,-.4,-11,.4,.5,3,0x4a4140);cylinder(i,.65,-10,.3,.4,.9,0x27353b,8);spar([i-.55,1,-10],[i+.55,1,-10],.14,0x27353b);}
       // Gantry lattice, access ladder, motor trolley and suspended hook.
       for(const a of [-8,8])for(let y=1;y<15;y+=3){spar([a-.4,y,-6.4],[a+.4,y+3,-5.6],.09,0x27353b);box(a-.6,y+1.5,-6,.1,3,.1,0xe5af31);for(let j=0;j<4;j++)box(a-.6,y+j*.65,-6,.13,.08,.65,0x27353b);}
       for(let a=-8;a<8;a+=4){spar([a,16.5,-6],[a+2,18,-6],.12,0xe5af31);spar([a+2,18,-6],[a+4,16.5,-6],.12,0xe5af31);}
-      box(3,15.4,-6,2.7,.65,2.1,0x27353b);box(6,14.5,-6,2.1,2.2,1.8,0xe5af31);box(6,14.8,-6.92,1.5,1,.04,0x354650);
-      const hook=mesh(new THREE.TorusGeometry(.45,.12,5,12,Math.PI*1.55),0x27353b,3,5.9,-6);hook.rotation.z=-.7;
+
+
       // Corrugated ends with paired doors, locking bars and corner castings.
       for(let row=0;row<2;row++)for(let i=0;i<3;i++){const cx=(i-1)*6,cy=1.5+row*2.8;box(cx,cy,-2.03,.08,2.55,.06,0x354650);for(const side of [-1,1]){box(cx+side*1.55,cy,-2.07,.065,2.35,.08,0x998778);box(cx+side*1.45,cy-.45,-2.12,.4,.07,.08,0x354650);for(const h of [-1.15,1.15])box(cx+side*2.5,cy+h,-2.05,.2,.16,.08,0x354650);}}
       // Deck expansion joints, edge paint and tire fenders give the quay scale.
       for(let i=-12;i<=12;i+=3)box(i,.386,-1,.035,.018,20,0x625c51);
       for(let i=-12;i<=12;i+=2)box(i,.4,-10.2,1,.025,.18,0xdbba49);
       for(let i=-9;i<=9;i+=6)mesh(new THREE.TorusGeometry(.7,.22,6,12),0x27353b,i,-.1,-11.25);
+    const life=bringHarbourToLife(w,g);animated.push({kind:'harbour',mesh:life.root,life,x,z});
     }else if(landmark.kind==='ruins'){
       cylinder(0,.4,0,10,11,1.2,0xb4ae87,8);box(0,1.1,0,15,.8,12,0xc4b88c);
       for(const a of [-5,-1.7,1.7,5])for(const b of [-4,4]){cylinder(a,4.6,b,.75,.95,6.6,0xd7caa5,10);box(a,7.9,b,2.1,.6,2.1,0xcabc97);}
@@ -141,11 +132,13 @@ export function buildLandmarks(w){
         box(side*8,1.2,-2,1.8,2.4,1.8,0xcabc97);const statue=mesh(new THREE.IcosahedronGeometry(.9,1),0xd7caa5,side*8,3,-2);statue.scale.set(.65,1.7,.65);mesh(new THREE.IcosahedronGeometry(.4,1),0xd7caa5,side*8,4.4,-2);
       }
       for(let i=0;i<5;i++)box(0,.06+i*.14,-11.5+i*.62,8.5-i*.28,.2,1,0xcabc97);
+    const life=bringTempleToLife(w,g);animated.push({kind:'ruins',mesh:life.root,life,x,z});
     }else if(landmark.kind==='waterfall'){
-      for(const a of [-7,0,7]){const cliff=mesh(new THREE.IcosahedronGeometry(7,2),0x7b8472,a,5,2);cliff.scale.set(.75,1.5,.7);cliff.rotation.y=a*.3;}
-      for(let i=0;i<24;i++){const a=i%6,x=-10+a*4,y=1+Math.floor(i/6)*3;const ledge=rock(x,y,1.3+Math.sin(i)*1.4,1.7, i%3?0x7b8472:0x629361,i);ledge.scale.set(1.6,.35,.65);}
-      const stream=mesh(createIslandBand(10.5,4,[[1,11.7],[.82,12.05],[0,12.08]],40),0x629361);stream.scale.z=.48;stream.position.z=2;
-      const falls=new THREE.Group();falls.position.set(x,0,z);falls.rotation.y=-p.angle;w.scene.add(falls);
+      // Face the approaching racers as well as the road, rather than presenting
+      // the water curtains edge-on to the chase camera.
+      g.rotation.y+=Math.PI/4;
+      buildFallsMassif(w,g);
+      const falls=new THREE.Group();falls.position.set(x,g.position.y,z);falls.rotation.copy(g.rotation);w.scene.add(falls);
       const time={value:0},material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,forceSinglePass:true,fog:true,uniforms:{...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),time},vertexShader:`
         varying vec2 vUv;
         #include <fog_pars_vertex>
@@ -153,8 +146,14 @@ export function buildLandmarks(w){
         #include <fog_vertex>
         }`,fragmentShader:`
         uniform float time;varying vec2 vUv;
+        ${WATER_WISPS_GLSL}
         #include <fog_pars_fragment>
-        void main(){float ribbons=sin(vUv.x*91.+sin(vUv.y*11.-time*4.))*sin(vUv.x*37.+time*.6);float rush=sin(vUv.y*97.+time*13.+ribbons*3.);float foam=smoothstep(.3,.85,ribbons*.5+rush*.35)+pow(abs(vUv.x-.5)*2.,5.)*.35;vec3 water=mix(vec3(.16,.51,.53),vec3(.8,.95,.88),clamp(foam,0.,1.));gl_FragColor=vec4(water,.79+foam*.2);
+        void main(){
+          float wisps=waterWisps(vUv,time);
+          float edge=smoothstep(0.,.025,vUv.x)*smoothstep(0.,.025,1.-vUv.x);
+          float aeration=.34+wisps*.34+(1.-smoothstep(0.,.18,vUv.y))*.08;
+          vec3 water=mix(vec3(.23,.53,.55),vec3(.84,.94,.91),aeration);
+          gl_FragColor=vec4(water,edge*(.78+wisps*.14));
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -162,12 +161,12 @@ export function buildLandmarks(w){
       const poolMaterial=new THREE.MeshStandardMaterial({color:0x68aaaa,roughness:.15,metalness:.3});
       const pool=w.mesh(new THREE.CircleGeometry(10,48),poolMaterial,0,.02,-4.2,falls);pool.rotation.x=-Math.PI/2;pool.scale.y=.65;
       for(const a of [-5,5]){
-        const curtain=new THREE.PlaneGeometry(3.6,12,12,18),pos=curtain.attributes.position;
-        for(let i=0;i<pos.count;i++){const px=pos.getX(i),py=pos.getY(i);pos.setZ(i,.16*Math.sin(px*8)+.4*Math.pow((6-py)/12,3));}curtain.computeVertexNormals();w.mesh(curtain,material,a,6.1,-1.9,falls);
+        const curtain=new THREE.PlaneGeometry(5.1,12.5,20,36),pos=curtain.attributes.position;
+        for(let i=0;i<pos.count;i++){const px=pos.getX(i),py=pos.getY(i);const t=(6.25-py)/12.5;pos.setX(i,px*(1+t*.18)+Math.sin(t*7)*.2);pos.setZ(i,.08*Math.sin(px*8+t*14)-.8*t*t);}curtain.computeVertexNormals();w.mesh(curtain,material,a,6.3,-3.35,falls);
         const foam=w.mesh(new THREE.CircleGeometry(2.9,32),new THREE.MeshBasicMaterial({color:0xe6fbf1,transparent:true,opacity:.68,depthWrite:false}),a,.08,-2.2,falls);foam.rotation.x=-Math.PI/2;foam.scale.y=.65;
         for(let i=0;i<7;i++)rock(a+Math.sin(i*2.4)*3.3,.1,-3+Math.cos(i*2.4)*3.3,.65+i%3*.2,0x7b8472,i);
       }
-      animated.push({kind:'waterfall',mesh:falls,material,time,x,z,mistX:x+2*Math.sin(p.angle),mistZ:z-2*Math.cos(p.angle)});
+      animated.push({kind:'waterfall',mesh:falls,material,time,x,z,life:bringFallsToLife(w,g),mistX:x+2*Math.sin(p.angle),mistZ:z-2*Math.cos(p.angle)});
     }else if(landmark.kind==='lighthouse'){
       cylinder(0,6,0,2.5,3.6,13,0xe8dfbd,18);for(const y of [3,7,11])cylinder(0,y,0,3.4-y*.07,3.5-y*.07,1.4,0xc65342,18);
       cylinder(0,13.2,0,3.8,3.8,.6,0x263944,18);cylinder(0,14.4,0,2.2,2.2,2,0x9ccbc9,16);mesh(new THREE.ConeGeometry(3.3,2,16),0xb94938,0,16,0);
@@ -209,14 +208,16 @@ export function buildLandmarks(w){
 }
 export function animateLandmarks(w,now){
   for(const l of w.landmarks){
+    // Bound animated landmark work to a generous camera radius; absolute-time
+    // updates resume at the correct phase when the player returns.
+    if(l.life){const visible=Math.hypot(w.camera.position.x-l.x,w.camera.position.z-l.z)<240;l.life.root.visible=visible;if(visible)l.life.update(now/1000);}
     if(l.kind==='lighthouse')l.mesh.rotation.y=now*.00035;
-    if(l.kind==='waterfall'){l.time.value=now/1000;if(w.emitParticles&&Math.hypot(w.camera.position.x-l.x,w.camera.position.z-l.z)<100)w.particle(l.mistX+(Math.random()-.5)*8,.5,l.mistZ,'steam');}
+    if(l.kind==='waterfall')l.time.value=now/1000;
     if(l.kind==='geyser'){
       const cycle=(now/1000+l.phase)%8,height=3+18*Math.pow(Math.max(0,Math.sin(cycle/8*Math.PI)),3);
       for(const [i,mesh]of l.jets.entries()){const h=height*(.7+.3*Math.sin(now*.012+i)**2);mesh.scale.y=h;mesh.position.y=h/2;}
       const matrix=l.dropletMatrix;for(let i=0;i<48;i++){const t=((now/1500+i*.137)%1),a=i*2.39996,r=.4+2.8*t,dy=height*(1-t*t);matrix.makeTranslation(Math.cos(a)*r,dy,Math.sin(a)*r);l.droplets.setMatrixAt(i,matrix);}l.droplets.instanceMatrix.needsUpdate=true;
-      if(w.emitParticles&&Math.hypot(w.camera.position.x-l.x,w.camera.position.z-l.z)<150)for(let i=0;i<2;i++)w.particle(l.x+(Math.random()-.5)*2,height,l.z+(Math.random()-.5)*2,'steam');
     }
-    if(l.kind==='volcano'){l.mesh.scale.setScalar(.93+Math.sin(now*.004)*.07);if(w.emitParticles&&Math.hypot(w.camera.position.x-l.x,w.camera.position.z-l.z)<150){w.particle(l.x+(Math.random()-.5)*3,l.y,l.z+(Math.random()-.5)*3,'smoke');if(Math.random()<.3)w.particle(l.x,l.y,l.z,'fire',(Math.random()-.5)*3,(Math.random()-.5)*3);}}
+    if(l.kind==='volcano')l.mesh.scale.setScalar(.93+Math.sin(now*.004)*.07);
   }
 }

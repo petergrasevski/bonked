@@ -16,13 +16,29 @@ export function smoothSkyTarget(previous,target,dt){
   }
   return previous;
 }
+// A bright descending core, a softer sheath and orbiting ion knots are one
+// group; all geometry is owned by the strike and released at impact.
+export function createSkyStrike(color){
+  const bolt=new THREE.Group();bolt.name='sky-strike';
+  for(const [radius,opacity,tint]of [[.9,.12,color],[.3,.7,color],[.095,1,0xeaffff]]){
+    const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius*.45,radius,12,12),new THREE.MeshBasicMaterial({color:tint,transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));bolt.add(mesh);
+  }
+  const spiral=new THREE.BufferGeometry(),vertices=[];
+  for(let i=0;i<64;i++){const t=i/63,a=t*Math.PI*8;vertices.push(Math.cos(a)*.75,(t-.5)*12,Math.sin(a)*.75);}
+  spiral.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+  bolt.add(new THREE.Line(spiral,new THREE.LineBasicMaterial({color,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false})));
+  for(let i=0;i<3;i++){
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.75+i*.1,.035,5,32),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}));ring.rotation.x=Math.PI/2;ring.position.y=(i-1)*3.4;bolt.add(ring);
+  }
+  return bolt;
+}
 export class SkyBeamView{
   constructor(scene){this.scene=scene;this.targets=new Map();this.beams=new Map();this.cursor=new THREE.Vector2(0,0);this.ray=new THREE.Raycaster();this.aim=null;this.round=null;}
   marker(color){
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(4096*3),3).setUsage(THREE.DynamicDrawUsage));
-    const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms:{center:{value:new THREE.Vector2()},color:{value:new THREE.Color(color)},opacity:{value:.5}},
+    const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms:{center:{value:new THREE.Vector2()},color:{value:new THREE.Color(color)},opacity:{value:.5},time:{value:0}},
       vertexShader:`varying vec2 point;void main(){point=position.xz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-      fragmentShader:`uniform vec2 center;uniform vec3 color;uniform float opacity;varying vec2 point;void main(){vec2 p=point-center;float r=length(p);if(r>4.)discard;float ring=smoothstep(3.5,3.7,r);float cross=1.-smoothstep(.08,.16,min(abs(p.x),abs(p.y)));float line=max(ring,cross);gl_FragColor=vec4(mix(color,color*.12,line),opacity*mix(.6,1.7,line));
+      fragmentShader:`uniform vec2 center;uniform vec3 color;uniform float opacity,time;varying vec2 point;void main(){vec2 p=point-center;float r=length(p);if(r>4.)discard;float ring=smoothstep(3.5,3.7,r);float cross=1.-smoothstep(.08,.16,min(abs(p.x),abs(p.y)));float angle=atan(p.y,p.x);float ticks=step(.87,cos(angle*12.+time));float inner=(1.-smoothstep(.04,.12,abs(r-2.8)))*ticks;float scan=(1.-smoothstep(.08,.22,abs(r-mod(time*1.4,4.))))*.3;float line=max(max(ring,cross*.65),inner);gl_FragColor=vec4(color,opacity*(line*.95+scan+.035));
       #include <colorspace_fragment>
       }`});
     const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;mesh.renderOrder=6;this.scene.add(mesh);return mesh;
@@ -39,12 +55,12 @@ export class SkyBeamView{
       if(p.id!==localId)target=mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,target,dt);
       const cell=Math.floor(target.x/12)+','+Math.floor(target.z/12);
       if(mesh.userData.cell!==cell){mesh.userData.cell=cell;const vertices=skyPatch(target.x,target.z);let attr=mesh.geometry.attributes.position;if(attr.array.length<vertices.length){attr=new THREE.BufferAttribute(new Float32Array(3*2**Math.ceil(Math.log2(vertices.length/3))),3).setUsage(THREE.DynamicDrawUsage);mesh.geometry.setAttribute('position',attr);}attr.array.set(vertices);attr.needsUpdate=true;mesh.geometry.setDrawRange(0,vertices.length/3);}
-      mesh.material.uniforms.center.value.set(target.x,target.z);mesh.material.uniforms.opacity.value=time<p.skyCooldownUntil?.18:.5;
+      mesh.material.uniforms.time.value=time/1000;mesh.material.uniforms.center.value.set(target.x,target.z);mesh.material.uniforms.opacity.value=time<p.skyCooldownUntil?.18:.5;
     }
     for(const [id,mesh]of this.targets)if(!present.has(id)){this.scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();this.targets.delete(id);}
     const strikes=new Set();if(active)for(const strike of state.skyBeams||[]){if(time>=strike.impactAt)continue;strikes.add(strike.id);let bolt=this.beams.get(strike.id);
-      if(!bolt){bolt=new THREE.Group();for(const [radius,opacity]of [[.65,.3],[.2,1]]){const line=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,10,7),new THREE.MeshBasicMaterial({color:strike.color,transparent:true,opacity,depthWrite:false,toneMapped:false}));bolt.add(line);}this.scene.add(bolt);this.beams.set(strike.id,bolt);}
-      const t=Math.max(0,Math.min(1,(time-strike.at)/(strike.impactAt-strike.at)));bolt.position.set(strike.x,strike.y+5+80*(1-t),strike.z);
+      if(!bolt){bolt=createSkyStrike(strike.color);this.scene.add(bolt);this.beams.set(strike.id,bolt);}
+      const t=Math.max(0,Math.min(1,(time-strike.at)/(strike.impactAt-strike.at)));bolt.position.set(strike.x,strike.y+6+80*(1-t),strike.z);bolt.rotation.y=time*.008;bolt.scale.x=bolt.scale.z=.65+t*.6;bolt.children[3].rotation.y=-time*.014;
     }
     for(const [id,bolt]of this.beams)if(!strikes.has(id)){this.scene.remove(bolt);bolt.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});this.beams.delete(id);}
   }

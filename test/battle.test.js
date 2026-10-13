@@ -23,10 +23,10 @@ test('a nudge moves one car width in 0.1s, requires release, and enforces cooldo
   const car=at();stepCar(car,{...NEUTRAL,nudge:1});stepCar(car,NEUTRAL);stepCar(car,{...NEUTRAL,nudge:-1});assert.equal(car.nudgeDirection,1);
   for(const value of [2,Infinity,'left',null])assert.equal(sanitizeInput({nudge:value}).nudge,0);
 });
-test('nudging an adjacent car deals eight damage once, pushes it sideways with momentum',()=>{
+test('nudging an adjacent car deals five damage once, pushes it sideways with momentum',()=>{
   const a=at(0,-2.3),b=at(1,0),p=trackAt(.1),start={x:b.x,z:b.z};
   for(let i=0;i<28;i++){stepCar(a,{...NEUTRAL,nudge:1});stepCar(b,NEUTRAL);resolveNudges([a,b]);collideCars([a,b],{road:true});}
-  assert.equal(b.health,92);const moved=(b.x-start.x)*p.nx+(b.z-start.z)*p.nz;
+  assert.equal(b.health,95);const moved=(b.x-start.x)*p.nx+(b.z-start.z)*p.nz;
   assert.ok(moved>CAR_WIDTH&&moved<CAR_WIDTH*3,`shove distance ${moved}`);assert.ok(Math.abs(b.angle-p.angle)<.01);
 });
 test('nudge prediction responds immediately without applying authoritative damage',()=>{

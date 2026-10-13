@@ -1,3 +1,4 @@
+import {createWheelAssembly,attachHeadlights} from './car-animation.js';
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {CAR_LENGTH,CAR_WIDTH} from '../shared/game.js';
@@ -29,7 +30,10 @@ function buildTemplate(){
   const rubber=new THREE.MeshStandardMaterial({color:0x0c1115,roughness:.9});
   const alloy=new THREE.MeshStandardMaterial({color:0xcedae0,metalness:.95,roughness:.2,envMapIntensity:1.5});
   const led=new THREE.MeshStandardMaterial({color:0xd8f7ff,emissive:0x92dbff,emissiveIntensity:2.4});
+  led.name='headlamps';
   const rear=new THREE.MeshStandardMaterial({color:0xe73127,emissive:0xff2618,emissiveIntensity:.65,roughness:.25});
+  rear.name='rear-lights';
+  const caliper=new THREE.MeshStandardMaterial({color:0xb8291c,metalness:.3,roughness:.5});
   const add=(geo,mat,x=0,y=0,z=0)=>{const mesh=new THREE.Mesh(geo,mat);mesh.position.set(x,y,z);g.add(mesh);return mesh;};
   const box=(x,y,z,w,h,d,mat=trim)=>add(new THREE.BoxGeometry(w,h,d),mat,x,y,z);
   const tube=(points,r,mat)=>add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p))),20,r,6,false),mat);
@@ -48,12 +52,7 @@ function buildTemplate(){
     tube([[1.89,.65,side*.80],[2.08,.60,side*.71],[2.25,.51,side*.56]],.031,led);
     tube([[-2.23,.61,side*.82],[-2.30,.59,side*.62],[-2.32,.59,side*.29]],.029,rear);
     for(const x of [-1.48,1.43]){
-      const tyre=add(new THREE.TorusGeometry(.285,.075,8,24),rubber,x,.365,side*.91);tyre.scale.z=1.8;
-      const wheel=add(new THREE.CylinderGeometry(.24,.24,.024,20),trim,x,.365,side*1.026);wheel.rotation.x=Math.PI/2;
-      add(new THREE.TorusGeometry(.225,.018,6,24),alloy,x,.365,side*1.043);
-      const hub=add(new THREE.CylinderGeometry(.065,.065,.028,12),alloy,x,.365,side*1.043);hub.rotation.x=Math.PI/2;
-      for(let j=0;j<5;j++){const a=j*Math.PI*2/5,spoke=box(x+Math.cos(a)*.125,.365+Math.sin(a)*.125,side*1.044,.20,.025,.018,alloy);spoke.rotation.z=a;}
-      box(x+.16,.365,side*1.039,.045,.15,.025,rear);
+      box(x+.16,.365,side*1.039,.045,.15,.025,caliper);
       add(new THREE.TorusGeometry(.40,.035,6,24,Math.PI),paint,x,.365,side*.982);
     }
     const exhaust=add(new THREE.CylinderGeometry(.077,.077,.13,12),alloy,-2.36,.37,side*.50);exhaust.rotation.z=Math.PI/2;
@@ -67,22 +66,25 @@ function buildTemplate(){
   g.updateMatrixWorld(true);const groups=new Map();
   for(const mesh of g.children){let geo=mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);if(geo.index){const flat=geo.toNonIndexed();geo.dispose();geo=flat;}if(!groups.has(mesh.material))groups.set(mesh.material,[]);groups.get(mesh.material).push(geo);mesh.geometry.dispose();}
   const result=new THREE.Group();for(const[material,parts]of groups){const mesh=new THREE.Mesh(mergeGeometries(parts),material);mesh.castShadow=true;mesh.receiveShadow=true;result.add(mesh);parts.forEach(p=>p.dispose());}
+  const wheelAssembly=createWheelAssembly(rubber);result.add(wheelAssembly);
   // Match the unchanged collision footprint exactly, including mirrors/wheels.
   const bounds=new THREE.Box3().setFromObject(result),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   const fit=new THREE.Matrix4().makeScale(CAR_LENGTH/size.x,1,CAR_WIDTH/size.z).multiply(new THREE.Matrix4().makeTranslation(-center.x,-bounds.min.y,-center.z));
-  for(const mesh of result.children)mesh.geometry.applyMatrix4(fit);
+  for(const mesh of result.children)if(mesh.isMesh)mesh.geometry.applyMatrix4(fit);else mesh.applyMatrix4(fit);
   result.traverse(mesh=>{if(mesh.isMesh){mesh.geometry.userData.sharedCarResource=true;mesh.material.userData.sharedCarResource=true;}});
   return result;
 }
-export function createSportsCar(color){
+export function createSportsCar(color,{headlights=false}={}){
   template??=buildTemplate();const car=template.clone(true);let paint;
-  for(const mesh of car.children)if(mesh.material.name==='body-paint'){paint=mesh.material.clone();delete paint.userData.sharedCarResource;paint.color.set(color);mesh.material=paint;}
-  car.userData={paint,baseColor:new THREE.Color(color),chassisSize:{length:CAR_LENGTH,width:CAR_WIDTH}};car.rotation.order='YXZ';return car;
+  for(const mesh of car.children)if(mesh.material?.name==='body-paint'){paint=mesh.material.clone();delete paint.userData.sharedCarResource;paint.color.set(color);mesh.material=paint;}
+  const lamps={};
+  for(const mesh of car.children)if(['rear-lights','headlamps'].includes(mesh.material?.name)){mesh.material=mesh.material.clone();delete mesh.material.userData.sharedCarResource;lamps[mesh.material.name==='rear-lights'?'rearLights':'headlamps']=mesh.material;}
+  car.userData={...lamps,paint,baseColor:new THREE.Color(color),chassisSize:{length:CAR_LENGTH,width:CAR_WIDTH}};car.rotation.order='YXZ';car.userData.headlamps.emissiveIntensity=headlights?5:.12;if(headlights)attachHeadlights(car);return car;
 }
 
 // Chassis buffers are shared by every car and renderer for the page lifetime.
 export function disposeCarInstance(car){
   if(car.userData.weaponModel)car.remove(car.userData.weaponModel);
-  car.traverse(mesh=>{if(mesh.geometry&&!mesh.geometry.userData.sharedCarResource)mesh.geometry.dispose();});
-  car.userData.paint?.dispose();car.userData.shield?.material.dispose();
+  car.traverse(mesh=>{if(mesh.isInstancedMesh)mesh.dispose();if(mesh.geometry&&!mesh.geometry.userData.sharedCarResource)mesh.geometry.dispose();});
+  car.userData.paint?.dispose();car.userData.rearLights?.dispose();car.userData.headlamps?.dispose();car.userData.headlight?.dispose();car.userData.shield?.material.dispose();
 }

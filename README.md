@@ -242,3 +242,24 @@ Each map includes twelve additional decorative scenery types, arranged in small 
 Placement is deterministic, checks clearance against every road segment and existing grouped scenery, rejects steep ground, and leaves the central ice river open. These are visual props only: no changes to collision, vehicle physics, server work or network traffic. The added scenery shares one vertex-colour material per map, merged into culled 70-metre spatial batches, with no per-frame prop updates or extra textures/lights.
 
 The desert is enclosed by continuous eroded sandstone canyon walls. Saltwater has a large offshore mainland with sandy beaches, basalt cliffs, mountain ridges and an instanced broadleaf forest. These distant backdrops are purely visual, add one desert / three coastal render batches, and cast no extra shadows. The camera range accommodates the large landforms while small static scenery retains its previous distance limit. The Saltwater selection card now looks across a crab beach; primary actions are rectangular, Add bot matches Copy invite, and bot removal uses a borderless cross.
+
+### Graphics finish
+
+The game always uses Enhanced rendering on desktop and touch devices: depth-based
+contact shading, restrained bloom, updated biome lighting, weathered scenery and
+full-screen desktop menu backdrop. Original menu and lobby styling is retained.
+The finish draws the scene once, runs two quarter-resolution bloom passes and a
+final composite. Devices without floating-point colour buffers keep these effects
+using an unsigned-byte target. Small circuit cards and weapon portraits use their
+separate preview renderers.
+
+Cars now roll their wheels, steer the front wheels, and brighten their brake lamps
+when braking or reversing. Glacier cars have working headlights illuminating the
+road. Saltwater's animated landmarks include erupting lava and ash, a cargo crane,
+walking tourists, cascading falls and a geyser boardwalk. Landmarks occupy prominent
+bends. Grainy, rippled sand slopes gently into animated waves and foam; the bank
+uses the same surface triangles for rendering and collision.
+
+Weapon effects use bounded batches for layered fire, sparks, smoke, shockwaves,
+energy trails and branched arcs. Shields and sky strikes have animated energy
+surfaces. Visual effects leave weapon damage and timing unchanged.

@@ -1,3 +1,4 @@
+import {weatherSurface} from './surface-detail.js';
 import * as THREE from 'three';
 const TAU=Math.PI*2;
 const random=(seed,n)=>{const v=Math.sin(seed*127.1+n*311.7)*43758.5453;return v-Math.floor(v);};
@@ -21,7 +22,7 @@ function material(fogScale){
       gl_FragColor.rgb=mix(gl_FragColor.rgb,fogColor,fogFactor);
     #endif`);
   };
-  mat.customProgramCacheKey=()=>`landscape-backdrop-${fogScale}`;return mat;
+  mat.customProgramCacheKey=()=>`landscape-backdrop-${fogScale}`;return weatherSurface(mat,{rock:true});
 }
 function surface(){
   const positions=[],colors=[];

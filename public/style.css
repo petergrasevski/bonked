@@ -298,3 +298,11 @@ body.mobile #race-ui.sky-beam #sky-joystick{display:flex}#race-ui.sky-beam #item
 .add-bot:hover{background:#ffffff12}
 .remove-bot{border:0;border-radius:0;background:transparent;box-shadow:none}
 .remove-bot:hover{background:transparent;color:#ff8a76}
+
+/* Preserve the original menu design over a full-screen desktop scene. */
+#race-hud,#controller-status,#health-ui{background:#101b25d9;border-color:#c4d6e429;box-shadow:0 3px 12px #0002}
+body.playing .grain{background:radial-gradient(ellipse at center,transparent 55%,#07111c1a 100%)}
+@media(min-width:901px) and (min-height:601px){
+  body:not(.playing) #scene{inset:0;mask-image:none}
+  body:not(.playing) .grain{background:linear-gradient(90deg,#08121bf2 0%,#0a1523bd 25%,#0a15234d 49%,transparent 75%),linear-gradient(0deg,#07111ccc,transparent 24%,transparent 80%,#07111c55)}
+}

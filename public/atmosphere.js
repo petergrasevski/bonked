@@ -2,9 +2,9 @@ import {createDustCloud,stormHaze} from './desert-storm.js';
 import * as THREE from 'three';
 // Lighting, fog, reflections and ocean share the same palette and sun direction.
 export const ATMOSPHERES={
-  coast:{viewDistance:420,fog:0xbca39c,density:.0058,zenith:0x587798,horizon:0xfac092,ground:0x80666b,sunColor:0xffcf91,sunOffset:[-70,24,-50],sunPower:3.5,skyLight:0xb6c8df,groundLight:0x8a6656,ambient:1.05,exposure:1.03,clouds:.25},
-  ice:{viewDistance:250,fog:0xb9ccd9,density:.0085,zenith:0x667f99,horizon:0xc7d6df,ground:0x8299b0,sunColor:0xd5e8ff,sunOffset:[-45,60,-38],sunPower:1.3,skyLight:0xd6e9fa,groundLight:0x6e8b9f,ambient:1.55,exposure:1.03,clouds:.85},
-  desert:{viewDistance:600,fog:0xcda279,density:.0045,zenith:0x6593b7,horizon:0xebbe8f,ground:0x92705a,sunColor:0xffd4a0,sunOffset:[-135,315,-105],sunPower:4.6,skyLight:0xaecbed,groundLight:0x574337,ambient:.58,exposure:.98,clouds:.035},
+  coast:{viewDistance:420,fog:0xb4b4b5,density:.0036,zenith:0x4d789e,horizon:0xf3c5a0,ground:0x80666b,sunColor:0xffcf91,sunOffset:[-70,24,-50],sunPower:3.8,skyLight:0xa9c7e7,groundLight:0x665448,ambient:.68,exposure:1.0,clouds:.25},
+  ice:{viewDistance:250,fog:0xb9ccd9,density:.0062,zenith:0x667f99,horizon:0xc7d6df,ground:0x8299b0,sunColor:0xd5e8ff,sunOffset:[-45,60,-38],sunPower:1.85,skyLight:0xc4dff5,groundLight:0x536c87,ambient:1.12,exposure:1.0,clouds:.85},
+  desert:{viewDistance:600,fog:0xcda279,density:.0045,zenith:0x6593b7,horizon:0xebbe8f,ground:0x92705a,sunColor:0xffe0b5,sunOffset:[-135,315,-105],sunPower:4.6,skyLight:0xaecbed,groundLight:0x514237,ambient:.48,exposure:.98,clouds:.035},
 };
 const skyFragment=`
   uniform vec3 zenith,horizon,groundColor,sunDirection,sunColor,hazeColor;uniform float background;
@@ -22,14 +22,14 @@ const skyFragment=`
     float veil=smoothstep(.39,.73,cloud)*smoothstep(-.03,.18,d.y)*cloudCover;
     color=mix(color,mix(horizon,zenith,.5)*.85,veil*.65);
     color+=sunColor*pow(facing,1800.)*5.*(1.-cloudCover*.92);
+    if(background>.5)color=mix(hazeColor,color,smoothstep(-.025,.16,abs(d.y)));
     gl_FragColor=vec4(color,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
-    if(background>.5)gl_FragColor.rgb=mix(hazeColor,gl_FragColor.rgb,smoothstep(-.025,.16,abs(d.y)));
   }`;
 function skyMaterial(profile,background=false){
   return new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
-    uniforms:{background:{value:background?1:0},hazeColor:{value:new THREE.Color(profile.fog).convertLinearToSRGB()},zenith:{value:new THREE.Color(profile.zenith)},horizon:{value:new THREE.Color(profile.horizon)},groundColor:{value:new THREE.Color(profile.ground)},sunDirection:{value:new THREE.Vector3(...profile.sunOffset).normalize()},sunColor:{value:new THREE.Color(profile.sunColor)},cloudCover:{value:profile.clouds}},
+    uniforms:{background:{value:background?1:0},hazeColor:{value:new THREE.Color(profile.fog)},zenith:{value:new THREE.Color(profile.zenith)},horizon:{value:new THREE.Color(profile.horizon)},groundColor:{value:new THREE.Color(profile.ground)},sunDirection:{value:new THREE.Vector3(...profile.sunOffset).normalize()},sunColor:{value:new THREE.Color(profile.sunColor)},cloudCover:{value:profile.clouds}},
     vertexShader:background?'varying vec3 skyDirection;void main(){skyDirection=position;gl_Position=projectionMatrix*viewMatrix*vec4(cameraPosition+position*450.,1.);gl_Position.z=gl_Position.w*.999999;}':'varying vec3 skyDirection;void main(){skyDirection=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:skyFragment});
 }
 export function createBlizzard(count=1800){
@@ -67,5 +67,5 @@ export function createAtmosphere(renderer,scene,trackId,{mobile=false}={}){
   const snow=trackId==='ice'?createBlizzard(mobile?1600:2200):null;if(snow)scene.add(snow);
   const dust=trackId==='desert'?createDustCloud({mobile}):null;if(dust)scene.add(dust.group);
   const size=new THREE.Vector2(),clearFog=new THREE.Color(profile.fog),dustFog=new THREE.Color(0xb68b60),clearHorizon=new THREE.Color(profile.horizon);
-  return {profile,environment,sun,sky,snow,dust,update(camera,now,groundY=0,weatherTime=now/1000,focus=null){const height=Math.max(0,camera.position.y-groundY);scene.fog.density=weatherFogDensity(profile,height);if(dust){renderer.getDrawingBufferSize(size);const storm=dust.update(weatherTime,size.y),haze=stormHaze(storm,focus||camera.position,height);scene.fog.density=haze.density;scene.fog.color.copy(clearFog).lerp(dustFog,haze.coverage*.8);sun.intensity=profile.sunPower*(1-haze.coverage*.58);sky.material.uniforms.horizon.value.copy(clearHorizon).lerp(dustFog,haze.coverage*.75);sky.material.uniforms.hazeColor.value.copy(scene.fog.color).convertLinearToSRGB();sky.material.uniforms.cloudCover.value=profile.clouds+haze.coverage*.65;}if(snow){snow.material.uniforms.time.value=now/1000;snow.material.uniforms.center.value.copy(camera.position);renderer.getDrawingBufferSize(size);snow.material.uniforms.pointScale.value=size.y*.55;}}};
+  return {profile,environment,sun,sky,snow,dust,update(camera,now,groundY=0,weatherTime=now/1000,focus=null){const height=Math.max(0,camera.position.y-groundY);scene.fog.density=weatherFogDensity(profile,height);if(dust){renderer.getDrawingBufferSize(size);const storm=dust.update(weatherTime,size.y),haze=stormHaze(storm,focus||camera.position,height);scene.fog.density=haze.density;scene.fog.color.copy(clearFog).lerp(dustFog,haze.coverage*.8);sun.intensity=profile.sunPower*(1-haze.coverage*.58);sky.material.uniforms.horizon.value.copy(clearHorizon).lerp(dustFog,haze.coverage*.75);sky.material.uniforms.hazeColor.value.copy(scene.fog.color);sky.material.uniforms.cloudCover.value=profile.clouds+haze.coverage*.65;}if(snow){snow.material.uniforms.time.value=now/1000;snow.material.uniforms.center.value.copy(camera.position);renderer.getDrawingBufferSize(size);snow.material.uniforms.pointScale.value=size.y*.55;}}};
 }

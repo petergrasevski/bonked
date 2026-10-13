@@ -7,7 +7,7 @@ import {selectTrack} from '../shared/game.js';
 // Exercise actual landmark geometry without requiring a GPU or DOM texture canvas.
 function fixture(){
   const scene=new THREE.Scene(),staticGroup=new THREE.Group(),materials=new Map();scene.add(staticGroup);
-  return {scene,static:staticGroup,camera:new THREE.PerspectiveCamera(),emitParticles:false,palm(){},texture(){return new THREE.Texture();},
+  return {scene,static:staticGroup,materials,camera:new THREE.PerspectiveCamera(),emitParticles:false,palm(){},texture(){return new THREE.Texture();},
     mesh(geometry,color,x=0,y=0,z=0,parent=staticGroup){
       let material=color;
       if(typeof color!=='object'){if(!materials.has(color))materials.set(color,new THREE.MeshStandardMaterial({color}));material=materials.get(color);}
@@ -18,7 +18,7 @@ function fixture(){
   };
 }
 
-test('detailed coastal landmarks have finite geometry within a bounded mobile budget',()=>{
+test('detailed coastal landmarks have finite geometry within a bounded enhanced rendering budget',()=>{
   selectTrack('coast');const w=fixture();w.landmarks=buildLandmarks(w);w.scene.updateMatrixWorld(true);
   let triangles=0;const batches=new Set();
   w.scene.traverse(o=>{
@@ -31,9 +31,9 @@ test('detailed coastal landmarks have finite geometry within a bounded mobile bu
     batches.add(`${o.material.uuid}:${Math.floor(center.x/70)}:${Math.floor(center.z/70)}`);geometry.dispose();
   });
   // Count excludes generic palms (owned by scenery); no per-detail dynamic draws.
-  assert.ok(triangles>30000 && triangles<52000,`landmark triangles: ${triangles}`);
-  assert.ok(batches.size<=108,`whole-track landmark batches: ${batches.size}`);
-  assert.deepEqual(w.landmarks.map(l=>l.kind),['volcano','geyser','waterfall','lighthouse']);
+  assert.ok(triangles>30000 && triangles<90000,`landmark triangles: ${triangles}`);
+  assert.ok(batches.size<=145,`whole-track landmark batches: ${batches.size}`);
+  assert.deepEqual(w.landmarks.map(l=>l.kind),['volcano','geyser','harbour','ruins','waterfall','lighthouse']);
 });
 
 test('animated landmark parts survive removal of the static merge source',()=>{
@@ -83,4 +83,36 @@ test('sand stretches slope from below the road down beneath the sea',()=>{
   let low=0,high=-Infinity;
   for(const mesh of beaches){const p=mesh.geometry.attributes.position,n=mesh.geometry.attributes.normal;for(let i=0;i<p.count;i++){const y=p.getY(i);low=Math.min(low,y);high=Math.max(high,y);assert.ok(n.getY(i)>0);}}
   assert.ok(high<-.1&&high>-.3);assert.ok(low< -3);
+});
+
+test('living landmarks survive static merging, animate deterministically and keep fixed render resources',()=>{
+  selectTrack('coast');const w=fixture();w.landmarks=buildLandmarks(w);w.scene.remove(w.static);
+  for(const landmark of w.landmarks.filter(l=>l.life)){
+    assert.equal(landmark.life.root.parent,w.scene,`${landmark.kind}: live scene owner`);
+    const resources=[];landmark.life.root.traverse(o=>{if(o.isMesh)resources.push([o.uuid,o.geometry.uuid,o.material.uuid]);});
+    assert.ok(resources.length<=18,`${landmark.kind}: bounded animation draw calls (${resources.length})`);
+    w.camera.position.set(landmark.x,30,landmark.z);
+    const snapshot=()=>{const state=[];landmark.life.root.traverse(o=>{state.push(...o.position.toArray(),...o.quaternion.toArray(),...o.scale.toArray());if(o.isInstancedMesh)state.push(...o.instanceMatrix.array);});return state;};
+    animateLandmarks(w,3500);const initial=snapshot();
+    animateLandmarks(w,11750);const later=snapshot();assert.notDeepEqual(later,initial,`${landmark.kind}: visible motion`);
+    for(const n of later)assert.ok(Number.isFinite(n),`${landmark.kind}: finite transforms`);
+    animateLandmarks(w,3500);assert.deepEqual(snapshot(),initial,`${landmark.kind}: absolute-time replay`);
+    const after=[];landmark.life.root.traverse(o=>{if(o.isMesh)after.push([o.uuid,o.geometry.uuid,o.material.uuid]);});assert.deepEqual(after,resources,`${landmark.kind}: no resource allocation while animating`);
+    w.camera.position.set(landmark.x+1000,30,landmark.z);animateLandmarks(w,7000);assert.equal(landmark.life.root.visible,false);
+    w.camera.position.set(landmark.x,30,landmark.z);animateLandmarks(w,11750);assert.equal(landmark.life.root.visible,true);assert.deepEqual(snapshot(),later,`${landmark.kind}: returning resumes the current phase`);
+  }
+});
+
+test('crane cargo stays above its loading bay and below the gantry',()=>{
+  selectTrack('coast');const w=fixture();w.landmarks=buildLandmarks(w);const harbour=w.landmarks.find(l=>l.kind==='harbour');
+  w.camera.position.set(harbour.x,20,harbour.z);const {carrier,suspended}=harbour.life;
+  const heights=[],positions=[];
+  for(let t=0;t<=24000;t+=250){animateLandmarks(w,t);heights.push(suspended.position.y);positions.push(carrier.position.x);assert.ok(suspended.position.y-2.9>=.35,'cargo clears deck');assert.ok(suspended.position.y<=11.1,'spreader clears gantry');}
+  assert.ok(Math.max(...heights)-Math.min(...heights)>7,'cargo visibly lifts');assert.ok(Math.max(...positions)-Math.min(...positions)>11,'carrier crosses the loading bays');
+});
+
+test('relocated terrain landmarks use matching simulation anchors',()=>{
+  selectTrack('coast');const w=fixture();buildLandmarks(w);
+  const expected={volcano:.175,geyser:.275,ruins:.50,waterfall:.75};
+  for(const land of w.coastalLandforms)assert.equal(land.fraction,expected[land.kind]);
 });

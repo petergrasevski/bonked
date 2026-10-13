@@ -196,6 +196,8 @@ function renderedState(now,dt){
   if(!state||!predicted)return state;
   const fresh=now-lastState<PREDICTION_GRACE_MS&&state.phase==='racing';
   const players=renderFleet(state,predicted,predictedOthers,corrections,dt,fresh?accumulator:0);
+  // Lamps respond to local braking immediately, while remote cars use replicated input.
+  const local=players.find(p=>p.id===myId);if(local)local.input={...input};
   const camera=cameraFrame(createChase(players),players);
   const raceTime=Math.max(state.raceTime||0,...[predicted,...predictedOthers].map(car=>car.raceTime||0))+(fresh?accumulator:0);
   return {...state,...(state.phase==='racing'?combatPrediction.view():{}),combatTime:combatPrediction.time,players,camera,raceTime,chase:renderedChase(state.chase,players)};
