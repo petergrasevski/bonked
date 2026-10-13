@@ -1,0 +1,33 @@
+name: Deploy Bonked to Fly.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fly-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy one machine
+        run: flyctl deploy --remote-only --ha=false --yes
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify public multiplayer
+        run: node scripts/check-public.mjs https://bonked.fly.dev

@@ -285,6 +285,7 @@ body.mobile #health-ui{position:fixed;left:60%;bottom:max(16px,env(safe-area-ins
 /* Eliminated drivers retain only the sky-beam aim and fire controls. */
 #sky-joystick{display:none;touch-action:none;pointer-events:auto;position:fixed;left:max(28px,env(safe-area-inset-left));bottom:max(24px,env(safe-area-inset-bottom));width:116px;height:116px;border-radius:50%;border:2px solid var(--sky-color,#cbd5df);background:#172a35bb;align-items:center;justify-content:center;box-shadow:inset 0 0 20px #0006}
 #sky-joystick span{width:48px;height:48px;border-radius:50%;background:var(--sky-color,#cbd5df);opacity:.75;pointer-events:none}#sky-joystick small{position:absolute;bottom:8px;pointer-events:none;font-size:10px}
+#race-ui.sky-beam #finish-note{left:auto;right:max(16px,env(safe-area-inset-right));transform:none;text-align:right}
 #race-ui.sky-beam .controls{opacity:1}#race-ui.sky-beam .controls #item,#race-ui.sky-beam #sky-joystick{pointer-events:auto}
 #race-ui.sky-beam .left-controls,#race-ui.sky-beam #health-ui,#race-ui.sky-beam .nudge,#race-ui.sky-beam #gas,#race-ui.sky-beam #brake{display:none}
 body.mobile #race-ui.sky-beam #sky-joystick{display:flex}#race-ui.sky-beam #item{border-color:var(--sky-color);color:var(--sky-color)}#race-ui.sky-beam #item.cooling{opacity:.45}

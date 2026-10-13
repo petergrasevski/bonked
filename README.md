@@ -193,7 +193,24 @@ Eight-car scoring is **+3, +2, +1, 0, −1, −1, −1, −2**. With fewer cars,
 
 Eight landmarks are spaced about 303 road metres apart (roughly ten seconds at racing speed): Palm Island, Ember Caldera, Geyser Springs, Cargo Harbour, Sunken Temple, Twin Falls, Beacon Point, and Wreck Bay. Animated features share the particle budget; static geometry uses the existing batching. Wall and centre-island damage is `max(0, speedBefore − speedAfter − 1.5) × 0.3`, reducing grazing damage sharply.
 
-### Laptop-independent free hosting
+### Fly.io hosting
+
+`fly.toml` deploys [Bonked on Fly.io](https://bonked.fly.dev) to Sydney using the existing Dockerfile, one shared CPU and 256 MB RAM. HTTPS and `/health` checks are enabled. The machine starts on requests and stops when idle.
+
+Pushes to `main` run `.github/workflows/fly-deploy.yml`: install dependencies, run the regression suite, deploy one machine, then check public eight-player multiplayer. The repository's `FLY_API_TOKEN` Actions secret must contain a Fly deploy token scoped to the `bonked` app. Rotate that token before its expiry.
+
+To deploy manually from this directory after signing in to the Fly CLI:
+
+```sh
+flyctl deploy --remote-only --ha=false
+node scripts/check-public.mjs https://bonked.fly.dev
+```
+
+Keep exactly one application machine: rooms, scores and voice authentication live in process memory, so multiple machines cannot share a room. Restarts and deployments end active games. No database or persistent volume is required. `PUBLIC_URL` in `fly.toml` sets the invite address; update it along with `app` if using a different Fly app name.
+
+Fly.io's [free trial](https://docs.fly.io/about/free-trial) lasts for two total machine-hours or seven days from signup, whichever comes first. Trial machines automatically stop after five minutes, disconnecting players and clearing rooms. When the trial expires, the app stops until billing is configured. Adding a payment method ends the trial and starts usage billing; there is no ongoing free tier for new accounts.
+
+### Render hosting alternative
 
 `render.yaml` configures one **Free** Node web service in Singapore, with `/health` checks and deployments on commits. Connect [the game's repository](https://github.com/petergrasevski/bonked) in Render, select Node, `npm ci --omit=dev`, `node server.js`, Singapore, and **Free ($0)**. No database, disk or paid compute is required. This account was prompted for card verification even on Free; deployment was stopped at the user’s request and no cloud service exists yet. Keep paid upgrades off; without a payment method, exceeding included bandwidth suspends the free service rather than charging. Render's free service sleeps after 15 minutes of no incoming HTTP/WebSocket traffic and takes roughly one minute to wake. Active games send input and ping messages. Free services may also restart, so this is hobby hosting, not guaranteed uptime; rooms and scores are in memory and reset on a restart. [Official free-tier limits](https://render.com/docs/free).
 
