@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {skyPatch,skyRayGround} from '../shared/sky-ground.js';
-import {boundedSkyAim} from '../shared/sky-beam.js';
+import {skyPatch,skyRayGround,skyGroundAt} from '../shared/sky-ground.js';
+import {boundedSkyAim,clampSkyAimToTrack} from '../shared/sky-beam.js';
 export function advanceSkyCursor(cursor,move,dt){
   const length=Math.max(1,Math.hypot(move.x,move.y));
   cursor.x=Math.max(-.82,Math.min(.82,cursor.x+move.x/length*dt*.8));cursor.y=Math.max(-.72,Math.min(.76,cursor.y+move.y/length*dt*.8));return cursor;
@@ -33,7 +33,7 @@ export function createSkyStrike(color){
   return bolt;
 }
 export class SkyBeamView{
-  constructor(scene){this.scene=scene;this.targets=new Map();this.beams=new Map();this.cursor=new THREE.Vector2(0,0);this.ray=new THREE.Raycaster();this.aim=null;this.round=null;}
+  constructor(scene){this.scene=scene;this.targets=new Map();this.beams=new Map();this.cursor=new THREE.Vector2(0,0);this.aimScreen=new THREE.Vector3();this.ray=new THREE.Raycaster();this.aim=null;this.round=null;}
   marker(color){
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(4096*3),3).setUsage(THREE.DynamicDrawUsage));
     const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms:{center:{value:new THREE.Vector2()},color:{value:new THREE.Color(color)},opacity:{value:.5},time:{value:0}},
@@ -47,12 +47,23 @@ export class SkyBeamView{
     const active=state?.phase==='racing',me=state?.players.find(p=>p.id===localId),key=active&&me?.eliminated&&!me.bot?state.code+':'+state.round:null;
     if(key!==this.round){this.round=key;this.cursor.set(0,0);}
     this.aim=null;
-    if(key){advanceSkyCursor(this.cursor,move,dt);this.ray.setFromCamera(this.cursor,camera);const hit=skyRayGround(this.ray.ray.origin,this.ray.ray.direction);if(hit)this.aim=boundedSkyAim(hit,frame);}
+    if(key){
+      advanceSkyCursor(this.cursor,move,dt);this.ray.setFromCamera(this.cursor,camera);const hit=skyRayGround(this.ray.ray.origin,this.ray.ray.direction);
+      if(hit){
+        this.aim=boundedSkyAim(hit,frame);
+        if(Math.hypot(this.aim.x-hit.x,this.aim.z-hit.z)>1e-6){
+          // Stop the screen cursor at the visible boundary too, so reversing
+          // the stick/key never has to traverse an invisible off-track offset.
+          this.aimScreen.set(this.aim.x,skyGroundAt(this.aim.x,this.aim.z).y,this.aim.z).project(camera);
+          this.cursor.set(this.aimScreen.x,this.aimScreen.y);
+        }
+      }
+    }
     const present=new Set(),time=state?.combatTime??state?.time??0,roundKey=state?.code+':'+state?.round+':'+state?.trackId;
     if(active)for(const p of state.players){let target=p.id===localId?this.aim:p.skyTarget;if(p.bot||!p.eliminated||!target)continue;
       present.add(p.id);let mesh=this.targets.get(p.id);if(!mesh){mesh=this.marker(p.color);this.targets.set(p.id,mesh);}
       if(mesh.userData.round!==roundKey){mesh.userData.round=roundKey;mesh.userData.motion=null;mesh.userData.cell=null;}
-      if(p.id!==localId)target=mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,target,dt);
+      if(p.id!==localId){mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,target,dt);target=clampSkyAimToTrack(mesh.userData.motion);}
       const cell=Math.floor(target.x/12)+','+Math.floor(target.z/12);
       if(mesh.userData.cell!==cell){mesh.userData.cell=cell;const vertices=skyPatch(target.x,target.z);let attr=mesh.geometry.attributes.position;if(attr.array.length<vertices.length){attr=new THREE.BufferAttribute(new Float32Array(3*2**Math.ceil(Math.log2(vertices.length/3))),3).setUsage(THREE.DynamicDrawUsage);mesh.geometry.setAttribute('position',attr);}attr.array.set(vertices);attr.needsUpdate=true;mesh.geometry.setDrawRange(0,vertices.length/3);}
       // Snow and sand wash out translucent player colours; deepen targets on bright tracks.

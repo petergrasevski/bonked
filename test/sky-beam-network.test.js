@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {WebSocket} from 'ws';
+import {nearestTrack,selectTrack} from '../shared/game.js';
+import {SKY_TRACK_MARGIN} from '../shared/sky-beam.js';
 const port=33305;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,ms=18000){const end=Date.now()+ms;while(Date.now()<end){if(fn())return;await sleep(20);}throw Error('Sky beam network condition timed out');}
@@ -19,5 +21,9 @@ test('real spectator input publishes locked beams and server-owned cooldown', {t
   command={fire:false,skyAim:{x:aim.x+10,z:aim.z+10}};await until(()=>seen.some(s=>s.effects.some(e=>e.kind==='pulse'&&e.color===strike.color&&e.x===strike.x&&e.z===strike.z)),2000);
   const impact=seen.find(s=>s.effects.some(e=>e.kind==='pulse'&&e.color===strike.color&&e.x===strike.x&&e.z===strike.z));assert.ok(impact.time>=strike.impactAt);assert.ok(impact.time-strike.impactAt<200);
   command={fire:true,skyAim:aim,skyCooldownUntil:0};await sleep(150);assert.equal(me().skyCooldownUntil,strike.at+3000,'client cannot reset cooldown');
+  const constrainedSeq=seq+1;command={fire:false,skyAim:{x:1e8,z:-1e8}};
+  await until(()=>me().seq>=constrainedSeq);selectTrack(state.trackId);
+  const road=nearestTrack(me().skyTarget.x,me().skyTarget.z);
+  assert.ok(road.distance<=road.halfWidth+.6+SKY_TRACK_MARGIN+1e-6,'forged off-track input is constrained in real server snapshots');
 
 });

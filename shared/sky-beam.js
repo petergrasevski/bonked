@@ -1,11 +1,21 @@
 import {cameraFrame} from './chase.js';
 import {skyGroundAt} from './sky-ground.js';
 import {PULSE_RADIUS,pulsePush} from './shockwave.js';
+import {nearestTrack} from './game.js';
 export const SKY_DELAY=600,SKY_COOLDOWN=3000;
+export const SKY_TRACK_MARGIN=10;
 export function sanitizeSkyAim(aim){return aim&&Number.isFinite(aim.x)&&Number.isFinite(aim.z)?{x:aim.x,z:aim.z}:null;}
+export function clampSkyAimToTrack(aim){
+  // Use the full outer road width, including the ice split's centre gap.
+  // The shared spatial index also handles bends and the desert crossing.
+  const road=nearestTrack(aim.x,aim.z),limit=road.halfWidth+.6+SKY_TRACK_MARGIN;
+  if(road.distance<=limit)return {x:aim.x,z:aim.z};
+  const scale=limit/road.distance;
+  return {x:road.x+(aim.x-road.x)*scale,z:road.z+(aim.z-road.z)*scale};
+}
 export function boundedSkyAim(aim,frame){
   const radius=Math.min(500,Math.max(120,(frame.spread||0)+70)),dx=aim.x-frame.x,dz=aim.z-frame.z,d=Math.hypot(dx,dz),scale=d>radius?radius/d:1;
-  return {x:frame.x+dx*scale,z:frame.z+dz*scale};
+  return clampSkyAimToTrack({x:frame.x+dx*scale,z:frame.z+dz*scale});
 }
 export function resetSkyBeams(room){
   room.skyBeams=[];for(const p of room.players.values()){p.skyAim=null;p.skyTarget=null;p.skyCooldownUntil=0;p.skyFireLatch=false;}
