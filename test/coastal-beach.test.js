@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import {selectTrack,SEGMENTS,TRACK_LENGTH,hasBarrier,getLandscape,nearestTrack} from '../shared/game.js';
 import {BEACH_STEPS,SEA_LEVEL,beachSegments,beachPoint,beachShorePoint} from '../shared/beach-profile.js';
 import {TerrainSurface} from '../shared/landscape.js';
+import {coastalBeachGeometries} from '../public/coastal-terrain.js';
 import {createCoastalWater} from '../public/water.js';
 
 test('curved beaches retain the road boundary, slope into the sea and stay outside the course',()=>{
@@ -11,7 +12,7 @@ test('curved beaches retain the road boundary, slope into the sea and stay outsi
   for(const {a,side}of pairs){
     assert.equal(hasBarrier((a.start+a.len*.5)/TRACK_LENGTH,side),false);
     const edge=beachPoint(a,0,side);assert.ok(Math.abs(Math.hypot(edge[0]-a.x,edge[2]-a.z)-(a.halfWidth+.59))<1e-8);
-    assert.equal(edge[1],a.y-.19);let prior=edge;
+    assert.ok(Math.abs(edge[1]-(a.y+.01))<1e-8);let prior=edge;
     for(let i=1;i<=BEACH_STEPS;i++){
       const p=beachPoint(a,i/BEACH_STEPS,side);assert.ok(p[1]<prior[1]);
       // Lower than a 32 degree bank: no abrupt vertical chute off the road.
@@ -46,4 +47,20 @@ test('ocean and all animated shoreline strips remain two render batches with fin
     }
     ocean.depthTexture.dispose();
   }finally{if(original===undefined)delete globalThis.document;else globalThis.document=original;}
+});
+
+
+test('beach lighting is continuous across strips and meets the road without a shaded seam',()=>{
+  selectTrack('coast');const bands=getLandscape().beaches,meshes=coastalBeachGeometries(bands),seen=new Map();let rim=0,shared=0;
+  meshes.forEach((geo,j)=>{const p=geo.attributes.position,n=geo.attributes.normal;assert.equal(p.count,bands[j].length/3,'smoothing adds no triangles');
+    for(let i=0;i<p.count;i++){
+      const key=[p.getX(i),p.getY(i),p.getZ(i)].map(v=>Math.round(v*10000)).join(','),normal=[n.getX(i),n.getY(i),n.getZ(i)];
+      if(seen.has(key)){assert.deepEqual(normal,seen.get(key));shared++;}else seen.set(key,normal);
+      if(Math.abs(p.getY(i)-.01)<1e-6){assert.deepEqual(normal,[0,1,0]);rim++;}
+      assert.ok(Math.abs(Math.hypot(...normal)-1)<1e-6);
+    }geo.dispose();
+  });assert.ok(shared>100);assert.ok(rim>100);
+  for(const {a,side}of beachSegments({segments:SEGMENTS,trackLength:TRACK_LENGTH,hasBarrier}))for(const t of [1/3,.5,2/3,1]){
+    assert.ok(Math.abs(beachPoint(a,t,side)[1]-(a.y-.19-2.9*t*t*(3-2*t)))<1e-8,'lower bank stays at its original height');
+  }
 });

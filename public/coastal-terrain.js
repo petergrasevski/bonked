@@ -15,8 +15,20 @@ export function addConnectedLand(w,landmark,x,z,radius){
   land.bands.forEach((geo,i)=>{const mesh=w.mesh(geo,colors[i]);mesh.userData.sceneryKind='connected-land';mesh.userData.landmark=landmark.kind;});
   const {bands,...description}=land;(w.coastalLandforms??=[]).push({kind:landmark.kind,...description});return land;
 }
+// Smooth across strip boundaries as well as triangles. The upper rim shares
+// the road's upward normal so sunlight cannot reveal a separate beach mesh.
+export function coastalBeachGeometries(bands){
+  const geometries=bands.map(v=>geometry([...v])),normals=new Map();
+  const key=(p,i)=>[p.getX(i),p.getY(i),p.getZ(i)].map(v=>Math.round(v*10000)).join(',');
+  for(const geo of geometries){const p=geo.attributes.position,n=geo.attributes.normal;
+    for(let i=0;i<p.count;i++){const k=key(p,i);if(!normals.has(k))normals.set(k,new THREE.Vector3());normals.get(k).add(new THREE.Vector3().fromBufferAttribute(n,i));}}
+  for(const n of normals.values())n.normalize();
+  for(const geo of geometries){const p=geo.attributes.position,n=geo.attributes.normal;
+    for(let i=0;i<p.count;i++){const smooth=normals.get(key(p,i));if(Math.abs(p.getY(i)-.01)<.00001)n.setXYZ(i,0,1,0);else n.setXYZ(i,smooth.x,smooth.y,smooth.z);}}
+  return geometries;
+}
 export function buildCoastalBeaches(w){
   if(activeTrack.id!=='coast')return;
   const key='coastal-sand';if(!w.materials.has(key))w.materials.set(key,createCoastalSandMaterial());
-  getLandscape().beaches.forEach(v=>{const mesh=w.mesh(geometry([...v]),w.materials.get(key));mesh.userData.sceneryKind='coastal-beach';});
+  coastalBeachGeometries(getLandscape().beaches).forEach(geo=>{const mesh=w.mesh(geo,w.materials.get(key));mesh.userData.sceneryKind='coastal-beach';});
 }
