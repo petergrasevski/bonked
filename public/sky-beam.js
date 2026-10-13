@@ -55,7 +55,10 @@ export class SkyBeamView{
       if(p.id!==localId)target=mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,target,dt);
       const cell=Math.floor(target.x/12)+','+Math.floor(target.z/12);
       if(mesh.userData.cell!==cell){mesh.userData.cell=cell;const vertices=skyPatch(target.x,target.z);let attr=mesh.geometry.attributes.position;if(attr.array.length<vertices.length){attr=new THREE.BufferAttribute(new Float32Array(3*2**Math.ceil(Math.log2(vertices.length/3))),3).setUsage(THREE.DynamicDrawUsage);mesh.geometry.setAttribute('position',attr);}attr.array.set(vertices);attr.needsUpdate=true;mesh.geometry.setDrawRange(0,vertices.length/3);}
-      mesh.material.uniforms.time.value=time/1000;mesh.material.uniforms.center.value.set(target.x,target.z);mesh.material.uniforms.opacity.value=time<p.skyCooldownUntil?.18:.5;
+      // Snow washes out translucent player colours; deepen only the glacier targets.
+      const ice=state.trackId==='ice',cooling=time<p.skyCooldownUntil;
+      mesh.material.uniforms.color.value.set(p.color).multiplyScalar(ice?.45:1);
+      mesh.material.uniforms.time.value=time/1000;mesh.material.uniforms.center.value.set(target.x,target.z);mesh.material.uniforms.opacity.value=ice?(cooling?.3:.72):(cooling?.18:.5);
     }
     for(const [id,mesh]of this.targets)if(!present.has(id)){this.scene.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();this.targets.delete(id);}
     const strikes=new Set();if(active)for(const strike of state.skyBeams||[]){if(time>=strike.impactAt)continue;strikes.add(strike.id);let bolt=this.beams.get(strike.id);

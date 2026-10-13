@@ -310,3 +310,8 @@ body.playing .grain{background:radial-gradient(ellipse at center,transparent 55%
 .audio-volume{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 16px;padding:10px 12px;border:1px solid #8ba3b444;background:#ffffff08}.audio-volume label{margin:0;font-size:15px;letter-spacing:0;color:#f2f4ed}.audio-volume small{font-size:11px;color:#9eaeb9;margin-left:8px}.audio-volume output{font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}.audio-volume input{grid-column:1/-1;width:100%;min-width:0;min-height:36px;margin:0;padding:0;accent-color:var(--accent);touch-action:pan-x;cursor:pointer}
 
 #voice-toggle[hidden]{display:none}#audio-toggle .speaker-slash{display:none;stroke:#ff4d5e;stroke-width:2.7}#audio-toggle[aria-pressed="true"] .speaker-slash{display:block}#audio-toggle[aria-pressed="true"]{border-color:#ff4d5e88}#audio-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+/* Leave room for the wide start button to tilt inside the scrollable lobby. */
+@media(hover:hover) and (pointer:fine){#room-panel #start{width:calc(100% - 64px);margin-inline:32px}}
+/* Keep race status below the scores, clear of the shared camera's racing line. */
+body.playing #race-hud #finish-note{position:static;transform:none;margin-top:8px;width:fit-content;max-width:100%;white-space:normal;font-size:11px;padding:7px 10px}
