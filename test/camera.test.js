@@ -17,7 +17,7 @@ function contained(camera,car){
   const c=Math.cos(car.angle),s=Math.sin(car.angle);
   for(const x of [-CAR_LENGTH/2,CAR_LENGTH/2])for(const z of [-CAR_WIDTH/2,CAR_WIDTH/2])for(const y of [0,3.5]){
     const p=new THREE.Vector3(car.x+x*c-z*s,car.y+y,car.z+x*s+z*c).project(camera);
-    assert.ok(Math.abs(p.x)<.85&&p.y>-.61&&p.y<.77&&p.z>-1&&p.z<1,`car clipped: ${p.toArray()}`);
+    assert.ok(Math.abs(p.x)<.97&&p.y>-.73&&p.y<.90&&p.z>-1&&p.z<1,`car clipped: ${p.toArray()}`);
   }
 }
 test('compact packs use a rear chase view; spread gradually raises the camera',()=>{
@@ -27,7 +27,7 @@ test('compact packs use a rear chase view; spread gradually raises the camera',(
     assert.ok(f.pitch>=previous);previous=f.pitch;
     assert.ok(Math.abs(f.from-(100-spread-CAMERA_REAR_SPACE)/TRACK_LENGTH)<1e-9);
     assert.ok(Math.abs(f.to-(100+CAMERA_LOOKAHEAD)/TRACK_LENGTH)<1e-9);
-    if(spread<=18)assert.equal(f.pitch,26*Math.PI/180);
+    if(spread<=18)assert.equal(f.pitch,29*Math.PI/180);
     if(spread>=88)assert.equal(f.pitch,70*Math.PI/180);
   }
   const cars=[carAt(100)],chase=createChase(cars),f=cameraFrame(chase,cars);

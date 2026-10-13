@@ -1,5 +1,5 @@
 import { START_FRACTION, TRACK_LENGTH, TOP_SPEED, trackAt } from './game.js';
-export const CAMERA_LOOKAHEAD = 10; // Road metres ahead of the leader.
+export const CAMERA_LOOKAHEAD = 9; // Road metres ahead of the leader.
 export const CHASE_DISTANCE = TOP_SPEED * 2.25; // Fixed road distance, not a timer.
 // Race progress is unwrapped across the start line. Never compare wrapped fractions.
 export function createChase(cars) {
@@ -22,7 +22,7 @@ export function updateChase(chase,players,elapsedMs) {
 export function chaseSnapshot(chase){
   return {active:chase.active,progress:chase.progress,leaderId:chase.leaderId,leaderProgress:chase.leaderProgress,...trackAt(START_FRACTION+chase.progress)};
 }
-export const CAMERA_REAR_SPACE = 10;
+export const CAMERA_REAR_SPACE = 9;
 // All drivers receive the same route target. Eliminated cars stop stretching the pack.
 export function cameraFrame(chase,cars=[]){
   const running=cars.filter(car=>!car.eliminated);
@@ -35,7 +35,7 @@ export function cameraFrame(chase,cars=[]){
   const ahead=trackAt(START_FRACTION+middle+20/TRACK_LENGTH);
   const angle=Math.hypot(ahead.x-behind.x,ahead.z-behind.z)>1?Math.atan2(ahead.z-behind.z,ahead.x-behind.x):target.angle;
   const t=Math.max(0,Math.min(1,(spread-18)/70)),rise=t*t*(3-2*t);
-  return {y:target.y,x:target.x,z:target.z,angle,pitch:(26+44*rise)*Math.PI/180,spread,from:rear-CAMERA_REAR_SPACE/TRACK_LENGTH,to:leader+CAMERA_LOOKAHEAD/TRACK_LENGTH};
+  return {y:target.y,x:target.x,z:target.z,angle,pitch:(29+41*rise)*Math.PI/180,spread,from:rear-CAMERA_REAR_SPACE/TRACK_LENGTH,to:leader+CAMERA_LOOKAHEAD/TRACK_LENGTH};
 }
 export function raceOrder(a,b){
   const ca=a.car||a,cb=b.car||b;

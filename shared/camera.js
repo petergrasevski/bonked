@@ -8,16 +8,17 @@ const TARGET_HEIGHT = 1.5;
 export function cameraDistance(frame,cars,aspect){
   const c=Math.cos(frame.angle),s=Math.sin(frame.angle),sp=Math.sin(frame.pitch),cp=Math.cos(frame.pitch);
   const tanY=Math.tan(CAMERA_FOV*Math.PI/360),tanX=tanY*Math.max(.35,aspect);
-  let distance=16;
+  let distance=14.4;
   const include=(x,y,z,sideMargin,topMargin,bottomMargin)=>{
     const dx=x-frame.x,dz=z-frame.z,dy=y-(frame.y||0)-TARGET_HEIGHT;
     const along=dx*c+dz*s,right=-dx*s+dz*c,up=along*sp+dy*cp,depth=along*cp-dy*sp;
     distance=Math.max(distance,Math.abs(right)/(tanX*sideMargin)-depth,Math.abs(up)/(tanY*(up>=0?topMargin:bottomMargin))-depth,2-depth);
   };
+  // Tighter framing brings the pack closer while retaining space around cars.
   // The rear strip exposes the death line as it gets close, without following it.
   for(let i=0;i<=16;i++){
     const p=trackAt(START_FRACTION+frame.from+(frame.to-frame.from)*i/16);
-    for(const side of [-1,1])include(p.x+p.nx*(p.halfWidth+1)*side,p.y||0,p.z+p.nz*(p.halfWidth+1)*side,.92,.86,.86);
+    for(const side of [-1,1])include(p.x+p.nx*(p.halfWidth+1)*side,p.y||0,p.z+p.nz*(p.halfWidth+1)*side,.98,.98,.98);
   }
   for(const car of cars){
     if(car.eliminated)continue;
@@ -26,7 +27,7 @@ export function cameraDistance(frame,cars,aspect){
     // the car's position is steady. Keep actual position/height containment.
     const radius=Math.hypot(CAR_LENGTH/2+.65,CAR_WIDTH/2+.65);
     for(const x of [-radius,radius])for(const z of [-radius,radius])for(const y of [-1,4]){
-      include(car.x+x*c-z*s,(car.y||0)+y,car.z+x*s+z*c,.84,.76,.6);
+      include(car.x+x*c-z*s,(car.y||0)+y,car.z+x*s+z*c,.96,.89,.72);
     }
   }
   return distance;
