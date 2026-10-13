@@ -1,3 +1,4 @@
+import {useBakedNoise,noise2DGLSL} from './baked-noise.js';
 import * as THREE from 'three';
 import {hasBarrier,TRACK_LENGTH,getLandscape} from '../shared/game.js';
 import {beachSegments,beachShorePoint,beachPoint,beachWidth} from '../shared/beach-profile.js';
@@ -17,9 +18,7 @@ const vertex=`
 uniform float time;varying vec3 vWorld;varying vec2 vUv;
 ${waves}
 void main(){vUv=uv;vec4 world=modelMatrix*vec4(position,1.);world.y+=surface(world.xz).x;vWorld=world.xyz;gl_Position=projectionMatrix*viewMatrix*world;}`;
-const noise=`
-float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.)),f.x),f.y);}`;
+const noise=`${noise2DGLSL} float noise(vec2 p){return bakedNoise2D(p);}`;
 export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
   const time={value:0},fogColor={value:fog.color.clone()},fogDensity={value:fog.density};
   const bounds={minX:Math.min(...track.map(p=>p.x))-100,minZ:Math.min(...track.map(p=>p.z))-100,maxX:Math.max(...track.map(p=>p.x))+100,maxZ:Math.max(...track.map(p=>p.z))+100};
@@ -45,7 +44,7 @@ export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
   ctx.globalCompositeOperation='source-over';
   const depthTexture=new THREE.CanvasTexture(canvas);depthTexture.colorSpace=THREE.NoColorSpace;depthTexture.generateMipmaps=false;depthTexture.minFilter=THREE.LinearFilter;depthTexture.magFilter=THREE.LinearFilter;
   const waterMaterial=new THREE.ShaderMaterial({fog:true,uniforms:{time,fogColor,fogDensity,sunDirection:{value:new THREE.Vector3(...(lighting?.sunOffset||[-55,62,-44])).normalize()},sunColor:{value:new THREE.Color(lighting?.sunColor||0xffd4a0)},skyHorizon:{value:new THREE.Color(lighting?.horizon||0xb6c6cb)},skyZenith:{value:new THREE.Color(lighting?.zenith||0x6593b7)},coastMap:{value:depthTexture},coastBounds:{value:new THREE.Vector4(bounds.minX,bounds.minZ,width,height)}},vertexShader:vertex,fragmentShader:`
-    uniform float time;uniform vec3 fogColor,sunDirection,sunColor,skyHorizon,skyZenith;uniform float fogDensity;uniform sampler2D coastMap;uniform vec4 coastBounds;varying vec3 vWorld;varying vec2 vUv;
+    uniform float sceneFadeStart,sceneFadeEnd;uniform float time;uniform vec3 fogColor,sunDirection,sunColor,skyHorizon,skyZenith;uniform float fogDensity;uniform sampler2D coastMap;uniform vec4 coastBounds;varying vec3 vWorld;varying vec2 vUv;
     ${waves}${noise}
     void main(){
       vec2 p=vWorld.xz;vec3 w=surface(p);
@@ -66,10 +65,12 @@ export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
       color+=sunColor*(pow(shine,420.)*3.8+pow(shine,45.)*.22);
       float crest=smoothstep(.27,.36,w.x)*smoothstep(.66,.9,noise(p*.8+time*.07));color=mix(color,vec3(.55,.8,.79),crest*.2);
       float distanceToEye=length(cameraPosition-vWorld);float haze=1.-exp(-pow(fogDensity*distanceToEye,2.));
+      haze=max(haze,smoothstep(sceneFadeStart,sceneFadeEnd,-(viewMatrix*vec4(vWorld,1.)).z));
       gl_FragColor=vec4(mix(color,fogColor,haze),1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`});
+  waterMaterial.uniforms.terrainNoise={value:useBakedNoise(waterMaterial)};
   const geometry=new THREE.PlaneGeometry(2000,2000,128,128);geometry.rotateX(-Math.PI/2);const water=new THREE.Mesh(geometry,waterMaterial);water.position.y=-2.1;
   // One foam batch for protected walls, sloping beaches and landmark islands.
   // The beach rows sit on the shared terrain profile and rise with wave swash;
@@ -106,7 +107,7 @@ export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
   const shoreGeo=new THREE.BufferGeometry();shoreGeo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));shoreGeo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
   const shoreMaterial=new THREE.ShaderMaterial({uniforms:{time,fogColor,fogDensity},vertexShader:`uniform float time;varying vec3 vWorld;varying vec2 vUv;${waves}
     void main(){vUv=uv;vec4 world=modelMatrix*vec4(position,1.);world.y=max(world.y,-2.06+surface(world.xz).x);vWorld=world.xyz;gl_Position=projectionMatrix*viewMatrix*world;}`,transparent:true,depthWrite:false,side:THREE.DoubleSide,fragmentShader:`
-    uniform float time;uniform vec3 fogColor;uniform float fogDensity;varying vec3 vWorld;varying vec2 vUv;${noise}
+    uniform float sceneFadeStart,sceneFadeEnd;uniform float time;uniform vec3 fogColor;uniform float fogDensity;varying vec3 vWorld;varying vec2 vUv;${noise}
     void main(){
       float grain=noise(vWorld.xz*1.6+vec2(time*.045,-time*.06));
       float broken=noise(vec2(vUv.x*.7,time*.08));
@@ -118,10 +119,12 @@ export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
       float edgeFoam=(1.-smoothstep(.1,.35,vUv.y+surge))*(.25+.4*grain);
       float envelope=smoothstep(0.,.09,vUv.y)*(1.-smoothstep(.78,1.,vUv.y));
       float alpha=(lace*.6+edgeFoam*.38)*envelope*(.65+broken*.35);
+      alpha*=1.-smoothstep(sceneFadeStart,sceneFadeEnd,-(viewMatrix*vec4(vWorld,1.)).z);
       alpha*=exp(-pow(fogDensity*length(cameraPosition-vWorld),2.));gl_FragColor=vec4(.76,.86,.79,alpha);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`});
+  shoreMaterial.uniforms.terrainNoise={value:useBakedNoise(shoreMaterial)};
   const shore=new THREE.Mesh(shoreGeo,shoreMaterial);
   return {water,shore,waterMaterial,depthTexture};
 }

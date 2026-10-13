@@ -1,7 +1,12 @@
+import {SceneMaterials} from './scene-materials.js';
+import {StaticShadows} from './static-shadows.js';
+import {DistanceFade,sceneRange} from './scene-distance.js';
+import {spatialPieces,prepareSceneryLOD,updateSceneryLOD} from './scenery-lod.js';
+import {AdaptiveResolution} from './adaptive-resolution.js';
+import {yieldToLobby} from './circuit-loading.js';
 import {WeaponEffects,createWeaponShieldMaterial} from './weapon-effects.js';
 import {createCoastalSandMaterial} from './sand-surface.js';
 import {updateCarVisuals} from './car-animation.js';
-import {VisualFinish} from './visual-finish.js';
 import {weatherSurface} from './surface-detail.js';
 import {buildLandscapeBackdrop} from './landscape-backdrop.js';
 import {buildSceneryDetails} from './scenery-details.js';
@@ -39,27 +44,54 @@ import { cameraFrame, createChase } from '/shared/chase.js';
 import { CAMERA_FOV, stepCamera, cameraPose } from '/shared/camera.js';
 const C={asphalt:0x394951,sand:0x938d7c,cliff:0x777568,cream:0xc8c6b7,coral:0xae6654,navy:0x263941,teal:0x497475,lime:0xcbd3db};
 export class World{
-  constructor(container,{preview=false}={}){
-    this.trackId=activeTrack.id;this.previewOnly=preview;this.distanceCulledScenery=[];
+  constructor(container,{preview=false,deferred=false}={}){
+    this.trackId=activeTrack.id;this.previewOnly=preview;this.distanceCulledScenery=[];this.distanceFade=new DistanceFade();this.sceneMaterials=new SceneMaterials();
     this.container=container;this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0x8094a3);
     this.weaponEffects=new WeaponEffects(this.scene);
     this.tyreTracks=createTyreTracks();this.scene.add(this.tyreTracks.mesh);
     this.nudgeEffects=createNudgeEffects(MAX_PLAYERS);this.scene.add(this.nudgeEffects.group);
     skySurfaces();this.skyView=new SkyBeamView(this.scene);this.skyMove={x:0,y:0};this.skyAim=null;
     this.scene.fog=new THREE.FogExp2(0x8094a3,.0045);
-    this.renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance',alpha:false});
-    this.renderer.setPixelRatio(preview?1:Math.min(devicePixelRatio,1.7));this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+    this.renderer=new THREE.WebGLRenderer({antialias:preview,powerPreference:'high-performance',alpha:false});
+    let graphicsStorage;try{graphicsStorage=localStorage;}catch{}
+    if(!preview)this.resolution=new AdaptiveResolution({pixelRatio:devicePixelRatio,width:container.clientWidth,height:container.clientHeight,trackId:this.trackId,storage:graphicsStorage,onChange:ratio=>this.renderer.setPixelRatio(ratio)});
+    this.renderer.info.autoReset=false;
+    this.renderer.setPixelRatio(this.resolution?.ratio||1);this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.02;this.renderer.outputColorSpace=THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
-    if(!preview)this.visualFinish=new VisualFinish(this.renderer);
     this.camera=new THREE.PerspectiveCamera(CAMERA_FOV,1,.2,1600);this.camera.position.set(0,90,64);this.camera.lookAt(0,0,0);
     this.atmosphere=createAtmosphere(this.renderer,this.scene,activeTrack.id);this.sun=this.atmosphere.sun;this.environment=this.atmosphere.environment;
     this.gustTrails=activeTrack.id==='desert'?createGustTrails(MAX_PLAYERS):null;if(this.gustTrails)this.scene.add(this.gustTrails.mesh);
     this.materials=new Map();this.textures=new Map();this.static=new THREE.Group();this.scene.add(this.static);this.cars=new Map();this.boxes=[];this.rockets=new Map();this.frame=0;this.mines=new Map();this.chains=new Map();this.particles=[];this.particleClock=0;
-    this.buildTrack();if(activeTrack.id==='coast'){this.buildScenery();this.landmarks=buildLandmarks(this);this.coastalCrabs=buildCoastalCrabs(this.scene);}else{this.landmarks=[];this.buildBiome();}if(activeTrack.id==='ice')this.valley=buildGlacierValley(this);if(activeTrack.id==='desert'){buildDesertScenery(this);this.desertMoles=buildDesertMoles(this);}this.sceneryDetails=buildSceneryDetails(this);this.mergeStatic();this.distanceCulledScenery.push(...this.sceneryDetails.group.children);this.buildWater();this.landscapeBackdrop=buildLandscapeBackdrop(this.scene,activeTrack.id);this.buildPickups();this.buildEliminationLine();this.buildParticles();this.boostPads=buildBoostPads(this.scene);
-    this.previewCars=COLORS.slice(0,2).map((color,i)=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});
-    if(preview)this.renderer.setSize(320,320);else{this.resize();this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(container);this.renderer.compile(this.scene,this.camera);}
+    this.previewCars=[];
+    if(!deferred){for(const [,build]of this.buildStages())build();this.finishBuild();if(!preview)this.renderer.compile(this.scene,this.camera);}
   }
+  *buildStages(){
+    yield ['Building road',()=>this.buildTrack()];
+    yield ['Building terrain',()=>{if(activeTrack.id==='coast')this.buildScenery();else this.buildBiome();}];
+    yield ['Adding landmarks',()=>{this.landmarks=activeTrack.id==='coast'?buildLandmarks(this):[];}];
+    yield ['Adding circuit details',()=>{if(activeTrack.id==='coast')this.coastalCrabs=buildCoastalCrabs(this.scene);if(activeTrack.id==='ice')this.valley=buildGlacierValley(this);if(activeTrack.id==='desert'){buildDesertScenery(this);this.desertMoles=buildDesertMoles(this);}}];
+    yield ['Adding scenery',()=>{this.sceneryDetails=buildSceneryDetails(this);this.mergeStatic();this.distanceCulledScenery.push(...this.sceneryDetails.group.children);for(const mesh of this.sceneryDetails.group.children)prepareSceneryLOD(mesh);}];
+    yield ['Preparing environment',()=>{this.buildWater();this.landscapeBackdrop=buildLandscapeBackdrop(this.scene,activeTrack.id);}];
+    yield ['Preparing race objects',()=>{this.buildPickups();this.buildEliminationLine();this.buildParticles();this.boostPads=buildBoostPads(this.scene);}];
+    yield ['Preparing cars',()=>{this.previewCars=COLORS.slice(0,2).map(color=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});}];
+    yield ['Caching scenery shadows',()=>{this.staticShadows=new StaticShadows(this.renderer,this.distanceCulledScenery,this.atmosphere.profile.sunOffset);this.staticShadows.apply(this.scene);this.distanceFade.apply(this.scene);}];
+  }
+  finishBuild(){
+    if(this.previewOnly)this.renderer.setSize(320,320);else{this.resize();this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(this.container);}
+  }
+  static async load(container,{current=()=>true,progress=()=>{}}={}){
+    let world;
+    const check=()=>{if(!current())throw new Error('Circuit selection changed');};
+    try{
+      check();world=new World(container,{deferred:true});
+      for(const [stage,build]of world.buildStages()){progress(stage);await yieldToLobby();check();build();}
+      world.finishBuild();progress('Preparing graphics');await yieldToLobby();check();
+      if(world.renderer.compileAsync)await world.renderer.compileAsync(world.scene,world.camera);else world.renderer.compile(world.scene,world.camera);
+      check();return world;
+    }catch(error){world?.dispose();throw error;}
+  }
+
   roadMaterial(kind){
     if(kind==='sand'&&activeTrack.id==='coast'){if(!this.materials.has('coastal-sand'))this.materials.set('coastal-sand',createCoastalSandMaterial());return this.materials.get('coastal-sand');}
     if(kind==='ice')return this.iceRoadMaterial??=createIceMaterial();
@@ -187,8 +219,8 @@ export class World{
   mergeStatic(){
     this.static.updateMatrixWorld(true);const groups=new Map();
     this.static.traverse(obj=>{if(!obj.isMesh)return;let geo=obj.geometry.clone().applyMatrix4(obj.matrixWorld);if(geo.index)geo=geo.toNonIndexed();if(!geo.attributes.uv)geo.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count*2),2));for(const key of Object.keys(geo.attributes))if(!['position','normal','uv'].includes(key))geo.deleteAttribute(key);
-      geo.computeBoundingBox();const center=geo.boundingBox.getCenter(new THREE.Vector3());const key=`${obj.material.uuid}:${Math.floor(center.x/70)}:${Math.floor(center.z/70)}`;
-      if(!groups.has(key))groups.set(key,{material:obj.material,geos:[]});groups.get(key).geos.push(geo);
+      for(const piece of spatialPieces(geo)){piece.computeBoundingBox();const center=piece.boundingBox.getCenter(new THREE.Vector3());const key=`${obj.material.uuid}:${Math.floor(center.x/70)}:${Math.floor(center.z/70)}`;
+        if(!groups.has(key))groups.set(key,{material:obj.material,geos:[]});groups.get(key).geos.push(piece);}
     });
     this.scene.remove(this.static);this.static.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
     for(const {material,geos}of groups.values()){const mesh=new THREE.Mesh(mergeGeometries(geos),material);mesh.castShadow=true;mesh.receiveShadow=true;mesh.geometry.computeBoundingSphere();this.distanceCulledScenery.push(mesh);this.scene.add(mesh);for(const geo of geos)geo.dispose();}
@@ -196,8 +228,8 @@ export class World{
   cullDistantScenery(camera){
     // Extend only the large backdrop's useful range; small static props retain
     // their previous far-plane budget even when the island is in view.
-    const e=camera.matrixWorld.elements,p=camera.position,far=camera===this.camera?Math.max(this.atmosphere.profile.viewDistance,this.follow?.far||0):camera.far;
-    for(const mesh of this.distanceCulledScenery){const {center:c,radius:r}=mesh.geometry.boundingSphere;mesh.visible=-(c.x-p.x)*e[8]-(c.y-p.y)*e[9]-(c.z-p.z)*e[10]-r<far;}
+    const e=camera.matrixWorld.elements,p=camera.position,far=camera===this.camera?sceneRange(this.trackId,this.follow):camera.far;
+    for(const mesh of this.distanceCulledScenery){updateSceneryLOD(mesh,camera);const {center:c,radius:r}=mesh.userData.lodBounds||mesh.geometry.boundingSphere;mesh.visible=-(c.x-p.x)*e[8]-(c.y-p.y)*e[9]-(c.z-p.z)*e[10]-r<far;}
     const within=(c,r)=>-(c.x-p.x)*e[8]-(c.y-p.y)*e[9]-(c.z-p.z)*e[10]-r<far;
     for(const g of this.boxes)g.visible=g.userData.available!==false&&within(g.position,6);
     for(const l of this.landmarks)l.mesh.visible=within(l.mesh.position,l.kind==='lighthouse'?70:28);
@@ -208,11 +240,11 @@ export class World{
       this.waterMaterial={uniforms:{time:{value:0}}};
       const ground=new THREE.Mesh(new THREE.PlaneGeometry(6000,6000),activeTrack.id==='ice'?this.mat(0xe0eff2):createDesertMaterial(true));if(activeTrack.id==='desert'){ground.material.polygonOffset=true;ground.material.polygonOffsetFactor=2;ground.material.polygonOffsetUnits=4;}ground.rotation.x=-Math.PI/2;ground.position.y=-4;ground.receiveShadow=true;this.scene.add(ground);return;
     }
-    const ocean=createCoastalWater(TRACK,SEGMENTS,this.scene.fog,this.atmosphere.profile,this.coastalLandforms);this.waterMaterial=ocean.waterMaterial;this.textures.set('coast-depth',ocean.depthTexture);this.scene.add(ocean.water,ocean.shore);
+    const ocean=createCoastalWater(TRACK,SEGMENTS,this.scene.fog,this.atmosphere.profile,this.coastalLandforms);this.waterMaterial=ocean.waterMaterial;this.waterMaterial.uniforms.sceneFadeStart=this.distanceFade.start;this.waterMaterial.uniforms.sceneFadeEnd=this.distanceFade.end;ocean.shore.material.uniforms.sceneFadeStart=this.distanceFade.start;ocean.shore.material.uniforms.sceneFadeEnd=this.distanceFade.end;this.textures.set('coast-depth',ocean.depthTexture);this.scene.add(ocean.water,ocean.shore);
   }
   setPickupModel(g,kind){
     if(g.userData.kind===kind)return;if(g.userData.model)g.remove(g.userData.model);
-    const model=createPickupModel(kind);g.add(model);g.userData.model=model;g.userData.kind=kind;
+    const model=this.sceneMaterials.adopt(createPickupModel(kind),true);this.staticShadows?.apply(model);this.distanceFade.apply(model);g.add(model);g.userData.model=model;g.userData.kind=kind;
     g.userData.halo.material.color.setHex(PICKUP_COLORS[kind]);g.userData.ring.material.uniforms.color.value.setHex(PICKUP_COLORS[kind]);g.userData.beacon.material.color.setHex(PICKUP_COLORS[kind]);
   }
   buildPickups(){
@@ -235,7 +267,7 @@ export class World{
     const aspect=this.container.clientWidth/Math.max(1,this.container.clientHeight);
     const f=this.follow=stepCamera(this.follow,frame,cars,aspect,dt),pose=cameraPose(f);
     // Avoid drawing scenery already hidden by weather; always retain the pack.
-    const far=Math.max(this.atmosphere.profile.viewDistance,f.far,this.landscapeBackdrop?.children.length?1600:0);
+    const far=sceneRange(this.trackId,f);this.distanceFade.update(far);
     if(this.camera.aspect!==aspect||this.camera.far!==far){this.camera.aspect=aspect;this.camera.far=far;this.camera.updateProjectionMatrix();}
     this.camera.position.set(pose.x,pose.y,pose.z);this.camera.lookAt(pose.targetX,pose.targetY,pose.targetZ);this.camera.updateMatrixWorld();
     const [sx,sy,sz]=this.atmosphere.profile.sunOffset;this.sun.position.set(f.x+sx,(f.y||0)+sy,f.z+sz);this.sun.target.position.set(f.x,f.y||0,f.z);this.sun.target.updateMatrixWorld();
@@ -244,7 +276,8 @@ export class World{
     const g=createSportsCar(color,{headlights:activeTrack.id==='ice'}),{paint}=g.userData;
     const shield=new THREE.Mesh(new THREE.SphereGeometry(3.2,20,12),createWeaponShieldMaterial());shield.position.y=.7;shield.scale.y=.65;shield.visible=false;g.add(shield);g.userData={...g.userData,shield,paint,baseColor:new THREE.Color(color),chassisSize:{length:CAR_LENGTH,width:CAR_WIDTH}};g.rotation.order='YXZ';
     const flame=this.createFlame();flame.scale.x=(FLAME_RANGE-CAR_LENGTH/2)/8.35;g.add(flame);g.userData.flame=flame;const exhaust=new THREE.Group();exhaust.visible=false;for(const side of [-1,1]){const jet=this.createFlame();jet.visible=true;jet.position.set(-2.36,.37,side*.50);jet.rotation.y=Math.PI;jet.scale.set(.32,.13,.13);exhaust.add(jet);}g.add(exhaust);g.userData.boostExhaust=exhaust;
-    return g;
+    this.sceneMaterials.adopt(g);
+    this.staticShadows?.apply(g);this.distanceFade.apply(g);return g;
   }
   createFlame(){
     if(!this.flameMaterial)this.flameMaterial=new THREE.ShaderMaterial({uniforms:{time:{value:0}},transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,toneMapped:false,
@@ -270,9 +303,9 @@ export class World{
     sync(this.chains,state?.chains||[],()=>{const g=new THREE.Group();const ball=this.mesh(new THREE.IcosahedronGeometry(.95,1),0x4b5258,0,0,0,g);for(let i=0;i<8;i++)this.mesh(new THREE.TorusGeometry(.22,.07,4,6),0xa4a9ad,0,0,0,g);return g;},(g,b)=>{const pose=g.userData.motion=projectilePose(g.userData.motion,{...b,vx:b.renderVx??b.vx,vy:b.renderVy??b.vy,vz:b.renderVz??b.vz,angle:0,pitch:0},state.combatTime??state.time,dt,now);const ownerState=state.players.find(p=>p.id===b.owner),ballRoad=nearestTrack(pose.x,pose.z,ownerState?.trackFraction);if(ballRoad.distance<=ballRoad.halfWidth+.6)pose.y=Math.max(pose.y,ballRoad.y+.98);const owner=this.cars.get(b.owner),anchor=owner?owner.localToWorld(new THREE.Vector3(-CAR_LENGTH/2,.9,0)):{x:b.anchorX??pose.x,y:b.anchorY??pose.y,z:b.anchorZ??pose.z};g.children[0].position.set(pose.x,pose.y,pose.z);g.children[0].rotation.z=now*.002;for(let i=1;i<9;i++){const t=i/9,x=pose.x+(anchor.x-pose.x)*t,z=pose.z+(anchor.z-pose.z)*t,road=nearestTrack(x,z,ownerState?.trackFraction),lineY=pose.y+(anchor.y-pose.y)*t,y=road.distance<=road.halfWidth+.6?Math.max(lineY,road.y+.22):lineY;g.children[i].position.set(x,y,z);g.children[i].rotation.set(i%2*Math.PI/2,-Math.atan2(anchor.z-pose.z,anchor.x-pose.x),Math.atan2(anchor.y-pose.y,Math.hypot(anchor.x-pose.x,anchor.z-pose.z)));}});
   }
   dispose(){
-    this.weaponEffects.dispose();this.resizeObserver?.disconnect();this.previewTarget?.dispose();this.visualFinish?.dispose();
-    const geometries=new Set(),materials=new Set(),textures=new Set(this.textures.values());
-    this.scene.traverse(o=>{if(o.isInstancedMesh)o.dispose();if(o.name==='ice-headlight')o.dispose();if(o.geometry)geometries.add(o.geometry);for(const m of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){materials.add(m);if(m.map)textures.add(m.map);}});
+    this.staticShadows?.dispose();this.weaponEffects.dispose();this.resizeObserver?.disconnect();this.previewTarget?.dispose();
+    const geometries=new Set(),materials=new Set(this.sceneMaterials.materials.values()),textures=new Set(this.textures.values());
+    this.scene.traverse(o=>{if(o.isInstancedMesh)o.dispose();if(o.name==='ice-headlight')o.dispose();if(o.geometry)geometries.add(o.geometry);for(const geometry of o.userData.detailLevels||[])geometries.add(geometry);for(const m of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){materials.add(m);if(m.map)textures.add(m.map);}});
     for(const g of geometries)if(!g.userData.sharedCarResource)g.dispose();for(const m of materials)if(!m.userData.sharedCarResource)m.dispose();for(const t of textures)t.dispose();
     this.environment?.dispose();this.sun.shadow.dispose();this.renderer.dispose();this.renderer.forceContextLoss();this.renderer.domElement.remove();
   }
@@ -280,9 +313,10 @@ export class World{
     this.weaponEffects.reset();this.follow=null;this.cameraMode=null;this.particles=[];this.nudgeEffects.reset();this.tyreTracks.reset();
     for(const g of this.cars.values())g.userData.snap=true;
   }
-  resize(){const w=this.container.clientWidth,h=this.container.clientHeight;if(w&&h)this.renderer.setSize(w,h,false);}
+  resize(){const w=this.container.clientWidth,h=this.container.clientHeight;if(w&&h){this.resolution?.resize(w,h);this.renderer.setSize(w,h,false);}}
   update(state,localId,localCar,dt,now){
-    this.boostPads?.update(state,now);if(this.coastalCrabs)updateCoastalCrabs(this.coastalCrabs,state?.raceTime??now/1000);if(this.desertMoles)updateDesertMoles(this.desertMoles,state?.raceTime??now/1000);if(this.valley)updateGlacierValley(this.valley,now);this.waterMaterial.uniforms.time.value=now/1000;if(this.flameMaterial)this.flameMaterial.uniforms.time.value=now/1000;this.frame++;this.particleClock+=dt;this.emitParticles=this.particleClock>=1/30;if(this.emitParticles)this.particleClock%=1/30;
+    this.renderer.info.reset();
+    this.boostPads?.update(state,now);if(this.coastalCrabs)updateCoastalCrabs(this.coastalCrabs,state?.raceTime??now/1000,this.camera);if(this.desertMoles)updateDesertMoles(this.desertMoles,state?.raceTime??now/1000);if(this.valley)updateGlacierValley(this.valley,now);this.waterMaterial.uniforms.time.value=now/1000;if(this.flameMaterial)this.flameMaterial.uniforms.time.value=now/1000;this.frame++;this.particleClock+=dt;this.emitParticles=this.particleClock>=1/30;if(this.emitParticles)this.particleClock%=1/30;
     const previewProgress=START_FRACTION+((now/1000*22)%TRACK_LENGTH)/TRACK_LENGTH;
     const previewChase=createChase([{progress:previewProgress-START_FRACTION}]);
     const mode=state?`${state.code}:${state.round||1}`:'preview';if(this.cameraMode!==mode){this.follow=null;this.cameraMode=mode;this.weaponEffects.reset();this.nudgeEffects.reset();this.tyreTracks.reset();}
@@ -296,7 +330,7 @@ export class World{
       g.position.x+=(car.x-g.position.x)*a;g.position.z+=(car.z-g.position.z)*a;g.rotation.y+=angleDelta(-car.angle,g.rotation.y)*a;
       g.position.y=(car.y||0)+(1-Math.cos(car.roll||0)*Math.cos(car.pitch||0))*.5+rolloverLift(car);g.rotation.x=car.roll||0;g.rotation.z=car.pitch||0;g.visible=(!p.eliminated||p.wrecked)&&g.position.y>-15;
       updateCarVisuals(g,car,dt);
-      syncCarWeapon(g,p);
+      const oldWeapon=g.userData.weaponModel;syncCarWeapon(g,p);if(g.userData.weaponModel&&g.userData.weaponModel!==oldWeapon){this.sceneMaterials.adopt(g.userData.weaponModel,true);this.staticShadows?.apply(g.userData.weaponModel);this.distanceFade.apply(g.userData.weaponModel);}
       g.userData.flame.visible=p.firing==='flame'&&!p.eliminated;
       const thrust=boostExhaustStrength(car.padBoostRemaining);g.userData.boostExhaust.visible=thrust>0&&!p.eliminated;for(const jet of g.userData.boostExhaust.children)jet.scale.set(.32*thrust,.13*Math.sqrt(thrust),.13*Math.sqrt(thrust));
       g.userData.shield.visible=p.shield>0&&!p.eliminated;
@@ -317,7 +351,7 @@ export class World{
     this.skyView.update(state,localId,this.camera,this.follow,this.skyMove,dt);this.skyAim=this.skyView.aim;
     this.boxes.forEach((g,i)=>{const pickup=state?.pickups[i];g.visible=g.userData.available=!state||pickup?.readyAt<=state.time;this.setPickupModel(g,pickup?.item||WEAPON_IDS[i%WEAPON_IDS.length]);g.userData.model.rotation.y=now*.00045+i;g.position.y=(PICKUP_LOCATIONS[i]?.y||0)+1.9+Math.sin(now*.0017+i)*.18;g.userData.halo.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.08-g.position.y;g.userData.ring.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.13-g.position.y;});
     this.combatObjects(state,dt,now);this.weaponEffects.update(state,this.cars,this.rockets,this.mines,this.chains,this.camera,dt,now);animateLandmarks(this,now);this.updateParticles(dt);
-    this.atmosphere.update(this.camera,now,this.follow?.y||0,state?(state.phase==='racing'?state.raceTime:0):now/1000,this.follow);this.cullDistantScenery(this.camera);if(this.visualFinish)this.visualFinish.render(this.scene,this.camera);else this.renderer.render(this.scene,this.camera);
+    this.atmosphere.update(this.camera,now,this.follow?.y||0,state?(state.phase==='racing'?state.raceTime:0):now/1000,this.follow);this.cullDistantScenery(this.camera);this.renderer.render(this.scene,this.camera);
   }
   screenPosition(id){const g=this.cars.get(id);if(!g)return null;const p=g.position.clone();p.y+=3.3;p.project(this.camera);const r=this.container.getBoundingClientRect();return {x:r.left+(p.x+1)/2*r.width,y:r.top+(1-p.y)/2*r.height};}
 }

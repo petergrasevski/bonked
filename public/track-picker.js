@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import {TRACK_TITLES} from './track-title-assets.js';
-import {World} from './world.js';
-import {TRACKS,activeTrack,selectTrack,trackAt} from '../shared/game.js';
+import {TRACKS,trackAt} from '../shared/game.js';
 const SIZE=320;
 export const SELECTED_PREVIEW_INTERVAL=100;
 export function captureTrackPreview(world,canvas,now=0){
@@ -25,28 +24,20 @@ export function captureTrackPreview(world,canvas,now=0){
     const ctx=canvas.getContext('2d'),data=canvas.previewImageData??=ctx.createImageData(SIZE,SIZE);for(let y=0;y<SIZE;y++)data.data.set(pixels.subarray((SIZE-y-1)*SIZE*4,(SIZE-y)*SIZE*4),y*SIZE*4);ctx.putImageData(data,0,0);
   }finally{world.renderer.setRenderTarget(previousTarget);world.sun.position.copy(sun);world.sun.target.position.copy(sunTarget);world.sun.target.updateMatrixWorld();for(const [o,visible]of hidden)o.visible=visible;world.cullDistantScenery(world.camera);}
 }
-export function createTrackPicker(root,getWorld,onSelect){
-  const cards=new Map(),rendered=new Set();let visible=false,queued=false,lastCapture=-Infinity;
+export function createTrackPicker(root,getWorld,onSelect,isLoading=()=>false){
+  const cards=new Map();let visible=false,lastCapture=-Infinity;
   for(const track of Object.values(TRACKS)){
     const button=document.createElement('button');button.type='button';button.className='track-card '+track.id;button.setAttribute('aria-label',track.name);button.setAttribute('aria-pressed','false');button.dataset.trackId=track.id;
     const canvas=document.createElement('canvas');canvas.width=canvas.height=SIZE;canvas.setAttribute('aria-hidden','true');
     const image=document.createElement('img');image.src=TRACK_TITLES[track.id];image.width=960;image.height=480;image.decoding='async';image.alt='';image.className='track-title';image.draggable=false;
-    const check=document.createElement('span');check.className='track-selected';check.textContent='✓';check.setAttribute('aria-hidden','true');button.append(canvas,image,check);button.onclick=()=>onSelect(track.id);root.append(button);cards.set(track.id,{button,canvas});
+    const preview=document.createElement('img');preview.src=`/track-previews/${track.id}.webp`;preview.alt='';preview.width=preview.height=SIZE;preview.className='track-preview';preview.decoding='async';preview.draggable=false;
+    const check=document.createElement('span');check.className='track-selected';check.textContent='✓';check.setAttribute('aria-hidden','true');button.append(preview,canvas,image,check);button.onclick=()=>onSelect(track.id);root.append(button);cards.set(track.id,{button,canvas});
   }
-  const generateMissing=()=>{
-    queued=false;if(!visible||document.hidden)return;
-    const id=[...cards.keys()].find(id=>!rendered.has(id));if(!id)return;
-    const previous=activeTrack.id;let preview;
-    try{selectTrack(id);preview=new World(document.createElement('div'),{preview:true});captureTrackPreview(preview,cards.get(id).canvas,12500);rendered.add(id);cards.get(id).button.classList.add('ready');}
-    catch(error){console.error('Track preview',error);rendered.add(id);}
-    finally{preview?.dispose();selectTrack(previous);}
-  };
   return {
     sync(id,canSelect,isVisible){visible=isVisible;for(const [key,{button}]of cards){button.setAttribute('aria-pressed',String(key===id));button.disabled=!canSelect;}},
     tick(now){
-      if(!visible||document.hidden)return;
-      const world=getWorld();if(world&&now-lastCapture>=SELECTED_PREVIEW_INTERVAL){lastCapture=now;const card=cards.get(world.trackId);captureTrackPreview(world,card.canvas,now);rendered.add(world.trackId);card.button.classList.add('ready');}
-      if(!queued&&[...cards.keys()].some(id=>!rendered.has(id))){queued=true;if(window.requestIdleCallback)requestIdleCallback(generateMissing,{timeout:1500});else setTimeout(generateMissing,100);}
+      if(!visible||document.hidden||isLoading())return;
+      const world=getWorld();if(world&&now-lastCapture>=SELECTED_PREVIEW_INTERVAL){lastCapture=now;const card=cards.get(world.trackId);captureTrackPreview(world,card.canvas,now);card.button.classList.add('ready');}
     }
   };
 }

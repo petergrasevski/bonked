@@ -27,7 +27,7 @@ To use another port: `PORT=4000 npm start`. To bind only to this machine: `HOST=
 3. Add optional practice drivers to try it alone. Bots count toward the eight-car limit.
 4. Keep ahead of the red elimination line. It stays **81 game metres of road distance behind the leader**, roughly 2.25 seconds at the normal maximum speed. It is not a timer: a stopped leader does not make the line creep forward. Crossing behind it eliminates your car; eliminated drivers spectate. In multiplayer, the last survivor wins. If more than one survives, the three-lap finish still applies. Round scores carry forward automatically. Every connected human can tap Ready (or press Enter on a computer); the next countdown starts as soon as everyone is ready or five seconds elapse. The next grid forms behind the previous winner’s finishing checkpoint.
 
-On phones, landscape is required: portrait shows a rotate prompt and releases controls. Desktop browsers work in either orientation and hide the touch buttons; a weapon indicator remains visible. The circuit is approximately **2.43 km, 30% shorter than v0.2**, with two extended straights and fewer turns on a narrow island causeway. Exposed edges remain lethal; the landmark islands and beach slopes are solid terrain for tumbling wrecks; off-road falls still eliminate the car. The road now crosses land beneath the volcano, geyser, temple and waterfall. Everyone shares a perspective camera behind the surviving pack. It anticipates bends, includes **10 metres ahead of the leader** and **10 metres behind the last car**, and rises gradually from a 26° chase view toward a 70° overhead view as the pack spreads out. The death line enters view when it approaches the last car, following the same corrected fractional-frame progress as the cars while elimination remains authoritative. Viewport fitting keeps every surviving car and its roof weapon in frame, including during camera turns and local prediction.
+On phones, landscape is required: portrait shows a rotate prompt and releases controls. Desktop browsers work in either orientation and hide the touch buttons; a weapon indicator remains visible. The circuit is approximately **2.43 km, 30% shorter than v0.2**, with two extended straights and fewer turns on a narrow island causeway. Visible dry coastal shoulders support driving and recovery; unsupported falls and the sea remain lethal. Landmark islands and beach slopes also provide solid contacts for tumbling wrecks. The road now crosses land beneath the volcano, geyser, temple and waterfall. Everyone shares a perspective camera behind the surviving pack. It anticipates bends, includes **10 metres ahead of the leader** and **10 metres behind the last car**, and rises gradually from a 26° chase view toward a 70° overhead view as the pack spreads out. The death line enters view when it approaches the last car, following the same corrected fractional-frame progress as the cars while elimination remains authoritative. Viewport fitting keeps every surviving car and its roof weapon in frame, including during camera turns and local prediction.
 
 | Control | Phone / tablet touch | Computer | Standard controller / DualSense |
 | --- | --- | --- | --- |
@@ -61,7 +61,7 @@ Track palettes, skies, fog and snowfall are in `public/atmosphere.js`. The blizz
 
 `public/scenery.js` supplies curved palms with individual leaflets, layered irregular shorelines, snow-laden pines, eroded rocks and ribbed cacti. Landmark detail includes harbor crane bracing, lighthouse railings and lantern frames, temple masonry and shipwreck rigging. Static scenery shares materials and is merged into 70 m spatial batches for frustum culling. The ice material uses a single packed 512-pixel texture with three stochastic world-space samples, reducing repeated cracks and tile seams without another render pass. Desktop browser checks include phone-sized landscape views; physical-phone thermal and GPU performance still needs device validation.
 
-Exposed edges check all four tyre contact points. Lost support applies gravity torque, reduced grip and progressive body tilt; regaining support can save the car. Once the body slips off, chassis contact impulses let it tumble along the terrain. Coastal banks and desert mountains share triangle geometry between rendering and collision, indexed into local spatial cells. The server builds those meshes before accepting players, avoiding first-fall frame stalls. Off-road elimination follows after 1.2 seconds (or sooner in water), and wrecks keep colliding with the ground.
+Exposed edges check all four tyre contact points. Lost support applies gravity torque, reduced grip and progressive body tilt; regaining support can save the car. Once the body slips off, chassis contact impulses let it tumble along the terrain. Coastal banks and desert mountains share triangle geometry between rendering and collision, indexed into local spatial cells. The server builds those meshes before accepting players, avoiding first-fall frame stalls. Unsupported falls eliminate after 1.2 seconds (or sooner in water), while an upright landing on dry coastal sand can recover the car. Wrecks keep colliding with the ground.
 
 The glacier valley adds fewer than 35,000 static triangles, with one river draw and two instanced chairlift batches. Coastal landmark terrain feeds the ocean shallows and foam mask. All additions reuse the existing renderer and static batching.
 
@@ -105,7 +105,7 @@ Directional weapons use the rendered car’s full pitch/roll/yaw for their muzzl
 
 Weapon pickups form rows of three or four across the road, spaced about ten seconds apart at full speed. These are initial balance values. Pickups are slowly rotating 3D weapon models with a coloured ground glow. The server chooses each visible weapon in advance, awards exactly that item, and chooses the next one for its 2-second respawn. Sound effects are on by default at **40%**, with music at **100%**, with independent **Settings → Sound effects / Music** sliders saved on this device. Effects at 100% retain the original mixer level; 0% mutes them. Music plays Chill Menu by Not Jam as a continuous loop. Each weapon has a distinct layered sound: shots and impacts play once from server events, while the flamethrower and taser loop only while firing. Nearby opponents are audible with distance attenuation and stereo positioning; muting, leaving, hiding the page or losing connection stops effects. The physics is a lightweight arcade simulation: planar car-to-car impulses, wheel support and 3D terrain contacts at exposed edges, a constrained swinging ball, and ballistic height/roll/pitch. Landing orientation determines whether a live car lands upright or on its roof. Roof landings allow powered recovery and collision-driven rocking/rolling; it is not a full suspension or general-purpose 3D rigid-body engine.
 
-The race uses the full screen, with Settings, ping, and segmented score thermometers in the upper-left on every device. Score segments glow more as players approach the winning total. Results show the same thermometers from highest to lowest leaderboard total, with bright new points and half-opacity lost points. Your result card has a bright car-colour outline, tinted background and YOU badge, and scrolls into view within the leaderboard on narrow screens. Ready ticks appear beside each ready driver (including every bot), and the centred Ready button fills from 70% to full opacity over the five-second wait. Rendering uses worn asphalt and concrete, rounded chassis, softer billboard smoke, muted coastal colours, water highlights, and a light vignette. All textures and models are generated locally; no remote art assets or image processing passes are required.
+The race uses the full screen, with Settings and segmented score thermometers in the upper-left on every device. Optional Dev logs adds FPS and ping beside Settings. Score segments glow more as players approach the winning total. Results show the same thermometers from highest to lowest leaderboard total, with bright new points and half-opacity lost points. Your result card has a bright car-colour outline, tinted background and YOU badge, and scrolls into view within the leaderboard on narrow screens. Ready ticks appear beside each ready driver (including every bot), and the centred Ready button fills from 70% to full opacity over the five-second wait. Rendering uses worn asphalt and concrete, rounded chassis, softer billboard smoke, muted coastal colours, water highlights, and a light vignette. All textures and models are generated locally; no remote art assets or image processing passes are required.
 
 Bots keep the shared track-following steering, with small lane preferences and deliberate detours for reachable weapon pickups and boost pads. Steering looks farther ahead at speed and corrects sideways momentum; corner speed follows road curvature instead of treating a drifting chassis angle as a sharper bend. They choose targets about five times per second, check weapon opportunities about ten times per second, and nudge nearby opponents when grounded with road clearance. Pickup interest, nudge decisions and reaction times vary slightly; target choices stay stable during an approach. Six seconds without using a weapon triggers using up its remaining ammo or fuel. Decisions live in `bots.js` on the server and are not included in car snapshots. Ice bots approach splits earlier and take the guarded branch on the first straight. Wide ice hairpins allow a faster inside aim and more sideways drift. About ten times per second, bots compare a few legal passing lanes around nearby wrecks, overturned cars, mines, and active or emerging moles; they ease off when clearance is limited and never choose a route across an ice gap.
 
@@ -189,6 +189,30 @@ The road widens smoothly around bends (up to 18m) and three passing plazas (24m)
 
 Main menu, lobby, results and settings use the Pit Console design: clipped metal frames, recessed controls, a painted top edge and angled primary buttons. The entry screen starts with the shared Name field, and Join stays disabled until the room code contains three letters (including after editing and while a request is pending). The menu demo uses two cars side by side with a 1.7m longitudinal stagger. Saltwater and Redrock preview cameras pan forwards to leave their volcano and bridge visible below the title artwork. Headings, primary buttons and score totals use the locally hosted Righteous typeface; dense labels and inputs retain the system sans-serif. The font and its SIL Open Font License are in `public/fonts/`. Settings contains sound effects and music volume sliders and, during a race, Leave race. The landscape lobby respects both screen safe areas and keeps Start tournament aligned with the circuit cards. The speaker button beside the microphone mutes game audio while leaving incoming party chat audible. Each car’s engine stops on elimination, falling or finish. Opponent engines and weapons remain audible while spectating; the listening position follows the shared camera instead of the eliminated car. Game effects stop on mute, stale state, disconnection, hiding the page, or leaving the room. Music continues across menus and rooms, and pauses when muted or the page is hidden.
 
+### Circuit loading
+
+Circuit selection highlights immediately and shows a spinner while the local world
+loads. Other lobby actions, including Start tournament, remain available. There is
+no client-ready handshake or server loading gate: a slower renderer catches up to
+the latest authoritative snapshot when ready. The race clock continues during
+loading, so a slow device can miss the start or be eliminated before it finishes.
+Building yields between major stages; individual geometry/GPU tasks can still
+briefly pause a slower device. Failed builds expose Retry. New selections cancel
+stale builds without publishing an obsolete world.
+
+Unselected circuit cards use 320px WebP captures in `public/track-previews` (about
+40 KB total), avoiding extra complete 3D world builds in the lobby. The selected
+circuit still has a live preview and the existing tilt interaction. Add bot inserts
+a pending slot immediately, matched to the authoritative bot by request ID. Failed
+or timed-out requests roll back; pending slots count toward the eight-player cap.
+
+The host can use Settings → Change circuit to return everyone to the lobby,
+stopping an unfinished round without awarding it points. Scores carry through
+lobby returns, circuit switches and subsequent starts. A completed tournament
+resets when the host starts fresh or returns to the lobby. Reset scores in the
+lobby explicitly clears everyone's totals; guests cannot invoke host controls.
+The roster shows each driver's current score. Leave sits beside Copy invite.
+
 ### Tournament and landmarks
 
 Eight-car scoring is **+3, +2, +1, 0, −1, −1, −1, −2**. With fewer cars, first still earns +3, intermediate places use the same descending awards, and last loses −2 (a solo driver earns +3). The target is fixed when a tournament starts: **15 with 1–4 cars; 10 with 5–8**. Bot cars count toward grid size and are automatically ready. Connected humans vote ready; otherwise the server advances after five seconds. Scores never drop below zero; results show the actual points gained or lost. Round awards are applied once on the server. Scores survive a brief reconnect; completed tournaments wait for the host to start a new one.
@@ -264,15 +288,39 @@ Placement is deterministic, checks clearance against every road segment and exis
 
 The desert is enclosed by continuous eroded sandstone canyon walls. Saltwater has a large offshore mainland with sandy beaches, basalt cliffs, mountain ridges and an instanced broadleaf forest. These distant backdrops are purely visual, add one desert / three coastal render batches, and cast no extra shadows. The camera range accommodates the large landforms while small static scenery retains its previous distance limit. The Saltwater selection card now looks across a crab beach; primary actions are rectangular, Add bot matches Copy invite, and bot removal uses a borderless cross.
 
-### Graphics finish
+### Rendering and graphics budgets
 
-The game always uses Enhanced rendering on desktop and touch devices: depth-based
-contact shading, restrained bloom, updated biome lighting, weathered scenery and
-full-screen desktop menu backdrop. Original menu and lobby styling is retained.
-The finish draws the scene once, runs two quarter-resolution bloom passes and a
-final composite. Devices without floating-point colour buffers keep these effects
-using an unsigned-byte target. Small circuit cards and weapon portraits use their
-separate preview renderers.
+The scene renders directly to the canvas. Bloom, screen-space ambient occlusion
+and the HDR/MSAA post-processing pipeline have been removed. The grey atmospheric
+fade remains in scene materials and reaches full fog before the far clip plane.
+Base scenery ranges are 260 units on the coast, 240 on ice and 300 in the desert;
+the camera extends these when needed to keep the racing pack in view. The former
+1,600-unit backdrop override is gone. Weather density, particles and storms are
+unchanged.
+
+Each circuit bakes fixed scenery's sun shadows once while loading into a cached
+RGBA depth texture (up to 4096 square, about 64 MiB). The temporary bake depth
+buffer is released after the copy. Moving objects retain a camera-following
+1024-square live shadow map. The static map shades sunlight only, preserving
+ambient/rim lighting, and is rebuilt/disposed when changing circuit. This is a
+runtime bake, so it does not add a downloaded shadow asset.
+
+Sand, snow, rock weathering and water noise reuse small, shared, mipmapped noise
+textures generated once per material family. World scale, wetness, colour,
+ripples, lighting and animated water waves remain; ice keeps its existing baked
+fracture texture and reflective material. The noise lattice matches the previous
+hash within the stored tile, with byte quantization and seamless repetition.
+
+Large terrain ribbons are split into spatial batches without changing triangles
+or physics. Decorative scenery has two simpler distant meshes with hysteresis;
+nearby decorations retain their original geometry. Forest instances are spatially
+batched, and offscreen crab instances are omitted from rendering without changing
+simulation. Circuit cards remain static images.
+
+Dev logs shows the last unobscured scene's FPS, frame interval, JavaScript time,
+all-pass draw/triangle counts and geometry/texture counts. JavaScript submission
+time does not measure asynchronous GPU execution. Diagnostics retain at most 60
+one-second samples in memory and do not send extra server telemetry.
 
 Cars now roll their wheels, steer the front wheels, and brighten their brake lamps
 when braking or reversing. Glacier cars have working headlights illuminating the
@@ -324,3 +372,36 @@ The circular speaker button sits next to the microphone and displays a red slash
 when muted. It mutes music and all game effects without changing voice chat or the
 two saved sliders. Its mute state persists. Hiding the page stops the soundtrack;
 unmuting or returning resumes the saved position instead of restarting the song.
+
+### Mines, coastal shoulders and automatic resolution
+
+Mine hits add 5.2 m/s of vertical velocity and modest contact-dependent angular
+velocity. Close mine clusters accumulate height and spin; an upright mine landing
+retains 88% of horizontal velocity. Other weapon launches and lethal damage keep
+their existing behavior. This remains an arcade simulation with gravity and tyre/
+chassis contacts, rather than a full suspension or rigid-body engine.
+
+Saltwater Circuit's visible dry banks support tyres using the same triangles as
+the scenery. Cars follow the slope, can drive back onto the road, and can recover
+an upright landing on dry sand. Submerged ground, empty space, ice gaps and desert
+cliffs remain unsupported. Race progress still requires proximity to the road.
+
+The 3D renderer measures foreground frame times, gradually raises resolution when
+there is room, and lowers it more quickly under sustained load. It targets around
+60 FPS, caps the drawing buffer at four million pixels and 3x CSS resolution, and
+remembers stable settings per circuit, viewport and menu/race mode for seven days.
+It continues adapting to race load and thermal changes; FPS cannot be guaranteed
+on every device. Loading/background pauses and open settings/dialog overlays are
+excluded. Auto retries higher resolution after 15 seconds of recovery instead of
+holding a lower ceiling for 90 seconds; isolated moderate stalls are ignored.
+The HUD stays native.
+
+Settings → 3D resolution offers Auto and High (fixed), saved locally. High locks
+the renderer to its maximum within the native/3x/four-million-pixel limits and
+does not reduce resolution when FPS drops. The settings readout shows the actual
+3D drawing-buffer dimensions and percentage of native resolution. The v3 Auto
+cache ignores old resolution choices measured before the rendering optimizations.
+
+Settings → Dev logs opts into the FPS/ping display and client console reports.
+It is off for both new and existing installations until explicitly enabled, and
+is saved locally. The existing server telemetry is unchanged.

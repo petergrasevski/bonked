@@ -1,12 +1,15 @@
 // Shared between the visible coast, its collision mesh and the ocean swash.
-// The road edge is unchanged. Twelve curved strips replace the steep two-plane bank.
+// The bank meets the sandy road at its top, then curves down to the seabed.
 export const BEACH_STEPS=12;
 export const SEA_LEVEL=-2.1;
 export function beachWidth(p){return 8.4+1.1*Math.sin(p.start*.071)+.65*Math.cos(p.start*.133);}
 export function beachPoint(p,t,side){
   const offset=p.halfWidth+.59+beachWidth(p)*t;
-  const drop=2.9*t*t*(3-2*t);
-  return [p.x+p.nx*offset*side,p.y-.19-drop,p.z+p.nz*offset*side];
+  const drop=2.9*t*t*(3-2*t),shoulder=Math.min(1,t*3);
+  // Feather the old 20cm step into the first third of dry sand. Keep the
+  // lower bank and waterline unchanged, with zero added slope at both ends.
+  const lift=.2*(1-shoulder*shoulder*(3-2*shoulder));
+  return [p.x+p.nx*offset*side,p.y-.19-drop+lift,p.z+p.nz*offset*side];
 }
 export function beachSegments(ctx){
   const pairs=[];

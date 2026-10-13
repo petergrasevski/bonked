@@ -37,7 +37,7 @@ test('edge and terrain contacts agree between authority and prediction',()=>{
 
 test('falling cars and wrecks collide with visible mountain and coastal banks',()=>{
   for(const [id,f]of [['desert',.18],['desert',.34],['coast',.15]]){
-    const car=edgeCar(id,f,trackWidth(id,f)+.2);car.shield=8;let contact=0,low=car.y,rotation=0;
+    const car=edgeCar(id,f,trackWidth(id,f)+(id==='coast'?3:.2));car.shield=8;if(id==='coast'){car.falling=true;car.roll=1.3;car.rollVelocity=1;car.wrecked=true;car.eliminated=true;car.health=0;car.shield=0;}let contact=0,low=car.y,rotation=0;
     for(let i=0;i<240;i++){
       stepCar(car,NEUTRAL);low=Math.min(low,car.y);rotation=Math.max(rotation,Math.abs(car.roll)+Math.abs(car.pitch));
       for(const [x,z]of WHEEL_POINTS){const p=bodyOffset(car,x,0,z),ground=terrainAt(car.x+p.x,car.z+p.z,car.y+3);if(ground&&car.falling){assert.ok(car.y+p.y>=ground.y-.03,`${id} tyre penetrates terrain`);if(car.y+p.y-ground.y<.3)contact++;}}

@@ -77,12 +77,12 @@ test('four coastal landmarks sit on connected land crossed by the road',()=>{
   }
 });
 
-test('sand stretches slope from below the road down beneath the sea',()=>{
+test('sand stretches join the road surface and slope down beneath the sea',()=>{
   selectTrack('coast');const w=fixture();buildLandmarks(w);const beaches=[];
   w.static.traverse(o=>{if(o.userData.sceneryKind==='coastal-beach')beaches.push(o);});assert.equal(beaches.length,2);
   let low=0,high=-Infinity;
   for(const mesh of beaches){const p=mesh.geometry.attributes.position,n=mesh.geometry.attributes.normal;for(let i=0;i<p.count;i++){const y=p.getY(i);low=Math.min(low,y);high=Math.max(high,y);assert.ok(n.getY(i)>0);}}
-  assert.ok(high<-.1&&high>-.3);assert.ok(low< -3);
+  assert.ok(Math.abs(high-.01)<1e-6);assert.ok(low< -3);
 });
 
 test('living landmarks survive static merging, animate deterministically and keep fixed render resources',()=>{
