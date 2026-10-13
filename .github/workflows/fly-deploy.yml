@@ -26,8 +26,18 @@ jobs:
       # Socket tests drive races in real time; avoid competing physics suites.
       - run: node --test --test-concurrency=1 test/*.test.js
       - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Check single-machine limit
+        shell: bash
+        run: flyctl machine list --app bonked --json | jq -e 'length <= 1'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       - name: Deploy one machine
-        run: flyctl deploy --remote-only --ha=false --yes
+        run: flyctl deploy --remote-only --ha=false --strategy immediate --yes
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Verify exactly one machine
+        shell: bash
+        run: flyctl machine list --app bonked --json | jq -e 'length == 1'
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       - name: Verify public multiplayer

@@ -4,6 +4,10 @@ primary_region = "syd"
 [build]
   dockerfile = "Dockerfile"
 
+[deploy]
+  # Update the existing machine in place; never use replacement/blue-green VMs.
+  strategy = "immediate"
+
 [env]
   NODE_ENV = "production"
   HOST = "0.0.0.0"

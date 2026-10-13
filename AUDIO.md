@@ -2,6 +2,8 @@
 
 Enable **Settings → Engine & effects** before starting a race. The browser loads and decodes the local sample bank once per tab; no third-party service or account is required at runtime. A failed sample can be retried by toggling sound. Previously consumed weapon events never replay after loading or unmuting.
 
+Downloads allow 30 seconds per request and retry transient failures once. If the browser's native decoder rejects a valid effect, a PCM16 WAV fallback builds its AudioBuffer directly from the shipped samples. Load reports retain per-file download/decode errors and the native errors recovered by the fallback. Toggle the speaker off/on to retry remaining failures. `/audio-check.html` displays these details and selects MP3 music when the browser cannot play Ogg.
+
 ## Sounds and provenance
 
 The 30 mono WAV assets total approximately 4 MB. Every imported source is CC0 1.0 (public domain, no attribution required). `public/sounds/sources.json` records the source pages, authors, download URLs, processing, output durations and SHA-256 hashes. The author names are an internal provenance record, not a requirement for in-game credits.

@@ -208,10 +208,10 @@ function unlockAudio(){
     loadGameAudio();
   }
   if(audioSettings.music>0&&!musicAudio.buffer&&!musicAudio.loading&&!musicAudio.error)musicAudio.load().then(ok=>{if(!ok)toast('Music could not load. Tap the speaker to retry.');});
-  if(audio.state==='suspended')audio.resume().catch(()=>{});
+  if(audio.state==='suspended'||audio.state==='interrupted')audio.resume().catch(()=>{});
 }
 function loadGameAudio(){
-  audioBank.load().then(({failed})=>{if(failed.length){console.warn('Unavailable audio samples:',failed);if(soundEnabled)toast('Some sounds could not load. Adjust sound effects volume to retry.');}});
+  audioBank.load().then(({failed,errors})=>{if(failed.length){console.warn('Unavailable audio samples:',errors);if(soundEnabled)toast('Some sounds could not load. Tap the speaker off and on to retry.');}});
 }
 function beep(freq,duration,volume){if(!audio||!soundEnabled)return;const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=freq;g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g);g.connect(audioMixer.bus('ui'));o.onended=()=>{o.disconnect();g.disconnect();};o.start();o.stop(audio.currentTime+duration);}
 for(const [name,id]of [['effects','effects-volume'],['music','music-volume']]){
@@ -233,7 +233,7 @@ syncSpeaker();
 $('audio-toggle').onclick=()=>{
   audioSettings.muted=!audioSettings.muted;soundEnabled=!audioSettings.muted&&audioSettings.effects>0;
   saveAudioSettings(audioStorage,audioSettings);audioMixer?.setMuted(audioSettings.muted);syncSpeaker();
-  if(audioSettings.muted)stopGameAudio();else{if(musicAudio)musicAudio.error=null;unlockAudio();}
+  if(audioSettings.muted)stopGameAudio();else{if(musicAudio)musicAudio.error=null;unlockAudio();if(audioBank?.errors.size&&!audioBank.loading)loadGameAudio();}
 };
 // Unlock on the first real interaction, including joining as a non-host or resuming a room.
 for(const event of ['pointerdown','keydown'])document.addEventListener(event,unlockAudio,{passive:true});

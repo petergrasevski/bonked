@@ -208,6 +208,8 @@ node scripts/check-public.mjs https://bonked.fly.dev
 
 Keep exactly one application machine: rooms, scores and voice authentication live in process memory, so multiple machines cannot share a room. Restarts and deployments end active games. No database or persistent volume is required. `PUBLIC_URL` in `fly.toml` sets the invite address; update it along with `app` if using a different Fly app name.
 
+Deployments use the `immediate` strategy to update the existing machine in place, with `--ha=false` to prevent a spare machine. CI checks the machine count before and after deployment. Fly autostart wakes this existing machine and does not create more machines. Fly does not offer a per-app hard cap against a manual scale/clone command; keep manual scaling at one. The old `bonked-peter` app has no machines.
+
 Fly.io's [free trial](https://docs.fly.io/about/free-trial) lasts for two total machine-hours or seven days from signup, whichever comes first. Trial machines automatically stop after five minutes, disconnecting players and clearing rooms. When the trial expires, the app stops until billing is configured. Adding a payment method ends the trial and starts usage billing; there is no ongoing free tier for new accounts.
 
 ### Render hosting alternative

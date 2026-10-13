@@ -6,9 +6,10 @@ import {MusicAudio} from './music-audio.js';
 import {RoadAudio} from './road-audio.js';
 export async function checkAudio(){
   const sampleRate=48000,context=new OfflineAudioContext(2,sampleRate*9,sampleRate),bank=new AudioBank(context);
-  const loaded=await bank.load();if(loaded.failed.length)throw new Error('Failed samples: '+loaded.failed.join(','));
+  const loaded=await bank.load();if(loaded.failed.length)throw new Error('Failed samples: '+JSON.stringify(loaded.errors));
   const mixer=new AudioMixer(context),options={bank,mixer},engines=new EngineAudio(context,options),weapons=new WeaponAudio(context,options),road=new RoadAudio(context,options);
-  const music=new MusicAudio(context,{mixer});if(!await music.load())throw music.error;music.offset=music.buffer.duration-.8;
+  const format=document.createElement('audio').canPlayType('audio/ogg; codecs="vorbis"')?'ogg':'mp3';
+  const music=new MusicAudio(context,{mixer,format});if(!await music.load())throw music.error;music.offset=music.buffer.duration-.8;
   const listener={x:0,y:0,z:0,angle:0},players=Array.from({length:8},(_,i)=>({id:String(i),x:(i-4)*4,y:0,z:i%2*4,groundY:0,angle:0,vx:0,vz:0,input:{throttle:1}}));
   const state={code:'QA',round:1,phase:'racing',trackId:'coast',time:0,raceTime:0,players,sounds:[]};let maxVoices=0,spectatorEngines=0;
   function update(t){
