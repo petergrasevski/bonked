@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 function setup(getMedia){
   const sent=[],messages=[],attributes={},bar={hidden:true},track={enabled:true,stop(){this.stopped=true;}},stream={getTracks:()=>[track]};let requests=0;
-  const button={closest:()=>bar,setAttribute:(k,v)=>attributes[k]=v};
+  const button={hidden:true,closest:()=>bar,setAttribute:(k,v)=>attributes[k]=v};
   class Context{constructor(){this.state='running';this.destination={};this.audioWorklet={addModule:async()=>{}};}async resume(){}createMediaStreamSource(){return {connect(){},disconnect(){}};}}
   class Socket{static OPEN=1;constructor(){this.readyState=1;this.bufferedAmount=0;}send(m){sent.push(m);}close(){this.readyState=3;}}
   class Node{constructor(){this.port={postMessage:m=>messages.push(m)};}connect(){}}
@@ -15,7 +15,7 @@ function setup(getMedia){
   return {voice,button,attributes,bar,track,messages,sent,join,receive,packet,requests:()=>requests};
 }
 test('joining enables incoming voice without requesting microphone access or transmitting',async()=>{
-  const h=setup();await h.join();assert.equal(h.requests(),0);assert.equal(h.voice.muted,true);assert.equal(h.attributes['aria-pressed'],'false');assert.equal(h.bar.hidden,false);
+  const h=setup();await h.join();assert.equal(h.requests(),0);assert.equal(h.voice.muted,true);assert.equal(h.attributes['aria-pressed'],'false');assert.equal(h.button.hidden,false);assert.equal(h.bar.hidden,true);
   h.receive();assert.equal(h.messages.at(-1).type,'audio');h.packet();assert.equal(h.sent.filter(x=>typeof x!=='string').length,0);
 });
 test('mic button alone enables capture; mute preserves incoming audio and unmute reuses permission',async()=>{

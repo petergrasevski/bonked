@@ -12,7 +12,7 @@ export class PartyVoice {
     this.context?.resume().catch(()=>{});
   }
   async join(session){
-    this.leave();this.session=session;this.button.closest('#party-bar').hidden=false;
+    this.leave();this.session=session;this.button.hidden=false;
     this.prepare();this.connect();this.update();
     const generation=this.generation;
     // Receiving party chat never needs microphone permission.
@@ -82,6 +82,6 @@ export class PartyVoice {
     this.generation++;this.session=null;this.muted=true;this.requesting=false;clearTimeout(this.retry);this.authenticated=false;
     if(this.socket){this.socket.onclose=null;this.socket.close();this.socket=null;}
     this.source?.disconnect();this.source=null;for(const track of this.stream?.getTracks()||[]){track.onended=null;track.stop();}this.stream=null;
-    this.node?.port.postMessage({type:'mute',muted:true});this.node?.port.postMessage({type:'clear'});this.update();this.button.closest('#party-bar').hidden=true;
+    this.node?.port.postMessage({type:'mute',muted:true});this.node?.port.postMessage({type:'clear'});this.update();this.button.hidden=true;
   }
 }

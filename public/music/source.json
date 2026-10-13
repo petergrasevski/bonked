@@ -1,0 +1,23 @@
+{
+  "title": "Chill Menu",
+  "author": "Not Jam",
+  "licence": "CC0-1.0",
+  "attributionRequired": false,
+  "licenceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "sourcePage": "https://not-jam.itch.io/not-jam-music-pack",
+  "sourceAudio": "https://html-classic.itch.zone/html/5506295-1006683/media/ChillMenu.ogg",
+  "retrieved": "2026-10-13",
+  "sourceSha256": "44362cab0e6d6d7105bd41435403c74240e01ca4d0005f014a71025a09f01244",
+  "processing": "32-bar loop at 135 BPM starting at 0.48s and ending before the original fade; 8ms seam blend without changing period; peak 0.84; stereo Vorbis/MP3 at 96kbps. MP3 is a browser fallback, not an additional normal download. Source is the official lossy player OGG.",
+  "duration": 56.888888888888886,
+  "assets": {
+    "chill-menu.ogg": {
+      "bytes": 629827,
+      "sha256": "02a39e4ae685c1384b5cc0ed23fbe9ef3891b5d15ca8fd5242ddc32ec8c96897"
+    },
+    "chill-menu.mp3": {
+      "bytes": 683407,
+      "sha256": "ab4f0e1e6d8ec48ad1b6cbed9c53c57a8e0be73c53bae5a031a91892934f4763"
+    }
+  }
+}

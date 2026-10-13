@@ -18,6 +18,7 @@ import { EngineAudio, raceListener } from './engine-audio.js';
 import { AudioBank } from './audio-bank.js';
 import {readAudioSettings,saveAudioSettings} from './audio-settings.js';
 import { AudioMixer } from './audio-mixer.js';
+import { MusicAudio } from './music-audio.js';
 import { RoadAudio } from './road-audio.js';
 import { World } from './world.js';
 import { TRACKS,MAX_PLAYERS,selectTrack,activeTrack,NEUTRAL, STEP, clamp, angleDelta, damageLevel } from '/shared/game.js';
@@ -193,17 +194,20 @@ $('race-settings').onclick=$('settings-open').onclick;
 $('copy-network').onclick=async()=>{const log=network.export();try{await navigator.clipboard.writeText(log);toast('Network log copied.');}catch{const t=document.createElement('textarea');t.value=log;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Network log copied.':'Could not copy. Use the browser console: bonkedNetwork.export()');}};
 $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target===$('settings'))closeSettings();};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
-let audio=null,engineAudio=null,weaponAudio=null,roadAudio=null,audioBank=null,audioMixer=null;
+let audio=null,engineAudio=null,weaponAudio=null,roadAudio=null,audioBank=null,audioMixer=null,musicAudio=null;
 let audioStorage;try{audioStorage=localStorage;}catch{}
-const audioSettings=readAudioSettings(audioStorage);let soundEnabled=audioSettings.effects>0;
-function stopGameAudio(){weaponAudio?.stop();engineAudio?.stop();roadAudio?.stop();audioMixer?.stop();}
+const audioSettings=readAudioSettings(audioStorage);let soundEnabled=!audioSettings.muted&&audioSettings.effects>0;
+function stopGameAudio(){weaponAudio?.stop();engineAudio?.stop();roadAudio?.stop();musicAudio?.stop();audioMixer?.stop();}
 function unlockAudio(){
-  if(!soundEnabled&&audioSettings.music===0)return;
+  if(audioSettings.muted||(!soundEnabled&&audioSettings.music===0))return;
   if(!audio){
     audio=new(window.AudioContext||window.webkitAudioContext)();audioBank=new AudioBank(audio);audioMixer=new AudioMixer(audio,audioSettings);
     const options={bank:audioBank,mixer:audioMixer};weaponAudio=new WeaponAudio(audio,options);engineAudio=new EngineAudio(audio,options);roadAudio=new RoadAudio(audio,options);
+    const format=document.createElement('audio').canPlayType('audio/ogg; codecs="vorbis"')?'ogg':'mp3';
+    musicAudio=new MusicAudio(audio,{mixer:audioMixer,format});
     loadGameAudio();
   }
+  if(audioSettings.music>0&&!musicAudio.buffer&&!musicAudio.loading&&!musicAudio.error)musicAudio.load().then(ok=>{if(!ok)toast('Music could not load. Tap the speaker to retry.');});
   if(audio.state==='suspended')audio.resume().catch(()=>{});
 }
 function loadGameAudio(){
@@ -215,11 +219,22 @@ for(const [name,id]of [['effects','effects-volume'],['music','music-volume']]){
   slider.value=Math.round(audioSettings[name]*100);output.value=slider.value+'%';
   slider.addEventListener('input',()=>{
     audioSettings[name]=Number(slider.value)/100;output.value=slider.value+'%';
-    soundEnabled=audioSettings.effects>0;saveAudioSettings(audioStorage,audioSettings);audioMixer?.setVolumes(audioSettings);
+    soundEnabled=!audioSettings.muted&&audioSettings.effects>0;if(musicAudio)musicAudio.error=null;saveAudioSettings(audioStorage,audioSettings);audioMixer?.setVolumes(audioSettings);
     unlockAudio();if(soundEnabled&&audioBank?.errors.size&&!audioBank.loading)loadGameAudio();
     if(!soundEnabled){weaponAudio?.stop();engineAudio?.stop();roadAudio?.stop();}
   });
 }
+function syncSpeaker(){
+  const button=$('audio-toggle'),label=audioSettings.muted?'Unmute game audio':'Mute game audio';
+  button.setAttribute('aria-pressed',String(audioSettings.muted));button.setAttribute('aria-label',label);
+  button.title=label+' (voice chat stays on)';
+}
+syncSpeaker();
+$('audio-toggle').onclick=()=>{
+  audioSettings.muted=!audioSettings.muted;soundEnabled=!audioSettings.muted&&audioSettings.effects>0;
+  saveAudioSettings(audioStorage,audioSettings);audioMixer?.setMuted(audioSettings.muted);syncSpeaker();
+  if(audioSettings.muted)stopGameAudio();else{if(musicAudio)musicAudio.error=null;unlockAudio();}
+};
 // Unlock on the first real interaction, including joining as a non-host or resuming a room.
 for(const event of ['pointerdown','keydown'])document.addEventListener(event,unlockAudio,{passive:true});
 
@@ -241,7 +256,9 @@ function frame(now){requestAnimationFrame(frame);const frameMs=now-lastFrame;net
   if(now-uiAt>100){uiAt=now;updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,presentation:'predicted-fleet',bufferMs:0,underruns:0,server:network.server});}
   const listening=raceListener(rendered,world?.follow),audible=soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible,myId);engineAudio?.update(rendered,listening,audible,myId);roadAudio?.update(rendered,listening,audible,myId);
-  audioMixer?.update(ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000&&['countdown','racing','finished'].includes(rendered?.phase),voice.activityLevel());
+  const musicEnabled=!document.hidden&&!audioSettings.muted&&audioSettings.music>0;
+  musicAudio?.update(musicEnabled);
+  audioMixer?.update(audible&&['countdown','racing','finished'].includes(rendered?.phase),voice.activityLevel(),{musicEnabled});
 }
 displayGuide=initDisplayGuide({onOpen:()=>{releaseControls();$('settings').hidden=true;},onClose:()=>{accumulator=0;world?.resize();}});
 requestAnimationFrame(frame);
