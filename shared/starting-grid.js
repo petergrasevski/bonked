@@ -1,6 +1,12 @@
 import {TRACK_LENGTH,PICKUP_LOCATIONS,BOOST_PADS,MAX_PLAYERS,gridSlotDistance} from './game.js';
 
 export const RESPAWN_PICKUP_CLEARANCE=20;
+// Shuffle positions, not the roster: identity, colour, scores and host stay put.
+export function randomGridSlots(count,random=Math.random){
+  const slots=Array.from({length:count},(_,i)=>i);
+  for(let i=count-1;i>0;i--){const j=Math.floor(random()*(i+1));[slots[i],slots[j]]=[slots[j],slots[i]];}
+  return slots;
+}
 // Move the whole formation forward, preserving row spacing and unwrapped lap progress.
 export function safeGridStartFraction(startFraction,count=MAX_PLAYERS,{length=TRACK_LENGTH,pickups=PICKUP_LOCATIONS,pads=BOOST_PADS}={}){
   if(count<1)return startFraction;

@@ -223,6 +223,8 @@ The roster shows each driver's current score. Leave sits beside Copy invite.
 
 ### Tournament and landmarks
 
+Each round independently shuffles the starting grid for all humans and bots, so joining first or having a particular car colour does not reserve a front-row position. Player identities, roster order and scores carry through the shuffle.
+
 Eight-car scoring is **+3, +2, +1, 0, −1, −1, −1, −2**. With fewer cars, first still earns +3, intermediate places use the same descending awards, and last loses −2 (a solo driver earns +3). The target is fixed when a tournament starts: **15 with 1–4 cars; 10 with 5–8**. Bot cars count toward grid size and are automatically ready. Connected humans vote ready; otherwise the server advances after five seconds. Scores never drop below zero; results show the actual points gained or lost. Round awards are applied once on the server. Scores survive a brief reconnect; completed tournaments wait for the host to start a new one.
 
 Eight landmarks are spaced about 303 road metres apart (roughly ten seconds at racing speed): Palm Island, Ember Caldera, Geyser Springs, Cargo Harbour, Sunken Temple, Twin Falls, Beacon Point, and Wreck Bay. Animated features share the particle budget; static geometry uses the existing batching. Wall and centre-island damage is `max(0, speedBefore − speedAfter − 1.5) × 0.3`, reducing grazing damage sharply.

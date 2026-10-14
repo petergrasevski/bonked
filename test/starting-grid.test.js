@@ -1,9 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeGridStartFraction,RESPAWN_PICKUP_CLEARANCE} from '../shared/starting-grid.js';
+import {safeGridStartFraction,RESPAWN_PICKUP_CLEARANCE,randomGridSlots} from '../shared/starting-grid.js';
 import {selectTrack,TRACK_LENGTH,PICKUP_LOCATIONS,BOOST_PADS,spawnCar,gridSlotDistance,START_FRACTION} from '../shared/game.js';
 const wrapDistance=(a,b,length)=>Math.abs(((a-b+.5)%1+1)%1-.5)*length;
 const fixture=(pickups=[],pads=[])=>({length:1000,pickups:pickups.map(fraction=>({fraction})),pads:pads.map(fraction=>({fraction,length:5}))});
+test('random grids retain every available position exactly once, including empty and solo grids',()=>{
+  for(let count=0;count<=8;count++)for(const random of [()=>0,()=>.999999,Math.random])assert.deepEqual(randomGridSlots(count,random).sort((a,b)=>a-b),Array.from({length:count},(_,i)=>i));
+});
+test('each four-car lineup is equally reachable, so every driver can occupy every slot',()=>{
+  const lineups=new Set(),positions=Array.from({length:4},()=>[0,0,0,0]);
+  for(let a=0;a<4;a++)for(let b=0;b<3;b++)for(let c=0;c<2;c++){
+    const choices=[(a+.5)/4,(b+.5)/3,(c+.5)/2];const slots=randomGridSlots(4,()=>choices.shift());lineups.add(slots.join(','));slots.forEach((slot,driver)=>positions[driver][slot]++);
+  }
+  assert.equal(lineups.size,24);for(const counts of positions)assert.deepEqual(counts,[6,6,6,6]);
+});
 test('clear checkpoints and empty grids are unchanged',()=>{
   assert.equal(safeGridStartFraction(.2,8,fixture([.5])),.2);
   assert.equal(safeGridStartFraction(.2,0,fixture([.2])),.2);

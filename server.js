@@ -1,4 +1,4 @@
-import {safeGridStartFraction} from './shared/starting-grid.js';
+import {safeGridStartFraction,randomGridSlots} from './shared/starting-grid.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
 import {VoiceRelayBudget} from './server-voice.js';
 import {botControls} from './bots.js';
@@ -90,17 +90,18 @@ function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLM
 function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
 function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
-function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION}={}){
+function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION,randomizeGrid=false}={}){
   selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
   if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
   room.round=newTournament?1:(room.round||1)+(advanceRound?1:0);room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
   room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;
   resetSkyBeams(room);
-  let slot=0;for(const p of room.players.values()){p.car=spawnCar(slot++,startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botState=null;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
+  const slots=randomizeGrid?randomGridSlots(room.players.size):Array.from({length:room.players.size},(_,i)=>i);
+  let index=0;for(const p of room.players.values()){p.car=spawnCar(slots[index++],startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botState=null;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
   room.chase=createChase([...room.players.values()].map(p=>p.car));room.raceSize=room.players.size;room.winnerId=null;
 }
 function startRound(room,now,next=false){
-  resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:next,startFraction:next?room.nextStartFraction:START_FRACTION});room.phase='countdown';room.startAt=now+3300;publish(room);
+  resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:next,startFraction:next?room.nextStartFraction:START_FRACTION,randomizeGrid:true});room.phase='countdown';room.startAt=now+3300;publish(room);
 }
 function addPlayer(room,ws,name,bot=false){
   selectTrack(room.trackId);const used=new Set([...room.players.values()].map(p=>p.color));
