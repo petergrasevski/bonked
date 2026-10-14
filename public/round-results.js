@@ -29,9 +29,10 @@ export class RoundResults{
     const focusKey=JSON.stringify([state.code,state.round,myId]);
     if(this.focusKey!==focusKey){this.focusKey=focusKey;const list=this.find('standings'),own=list.querySelector('.me');if(own)list.scrollLeft+=own.getBoundingClientRect().left-list.getBoundingClientRect().left-(list.clientWidth-own.clientWidth)/2;}
     this.find('results-lobby').hidden=state.host!==myId;
-    const ready=this.find('ready');ready.hidden=!!complete;ready.disabled=!!me?.ready;ready.textContent=me?.ready?'Ready ✓':'Ready';
-    const hint=this.find('ready-key-hint');if(hint)hint.hidden=!!complete||!!me?.ready;
+    const ready=this.find('ready');ready.hidden=!!complete||(state.mode==='lan'&&state.host===myId);ready.disabled=!!me?.ready;ready.textContent=me?.ready?'Ready ✓':'Ready';
+    const hint=this.find('ready-key-hint');if(hint)hint.hidden=!!complete||!!me?.ready||(state.mode==='lan'&&state.host===myId);
     this.find('rematch').hidden=!complete||state.host!==myId;this.find('rematch-hint').textContent=complete&&state.host!==myId?'Waiting for host.':'';
+    const lanEnd=this.find('lan-end-party');if(lanEnd)lanEnd.hidden=state.mode!=='lan'||state.host!==myId;
     this.progress(state,serverNow);
   }
   progress(state,serverNow){if(state.phase!=='finished'||state.tournamentComplete)return;this.find('ready').style.setProperty('--ready-progress',`${readyProgress(state.nextRoundAt,serverNow)*100}%`);}

@@ -19,6 +19,10 @@ test('the startup page serves its entire browser module graph, including shared 
     const src=attrs.match(/src="([^"]+)"/);
     for(const specifier of src?[src[1]]:specifiers(source))queue.push({specifier,parent:base+'/'});
   }
+  const lanPage=await fetch(base+'/lan.html');assert.equal(lanPage.status,200);
+  const lanHtml=await lanPage.text();assert.match(lanHtml,/name="bonked-revision"/,'controllers receive the same version handshake as the host');
+  for(const match of lanHtml.matchAll(/<script[^>]+src="([^"]+)"/g))queue.push({specifier:match[1],parent:base+'/lan.html'});
+  queue.push({specifier:'/lan-worker.js',parent:base+'/'});
   const seen=new Set();
   while(queue.length){
     const {specifier,parent}=queue.shift(),resolved=imports[specifier]||specifier;

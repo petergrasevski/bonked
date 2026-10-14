@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101923">
+<title>LAN controller · Bonked</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/lan-controller.css">
+</head>
+<body>
+<header><a href="/" aria-label="Bonked home"><img src="/logo.svg" alt="Bonked"></a><output id="connection" role="status" aria-live="polite">Connect to the laptop</output><button id="leave" hidden>Leave</button></header>
+<main>
+<section id="entry" class="card">
+<h1>LAN party</h1><p>Use your phone as a controller. Watch the race on the laptop.</p>
+<label for="name">Your name</label><input id="name" maxlength="18" autocomplete="nickname" required placeholder="Name">
+<label for="code">Room code on the laptop</label><input id="code" maxlength="3" autocomplete="off" autocapitalize="characters" required placeholder="ABC">
+<button id="join" class="primary">Connect controller →</button><p class="hint">Connect to the same main Wi-Fi as the laptop.</p>
+</section>
+<section id="help" class="card" hidden><h2>Couldn’t connect locally</h2><p id="error" role="alert"></p><ol><li>Put the phone and laptop on the same main Wi-Fi. Guest, hotel and office networks may isolate devices.</li><li>Allow local-network access if the browser or phone asks. If you denied it, change the site / browser permission in settings.</li><li>Enable local-network access in your VPN, or disconnect it temporarily.</li><li>On your own router, check “AP isolation” or “client isolation”. A different home router may work where a venue network doesn’t.</li><li>Keep the host tab open and the laptop awake. Try a current Safari or Chrome browser.</li></ol><button id="retry" class="primary">Try again</button><a href="/" class="online-link">Use ordinary online rooms →</a></section>
+<section id="controller" hidden>
+<div id="driver-bar"><span id="driver"></span><span id="health"></span><button id="ready" hidden>Ready for next round ✓</button></div>
+<div id="status" role="status">Waiting for host</div>
+<div id="pad" aria-label="Game controller">
+<div class="steering-zone">
+<div class="nudge-row"><button id="nudge-left" class="nudge" aria-label="Nudge left">⇤ <small>NUDGE</small></button><button id="nudge-right" class="nudge" aria-label="Nudge right">⇥ <small>NUDGE</small></button></div>
+<div id="steering" class="steering-row"><button id="left" class="steer" aria-label="Steer left">‹<small>LEFT</small></button><button id="right" class="steer" aria-label="Steer right">›<small>RIGHT</small></button></div>
+</div>
+<div class="weapon-zone"><button id="fire" class="fire" aria-label="Use weapon"><span id="weapon-icon">✦</span><strong id="weapon">WEAPON</strong><small id="ammo">Hold to fire</small></button><div class="drive-row"><button id="reverse" class="reverse" aria-label="Reverse">↓ <small>REVERSE</small></button><button id="gas" class="gas" aria-label="Accelerate">↑ <small>GO</small></button></div></div>
+</div>
+<p id="control-hint">Accelerates automatically at GO · hold left / right to steer</p>
+</section>
+</main>
+<div id="rotate" hidden><strong>Turn your phone sideways</strong><span>Keep your thumbs on the controls and watch the laptop.</span></div>
+<script type="module" src="/lan-controller.js"></script>
+</body>
+</html>

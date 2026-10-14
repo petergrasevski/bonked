@@ -1,15 +1,13 @@
-import {safeGridStartFraction,randomGridSlots} from './shared/starting-grid.js';
+import {LanSignaling} from './server-lan.js';
+import {createRoomEngine} from './shared/room-engine.js';
+import {TRACKS,selectTrack,getLandscape,MAX_PLAYERS,STEP,NEUTRAL,COLORS} from './shared/game.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
 import {clientRevision,assetHeaders,matchesETag} from './server-assets.js';
 import {PlayerActivity} from './server-activity.js';
 import {DeploymentGate} from './server-deployment.js';
 import {VoiceRelayBudget} from './server-voice.js';
-import {botControls} from './bots.js';
-import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './shared/sky-beam.js';
 import {skySurfaces} from './shared/sky-ground.js';
-import {NETWORK_VERSION,INPUT_TIMEOUT_MS} from './shared/network-timing.js';
-import {captureMotion,recordMotion} from './shared/prediction.js';
-import {collectBoostPad} from './shared/boost-pads.js';
+import {NETWORK_VERSION} from './shared/network-timing.js';
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -19,17 +17,13 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, WebSocket } from 'ws';
 import QRCode from 'qrcode';
-import { TRACKS,selectTrack,getLandscape,BOOST_PADS,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,PICKUP_LOCATIONS,trackAt,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './shared/game.js';
-import { createChase, updateChase, chaseSnapshot, cameraFrame } from './shared/chase.js';
-import { initCombat, createPickups, collectPickup, pressWeapon, updateCombat } from './shared/combat.js';
-import { targetScoreForPlayers, scoreRound, nextRoundDue } from './shared/tournament.js';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const revision=await clientRevision(root);
 const rooms=new Map(),connections=new Map();
 const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
 const MAX_ROOMS=100, GRACE_MS=20000;
-const deployment=new DeploymentGate({rooms,graceMs:GRACE_MS});
+const deployment=new DeploymentGate({rooms:{values:()=>[...rooms.values(),...lan.rooms.values()]},graceMs:GRACE_MS});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json','.json':'application/json','.wav':'audio/wav','.mp3':'audio/mpeg','.ogg':'audio/ogg','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
 function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}
 const server=http.createServer(async(req,res)=>{
@@ -65,13 +59,14 @@ const server=http.createServer(async(req,res)=>{
     }
     const routes={'/shared/coastal-barriers.js':'shared/coastal-barriers.js','/shared/rollover.js':'shared/rollover.js','/shared/beach-profile.js':'shared/beach-profile.js','/shared/sky-ground.js':'shared/sky-ground.js','/shared/sky-beam.js':'shared/sky-beam.js','/shared/shockwave.js':'shared/shockwave.js','/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/network-timing.js':'shared/network-timing.js','/shared/remote-snapshots.js':'shared/remote-snapshots.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/combat-prediction.js':'shared/combat-prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
+    if(!filename&&/^\/shared\/[a-z][a-z0-9-]*\.js$/.test(url.pathname))filename=url.pathname.slice(1);
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
       filename=path.join('public',requested);
       if(!path.resolve(root,filename).startsWith(path.join(root,'public')+path.sep)){res.writeHead(403);return res.end();}
     }
     let data=await readFile(path.join(root,filename));
-    if(filename==='public/index.html')data=Buffer.from(data.toString().replace('<head>',`<head>\n<meta name="bonked-revision" content="${revision}">`));
+    if(['public/index.html','public/lan.html'].includes(filename))data=Buffer.from(data.toString().replace('<head>',`<head>\n<meta name="bonked-revision" content="${revision}">`));
     const caching=assetHeaders(filename,data);
     if(matchesETag(req.headers['if-none-match'],caching.ETag)){res.writeHead(304,caching);return res.end();}
     res.writeHead(200,{'Content-Type':mime[path.extname(filename)]||'application/octet-stream',...caching,'Content-Length':data.length,'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'"});
@@ -81,11 +76,23 @@ const server=http.createServer(async(req,res)=>{
 const wss=new WebSocketServer({noServer:true,maxPayload:2048,perMessageDeflate:{threshold:1024,zlibDeflateOptions:{level:1},concurrencyLimit:4}});
 // A dedicated bounded audio socket avoids TCP audio traffic queuing game inputs.
 // Audio is relayed only to authenticated connected humans in the same room.
+const lanWss=new WebSocketServer({noServer:true,maxPayload:16384,perMessageDeflate:false});
+const lan=new LanSignaling({send,revision,codeAvailable:code=>!rooms.has(code)});
+lanWss.on('connection',ws=>{
+  let budget=0,windowAt=Date.now();ws.lanAlive=true;ws.on('pong',()=>ws.lanAlive=true);ws.on('error',()=>{});
+  ws.on('message',data=>{
+    const now=Date.now();if(now-windowAt>1000){windowAt=now;budget=0;}if(++budget>100)return ws.close(1008,'Too many messages');
+    let msg;try{msg=JSON.parse(data);}catch{return;}
+    if((msg.type==='lan-create'||msg.type==='lan-join')&&deployment.status().paused)return send(ws,{type:'error',message:'Updating Bonked. Try again shortly.'});
+    lan.handle(ws,msg);
+  });
+  ws.on('close',()=>lan.disconnect(ws));
+});
 const voiceWss=new WebSocketServer({noServer:true,maxPayload:1024,perMessageDeflate:false});
 server.on('upgrade',(req,socket,head)=>{
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host){socket.destroy();return;}}catch{socket.destroy();return;}}
   const pathname=new URL(req.url,'http://localhost').pathname;
-  const target=pathname==='/ws'?wss:pathname==='/voice'?voiceWss:null;
+  const target=pathname==='/ws'?wss:pathname==='/voice'?voiceWss:pathname==='/lan'?lanWss:null;
   if(!target||target.clients.size>=650){socket.destroy();return;}
   target.handleUpgrade(req,socket,head,ws=>target.emit('connection',ws,req));
 });
@@ -115,31 +122,10 @@ voiceWss.on('connection',ws=>{
 });
 function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(typeof data==='string'?data:JSON.stringify(data));else if(ws?.readyState===WebSocket.OPEN)diagnostics.backpressure++;}
 function fail(ws,message,requestId){send(ws,{type:'error',message,...(typeof requestId==='string'?{requestId:requestId.slice(0,80)}:{})});}
-function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
+function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code)||lan.rooms.has(code));return code;}
 function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
-function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,simulationTick:room.simulationTick||0,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:(room.phase==='countdown'?p.input:p.simInput)||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
-function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
-function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION,randomizeGrid=false}={}){
-  selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.simulationTick=0;room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
-  if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
-  room.round=newTournament?1:(room.round||1)+(advanceRound?1:0);room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
-  room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;
-  resetSkyBeams(room);
-  const slots=randomizeGrid?randomGridSlots(room.players.size):Array.from({length:room.players.size},(_,i)=>i);
-  let index=0;for(const p of room.players.values()){p.car=spawnCar(slots[index++],startFraction);constrainRoad(p.car);p.input={...NEUTRAL};p.simInput={...NEUTRAL};p.fireLatch=false;p.botState=null;p.accelPressedAt=null;p.ready=false;p.appliedSeq=p.seq;if(newTournament)p.score=0;}
-  room.chase=createChase([...room.players.values()].map(p=>p.car));room.raceSize=room.players.size;room.winnerId=null;
-}
-function startRound(room,now,next=false){
-  resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:next,startFraction:next?room.nextStartFraction:START_FRACTION,randomizeGrid:true});room.phase='countdown';room.startAt=now+3300;publish(room);
-}
-function addPlayer(room,ws,name,bot=false){
-  selectTrack(room.trackId);const used=new Set([...room.players.values()].map(p=>p.color));
-  const options=COLORS.filter(c=>!used.has(c)),color=options[Math.floor(Math.random()*options.length)];
-  const p={id:randomUUID(),token:randomBytes(24).toString('hex'),name:String(name||'Driver').trim().slice(0,18)||'Driver',color,colorName:COLOR_NAMES[COLORS.indexOf(color)],car:spawnCar(Array.from({length:MAX_PLAYERS},(_,i)=>i).find(slot=>![...room.players.values()].some(p=>p.car.gridSlot===slot))),ws,bot,score:0,ready:false,input:{...NEUTRAL},seq:0,lastInput:Date.now(),disconnectedAt:null};
-  room.players.set(p.id,p);if(!room.host&&!bot)room.host=p.id;return p;
-}
-function removePlayer(room,p){p.voice?.close(1000,'Left lobby');room.players.delete(p.id);if(room.host===p.id)room.host=[...room.players.values()].find(p=>!p.bot&&p.ws)?.id||[...room.players.values()].find(p=>!p.bot)?.id;if(![...room.players.values()].some(p=>!p.bot)){rooms.delete(room.code);return;}publish(room);}
-function useItem(room,p,now){return pressWeapon(room,p,now);}
+const engine=createRoomEngine({send,broadcast,onEmpty:room=>rooms.delete(room.code),stats:diagnostics,randomUUID,randomBytes});
+const {publish,resetRoom,addPlayer,removePlayer}=engine;
 wss.on('connection',(ws,req)=>{
   // Browsers must connect from the same origin; non-browser test clients have no Origin.
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host){ws.close(1008,'Origin rejected');return;}}catch{ws.close(1008);return;}}
@@ -158,6 +144,7 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='create'||msg.type==='join'){
       if(client.room)return fail(ws,'Already in a room.');
       if(deployment.status().paused){send(ws,{type:'error',reason:'updating',retryAfterMs:2000,message:'Updating Bonked—please wait…'});return;}
+      if(msg.type==='join'&&lan.rooms.has(String(msg.code||'').toUpperCase()))return send(ws,{type:'lan-redirect',code:String(msg.code).toUpperCase()});
       let room;
       if(msg.type==='create'){
         if(rooms.size>=MAX_ROOMS)return fail(ws,'The server is full. Try again shortly.');
@@ -174,30 +161,8 @@ wss.on('connection',(ws,req)=>{
       client.room=room;client.player=player;send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code,seq:player.seq});publish(room);return;
     }
     const room=client.room,p=client.player;if(!room||!p||p.ws!==ws)return;selectTrack(room.trackId);
-    if(msg.type==='input'){
-      if(!Number.isSafeInteger(msg.seq)||msg.seq<=p.seq||msg.seq-p.seq>10000)return;
-      const next=sanitizeInput(msg);if(room.phase==='countdown')recordLaunchInput(p,next,msg.accelPressedAt,now,room.startAt);
-      diagnostics.inputGaps.add(now-p.lastInput);p.seq=msg.seq;p.skyAim=sanitizeSkyAim(msg.skyAim);p.input=next;p.lastInput=now;return;
-    }
-    if(msg.type==='item')return useItem(room,p,now);
-    if(msg.type==='leave'){client.room=null;client.player=null;removePlayer(room,p);return send(ws,{type:'left'});}
-    if(msg.type==='ready'){if(room.phase==='finished'&&!room.tournamentComplete&&msg.round===room.round){p.ready=true;publish(room);}return;}
-    if(p.id!==room.host)return fail(ws,'Only the room host can do that.',msg.requestId);
-    if(msg.type==='lobby'){if(room.phase!=='lobby')resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:room.phase==='finished'&&!room.tournamentComplete});publish(room);return;}
-    if(msg.type==='reset-scores'&&room.phase==='lobby'){resetRoom(room,{newTournament:true});publish(room);return;}
-    if(msg.type==='track'&&room.phase==='lobby'){if(!Object.hasOwn(TRACKS,msg.trackId))return fail(ws,'Unknown track.');if(room.trackId===msg.trackId)return;room.trackId=msg.trackId;resetRoom(room);publish(room);return;}
-    if(msg.type==='bot'){
-      const requestId=typeof msg.requestId==='string'?msg.requestId.slice(0,80):undefined;
-      if(room.phase!=='lobby')return fail(ws,'Return to the lobby to add bots.',requestId);
-      if(requestId&&[...room.players.values()].some(p=>p.botRequestId===requestId)){publish(room);return;}
-      if(room.players.size>=MAX_PLAYERS)return fail(ws,'The grid is full.',requestId);
-      const bot=addPlayer(room,null,['Nova','Rocco','Mika','Scout','Jett','Cleo','Ash'][room.players.size-1]||'Bot',true);bot.botRequestId=requestId;publish(room);return;
-    }
-    if(msg.type==='remove-bot'&&room.phase==='lobby'){const bot=room.players.get(msg.playerId);if(!bot?.bot)return fail(ws,'Choose a bot to remove.');room.players.delete(bot.id);publish(room);return;}
-    if(msg.type==='start'&&room.phase==='lobby'){
-      startRound(room,now);
-    }
-    if(msg.type==='rematch'&&room.phase==='finished'&&room.tournamentComplete){startRound(room,now);}
+    if(msg.type==='leave'){client.room=null;client.player=null;}
+    engine.command(room,p,msg,now,ws);
   });
   ws.on('close',()=>{connections.delete(ws);const {room,player:p}=client;if(!room||!p||p.ws!==ws)return;selectTrack(room.trackId);p.ws=null;p.input={...NEUTRAL};p.disconnectedAt=Date.now();if(room.host===p.id)room.host=[...room.players.values()].find(p=>p.ws)?.id||p.id;publish(room);});
 });
@@ -209,38 +174,7 @@ const timer=setInterval(()=>{
       selectTrack(room.trackId);
       for(const p of room.players.values())if(!p.bot&&!p.ws&&now-p.disconnectedAt>GRACE_MS)removePlayer(room,p);
       if(!rooms.has(room.code))continue;
-      if(nextRoundDue(room,now))startRound(room,now,true);
-      if(room.phase==='countdown'&&now>=room.startAt){room.phase='racing';for(const p of room.players.values())applyLaunch(p.car,!p.bot&&p.input.throttle>.1&&!p.input.reverse&&now-p.lastInput<=250?p.accelPressedAt:null,room.startAt);}
-      if(room.phase==='racing'){
-        const motionBefore=new Map([...room.players.values()].map(p=>[p.id,captureMotion(p.car)]));
-        room.simulationTick=(room.simulationTick||0)+1;room.raceTime=room.simulationTick*STEP;
-        for(const p of room.players.values()){
-          const input=p.bot?botControls(room,p,now):now-p.lastInput>INPUT_TIMEOUT_MS?NEUTRAL:p.input;
-          if(!p.bot&&now-p.lastInput>INPUT_TIMEOUT_MS)diagnostics.staleInputs++;
-          p.simInput=input;p.appliedSeq=p.seq;
-          const previousPose={x:p.car.x,y:p.car.y,z:p.car.z};
-          stepCar(p.car,input);p.car.raceTime=room.raceTime;collideDesertMoles(p.car,room.raceTime);collideCoastalCrabs(p.car,room.raceTime);
-          if(!p.car.finished&&!p.car.eliminated&&p.car.progress>=room.finishProgress){p.car.finished=true;p.car.finishTime=now-room.startAt;}
-          collectPickup(p.car,room.pickups,now);collectBoostPad(p.car,room.boostPads,room.raceTime,previousPose);
-        }
-        resolveNudges([...room.players.values()].map(p=>p.car));
-        collideCars([...room.players.values()].map(p=>p.car),{road:true});
-        updateCombat(room,STEP,now);
-        for(const p of room.players.values())if(p.car.wrecked&&!p.car.explosionShown){p.car.explosionShown=true;p.car.eliminatedAt=now-room.startAt;room.sounds.push({id:++room.serial,kind:'explosion',owner:p.id,x:p.car.x,y:p.car.y||0,z:p.car.z,at:now});room.effects.push({id:++room.serial,kind:'explosion',x:p.car.x,z:p.car.z,until:now+1100,color:'#ff993d'});}
-        const players=[...room.players.values()];
-        for(const p of updateChase(room.chase,players,now-room.startAt)){
-          room.effects.push({id:randomUUID(),kind:'hit',x:p.car.x,z:p.car.z,until:now+600,color:p.color});
-          room.sounds.push({id:++room.serial,kind:'elimination',owner:p.id,x:p.car.x,y:p.car.y||0,z:p.car.z,at:now});
-        }
-        updateSkyBeams(room,now);
-        for(const p of players)recordMotion(p.car,motionBefore.get(p.id),STEP);
-        const survivors=players.filter(p=>!p.car.eliminated),finished=survivors.filter(p=>p.car.finished);
-        const lastStanding=room.raceSize>1&&survivors.length<=1;
-        if(lastStanding&&!room.survivorEndAt)room.survivorEndAt=now+1800;
-        if(lastStanding&&survivors[0]&&now>=room.survivorEndAt){survivors[0].car.finished=true;survivors[0].car.finishTime=now-room.startAt;room.winnerId=survivors[0].id;}
-        if(finished.length&&!room.endedAt)room.endedAt=now+25000;
-        if((lastStanding&&now>=room.survivorEndAt)||(!lastStanding&&finished.length===survivors.length)||(room.endedAt&&now>=room.endedAt)||now-room.startAt>1200000){room.phase='finished';room.finishedAt=now;scoreRound(room,now);publish(room);}
-      }
+      engine.step(room,now);
       if(tick%3===0)publishRooms.add(room);
     }
     diagnostics.tickCost.add(performance.now()-tickStart);
@@ -249,10 +183,10 @@ const timer=setInterval(()=>{
   for(const room of publishRooms)if(rooms.has(room.code))publish(room);
 },8);
 const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),1000);
-const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(c.activity.expired(Date.now())){const {room,player}=c;if(room&&player){c.room=null;c.player=null;removePlayer(room,player);}c.ws.close(4000,'Inactive for ten minutes');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});}},10000);
+const heartbeat=setInterval(()=>{lan.sweep();for(const ws of lanWss.clients){if(!ws.lanAlive){ws.terminate();continue;}ws.lanAlive=false;ws.ping();}for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(c.activity.expired(Date.now())){const {room,player}=c;if(room&&player){c.room=null;c.player=null;removePlayer(room,player);}c.ws.close(4000,'Inactive for ten minutes');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
 for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();skySurfaces();}selectTrack('coast');
 server.listen(PORT,HOST,()=>console.log(`\nBONKED\nLocal: http://localhost:${PORT}\n${lanURLs().map(url=>`Wi-Fi: ${url}`).join('\n')}\n`));
-function shutdown(){clearInterval(diagnosticTimer);diagnostics.close();for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
+function shutdown(){for(const ws of lanWss.clients)ws.close(1001,'Server restarting');lanWss.close();clearInterval(diagnosticTimer);diagnostics.close();for(const ws of voiceWss.clients)ws.close(1001,'Server restarting');voiceWss.close();clearInterval(timer);clearInterval(heartbeat);for(const ws of wss.clients)ws.close(1001,'Server restarting');wss.close();server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),2000).unref();}
 process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

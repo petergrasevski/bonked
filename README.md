@@ -430,3 +430,85 @@ on their first rendered frame and retain readable screen width as the camera zoo
 Next-round countdowns discard old fleet corrections and snap every car to the fresh
 grid. Desktop round results show a subtle “Press Enter” ready hint. Inactive players
 remain connected for ten minutes, including time spent spectating bots.
+
+## LAN party (browser host)
+
+Choose **LAN party → Host LAN party** on a laptop, then scan its QR code with
+phones on the same main Wi-Fi. Phones open the website normally and choose a name;
+no local server installation or private-IP configuration is needed on a deployed
+HTTPS site. The ordinary **Join a room** option also recognizes LAN party codes
+and opens the controller page. The laptop is a display and does not consume one
+of the eight driver slots. Practice bots share those eight slots with phones.
+
+The controller page has large fixed steering and weapon zones, separate reverse,
+GO and nudge buttons, touch auto-acceleration at GO, and short vibration feedback
+where the phone supports it. It loads no 3D renderer. After elimination, steer
+left/right and use GO/reverse to move your coloured sky-beam target on the laptop.
+Ready and tournament controls remain available between rounds.
+
+### Shared engine and connection model
+
+`shared/room-engine.js` owns the authoritative room commands, input validation,
+60Hz simulation, bots, combat, countdowns, scoring, track changes and snapshots.
+Both `server.js` and `public/lan-worker.js` call this engine; the LAN worker contains
+only browser lifecycle and connection adapters. Bot decisions live in
+`shared/bots.js`; `bots.js` re-exports them for existing consumers. The host uses
+Bonked's existing lobby, renderer, circuit picker, audio and results interface.
+
+`server-lan.js` handles bounded, authenticated host/controller signaling over
+`/lan`; it never relays game inputs or snapshots. Each phone has one WebRTC peer
+connection to the laptop. Repeated input uses an unordered channel with zero
+retransmissions; joins, readiness, discrete weapon presses and small controller
+status snapshots use the reliable channel. Out-of-order input is ignored and
+stale input releases automatically using the online engine's existing timeout.
+
+ICE uses host candidates only (`iceServers: []`), without STUN or TURN. Failure to
+connect shows local-network help and an explicit ordinary-online-room option;
+there is no silent cloud gameplay fallback. Setup and reconnection require
+internet. An established local connection can continue through a brief signaling
+outage, but long outages can expire the room's setup registration. Reloading or
+closing the host ends its game; there is no host migration. Keep the host tab
+visible and the laptop awake. The host and controllers request a screen wake lock
+where supported. Automatic client-update reload is disabled while hosting.
+
+Controller reloads reuse a per-tab reconnect token and retain their car and score
+when rejoining within the existing 20-second player grace period. Browser module
+revisions must match the backend, so reload both host and controllers after an
+update before creating a new party. LAN registrations also participate in the
+existing deployment occupancy gate, avoiding a deployment during a party.
+
+### When local Wi-Fi connections fail
+
+- **Guest / AP / client isolation:** devices can reach the internet while the
+  router prevents them from reaching each other. Use the main home Wi-Fi. On a
+  router you administer, check its client isolation settings. A hotel, venue or
+  office network may require a different router or ordinary online play.
+- **Different networks / VLANs:** the laptop may be on an office Ethernet segment,
+  while phones are on guest Wi-Fi or cellular. Put all devices on the same LAN.
+  Different 2.4GHz and 5GHz bands are fine when the router bridges them normally.
+- **VPNs / firewall policies:** enable the VPN's local-network access option, or
+  disconnect it temporarily. Permit the browser's local traffic if your OS asks.
+  Restricted managed networks may block WebRTC or local multicast discovery.
+- **Browser permissions:** allow local-network access if requested. If denied,
+  change that site's permission or the phone's browser local-network setting and
+  retry. Browser implementation varies; test current Safari and Chrome.
+- **Connected but laggy:** move closer to the router, reduce competing downloads,
+  and keep the laptop awake with the host tab visible. Local hosting removes the
+  internet round trip but cannot remove Wi-Fi congestion or a slow host renderer.
+
+The host's **LAN connections & help** panel shows connection state and WebRTC RTT.
+Controllers show their input-path RTT and offer a retry after a failed connection.
+Physical iPhone/Android tests on the intended router are still required before
+calling the feature production-ready; headless browser tests exercise protocols
+and UI but do not reproduce a router's isolation or a phone's OS permissions.
+
+### Trying a deployment and rolling back
+
+This feature is isolated on `codex/lan-party`; `main` remains the stable baseline.
+The existing GitHub deploy workflow only auto-deploys pushes to `main` and supports
+manual dispatch on a selected branch. A manual dispatch of this branch targets
+the existing production Fly app, so it is a production trial, not a preview URL.
+After pushing the branch, select it when manually running the deploy workflow.
+For rollback, manually run that workflow on the unchanged `main` branch. Its
+occupancy gate waits for active online rooms and LAN parties before restarting.
+No deployment has been performed as part of implementing this feature.

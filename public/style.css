@@ -375,3 +375,12 @@ body.playing #menu-fps{display:none}
 @media(max-height:560px) and (orientation:landscape){.how-to-play-card{width:min(850px,96vw);padding:16px 22px}.help-heading{margin-bottom:10px}.how-to-play-card h2{font-size:25px;margin:2px 0 4px}.help-heading .eyebrow{display:none}.help-grid{gap:8px}.help-step{min-height:112px;padding:10px;grid-template-columns:105px 1fr;gap:10px}.help-visual{width:105px}.help-step h3{font-size:15px;margin:3px 0 5px}.help-step p{font-size:11px}.help-heading p{font-size:11px}}
 
 .ready-control{display:flex;flex-direction:column;align-items:center;gap:6px;width:min(320px,100%)}.results-card .ready-control #ready{width:100%}#ready-key-hint{font-size:11px;color:var(--muted);font-weight:400;opacity:.7}.mobile #ready-key-hint{display:none}.ready-control:has(#ready[hidden]){display:none}
+
+/* LAN display has no player controls; it is a shared screen for all eight cars. */
+.lan-entry{grid-column:1/-1}.lan-join-link{display:block;margin-top:12px;color:#b5dbe8;text-decoration:none;font-size:13px}
+#lan-invite{display:flex;align-items:center;gap:18px;margin:16px 0}#lan-invite[hidden]{display:none}#lan-qr{border-radius:10px;background:white;padding:6px}#lan-invite p{font-size:13px;line-height:1.5}
+#lan-status{font-size:12px;line-height:1.6;margin:12px 0;color:#bed0df}#lan-status summary{cursor:pointer;font-weight:700}#lan-connections{padding-left:18px}
+body.lan-host .controls,body.lan-host .nudge,body.lan-host #desktop-weapon,body.lan-host #you-label,body.lan-host #controller-status{display:none!important}
+body.lan-host #room-panel #start{margin-top:16px}
+
+#lobby:has(#entry-panel:not([hidden])){bottom:76px;overflow:auto;touch-action:pan-y}
