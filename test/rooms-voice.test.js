@@ -24,10 +24,18 @@ test('independent track rooms, host authority, authenticated lobby-only audio, l
   const av=await voice(a),bv=await voice(b),cv=await voice(c),pcm=Buffer.alloc(640,64);
   av.ws.send(pcm);await until(()=>bv.audio.length===1);assert.equal(bv.audio[0].length,641);assert.deepEqual(bv.audio[0].subarray(1),pcm);
   await sleep(80);assert.equal(cv.audio.length,0);assert.equal(av.audio.length,0,'do not echo microphone');
+  // A valid catch-up flood must degrade outgoing audio, never duplex voice.
+  const before=bv.audio.length;
+  for(let i=0;i<200;i++)av.ws.send(pcm);
+  await sleep(100);assert.equal(av.ws.readyState,WebSocket.OPEN);assert.equal(bv.ws.readyState,WebSocket.OPEN);
+  assert.ok(bv.audio.length>before&&bv.audio.length<before+200,'bound forwarded catch-up audio');
+  const incoming=Buffer.alloc(640,65);bv.ws.send(incoming);await until(()=>av.audio.length===1);assert.deepEqual(av.audio[0].subarray(1),incoming,'listening still works while outgoing audio is limited');
+  await sleep(100);const recovered=Buffer.alloc(640,66);av.ws.send(recovered);await until(()=>bv.audio.some(frame=>frame[1]===66));assert.equal(av.ws.readyState,WebSocket.OPEN,'fresh audio recovers on the same connection');
   const bad=await connect('/voice');bad.send({type:'join',code:a.welcome.code,token:'wrong'});await until(()=>bad.ws.readyState===WebSocket.CLOSED);
   // A game input cannot inject voice data, and unauthenticated binary is rejected.
   const unauth=await connect('/voice');unauth.ws.send(pcm);await until(()=>unauth.ws.readyState===WebSocket.CLOSED);
-  b.send({type:'leave'});await until(()=>bv.ws.readyState===WebSocket.CLOSED);av.ws.send(pcm);await sleep(60);assert.equal(bv.audio.length,1);
+  const receivedBeforeLeave=bv.audio.length;
+  b.send({type:'leave'});await until(()=>bv.ws.readyState===WebSocket.CLOSED);av.ws.send(pcm);await sleep(60);assert.equal(bv.audio.length,receivedBeforeLeave);
   c.send({type:'start'});await until(()=>c.state.phase==='countdown');c.send({type:'track',trackId:'ice'});await sleep(60);assert.equal(c.state.trackId,'desert');
   const oversized=await voice(a);oversized.ws.send(Buffer.alloc(642));await until(()=>oversized.ws.readyState===WebSocket.CLOSED);
 });

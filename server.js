@@ -1,5 +1,6 @@
 import {safeGridStartFraction} from './shared/starting-grid.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
+import {VoiceRelayBudget} from './server-voice.js';
 import {botControls} from './bots.js';
 import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './shared/sky-beam.js';
 import {skySurfaces} from './shared/sky-ground.js';
@@ -61,7 +62,7 @@ server.on('upgrade',(req,socket,head)=>{
   target.handleUpgrade(req,socket,head,ws=>target.emit('connection',ws,req));
 });
 voiceWss.on('connection',ws=>{
-  let room=null,player=null,windowAt=Date.now(),packets=0;
+  let room=null,player=null;const audioBudget=new VoiceRelayBudget(performance.now());
   ws.voiceAlive=true;ws.on('pong',()=>ws.voiceAlive=true);ws.on('error',()=>{});
   const authTimeout=setTimeout(()=>{if(!player)ws.close(1008,'Join a lobby first');},5000);
   ws.on('message',(data,binary)=>{
@@ -75,7 +76,9 @@ voiceWss.on('connection',ws=>{
     }
     if(!room.players.has(player.id)||!player.ws||player.voice!==ws)return ws.close(1008,'Lobby ended');
     if(!binary||data.length!==640)return ws.close(1008,'Invalid audio frame');
-    const now=Date.now();if(now-windowAt>=1000){windowAt=now;packets=0;}if(++packets>70)return ws.close(1008,'Audio rate exceeded');
+    // Discard excess frames instead of disconnecting both sending and listening.
+    // Refill continuously so an ordinary microphone resumes without a retry.
+    if(!audioBudget.take(performance.now()))return;
     const frame=Buffer.allocUnsafe(641);frame[0]=COLORS.indexOf(player.color);data.copy(frame,1);
     for(const peer of room.players.values())if(peer!==player&&peer.ws&&peer.voice?.readyState===WebSocket.OPEN&&peer.voice.bufferedAmount<8192)peer.voice.send(frame);
   });
