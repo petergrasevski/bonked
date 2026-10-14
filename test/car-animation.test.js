@@ -33,3 +33,8 @@ test('ice headlights illuminate ahead without extra shadow maps and turn off on 
   updateCarVisuals(ice,{wrecked:true},.016);assert.equal(ice.userData.headlight.intensity,0);
   let disposed=0;ice.traverse(o=>{if(o.isInstancedMesh)o.addEventListener('dispose',()=>disposed++);});disposeCarInstance(ice);assert.equal(disposed,2);disposeCarInstance(coast);
 });
+test('countdown burnout spins rear wheels while front wheels and chassis stay still',()=>{
+  const car=createSportsCar('#fff'),front=matrix(car,2),rear=matrix(car,0),position=car.position.clone();
+  updateCarVisuals(car,{angle:0,vx:0,vz:0,burnout:true},.03);
+  assert.notDeepEqual(matrix(car,0).elements,rear.elements);assert.deepEqual(matrix(car,2).elements,front.elements);assert.ok(car.position.equals(position));disposeCarInstance(car);
+});

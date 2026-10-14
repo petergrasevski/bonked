@@ -1,3 +1,4 @@
+import {recordScrape,interruptPadBoost} from './contact-feedback.js';
 import {coastalHasBarrier} from './coastal-barriers.js';
 import {coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
@@ -22,12 +23,12 @@ export const healthSpeedFactor = health => 1 - .2 * damageSeverity(health);
 export function launchResult(pressedAt,startAt){
   if(!Number.isFinite(pressedAt))return 'normal';
   const lead=startAt-pressedAt;
-  return lead>2000?'spinout':Math.abs(lead-1000)<=20?'boost':'normal';
+  return Math.abs(lead-1000)<=20?'boost':'normal';
 }
 export function applyLaunch(car,pressedAt,startAt){
   car.launchResult=launchResult(pressedAt,startAt);
   if(car.launchResult==='boost')car.boost=START_BOOST_SECONDS;
-  if(car.launchResult==='spinout')car.spinout=START_SPIN_SECONDS;
+  car.spinout=0;
 }
 // Only the current uninterrupted hold counts. A late or implausible timestamp
 // falls back to receipt time; the client never chooses its launch outcome.
@@ -209,7 +210,8 @@ export function constrainObstacles(car){
     if(d<1e-6){const ex=CAR_LENGTH/2-Math.abs(ox),ez=CAR_WIDTH/2-Math.abs(oz);if(ex<ez){dx=ox>0?-1:1;dz=0;depth=o.radius+ex;}else{dx=0;dz=oz>0?-1:1;depth=o.radius+ez;}d=1;}
     const nx=(dx*c-dz*s)/d,nz=(dx*s+dz*c)/d;
     car.x+=nx*(depth+.002);car.z+=nz*(depth+.002);
-    const impact=-(car.vx*nx+car.vz*nz);
+    recordScrape(car,-nx,-nz);
+    const impact=-(car.vx*nx+car.vz*nz);interruptPadBoost(car,impact);
     if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;car.impactTime=.4;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
   }
 }
@@ -390,7 +392,8 @@ export function constrainRoad(car){
       if(hasBarrier(t.fraction,side)&&corrected>t.halfWidth-extent){corrected=t.halfWidth-extent;normal=-side;}
       if(gap>.3&&hasBarrier(t.fraction,side,true)&&corrected<gap+extent){corrected=gap+extent;normal=side;}
       if(normal){car.x+=t.nx*(side*corrected-lateral);car.z+=t.nz*(side*corrected-lateral);
-        const impact=-(car.vx*t.nx+car.vz*t.nz)*normal;if(impact>0){const speed=Math.hypot(car.vx,car.vz);car.vx+=t.nx*normal*impact*1.12;car.vz+=t.nz*normal*impact*1.12;car.impactTime=.3;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speed,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
+        recordScrape(car,-t.nx*normal,-t.nz*normal);
+        const impact=-(car.vx*t.nx+car.vz*t.nz)*normal;interruptPadBoost(car,impact);if(impact>0){const speed=Math.hypot(car.vx,car.vz);car.vx+=t.nx*normal*impact*1.12;car.vz+=t.nz*normal*impact*1.12;car.impactTime=.3;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speed,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
       }
     }
     supportRoad(car,t);
@@ -402,7 +405,8 @@ export function constrainRoad(car){
   if(car.y-t.y<1.4&&hasBarrier(t.fraction,side)&&t.distance>limit){
     const nx=(car.x-t.x)/(t.distance||1),nz=(car.z-t.z)/(t.distance||1);
     car.x=t.x+nx*limit;car.z=t.z+nz*limit;
-    const impact=car.vx*nx+car.vz*nz;
+    recordScrape(car,nx,nz);
+    const impact=car.vx*nx+car.vz*nz;interruptPadBoost(car,impact);
     if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx-=nx*impact*1.12;car.vz-=nz*impact*1.12;car.impactTime=Math.max(car.impactTime,.3);
       if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}
     }
@@ -411,6 +415,7 @@ export function constrainRoad(car){
   return t;
 }
 export function stepCar(car, input, dt=STEP) {
+  if(car.scrape){car.scrape={...car.scrape,remaining:car.scrape.remaining-dt};if(car.scrape.remaining<=0)car.scrape=null;}
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
   for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
   car.tasePhase=(car.tasePhase||0)+dt;
@@ -455,7 +460,9 @@ export function stepCar(car, input, dt=STEP) {
     forward+=force*dt;forward*=Math.exp(-(braking?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
-    if(padSpeed!==null&&!input.reverse)forward=Math.max(forward,padSpeed);
+    // Boost adds only the missing speed budget, never a second full velocity
+    // on top of sideways collision momentum. Solid impacts cancel the pad.
+    if(padSpeed!==null&&!input.reverse)forward=Math.max(forward,Math.sqrt(Math.max(0,padSpeed*padSpeed-lateral*lateral)));
     const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
     // At speed, the rear tyres shed grip so the body turns ahead of its
     // momentum: a physical tail-out slide that settles as the rack centres.
@@ -522,10 +529,12 @@ export function collideCars(cars,{road=false,damage=true}={}){
   for(let pass=0;pass<6;pass++){for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++){
     const a=cars[i],b=cars[j];if((a.eliminated&&!a.wrecked)||(b.eliminated&&!b.wrecked)||Math.abs(a.y-b.y)>1.3||a.falling||b.falling)continue;
     const hit=carContact(a,b);if(!hit)continue;const {nx,nz}=hit;
+    const rubSpeed=Math.hypot(a.vx-b.vx,a.vz-b.vz);
+    recordScrape(a,nx,nz,{...hit,speed:rubSpeed});recordScrape(b,-nx,-nz,{...hit,speed:rubSpeed});
     const ma=a.wrecked?.4:1,mb=b.wrecked?.4:1,inertia=(CAR_LENGTH**2+CAR_WIDTH**2)/12;
     const ax=hit.x-a.x,az=hit.z-a.z,bx=hit.x-b.x,bz=hit.z-b.z;
     const va=(a.vx-a.yawVelocity*az)*nx+(a.vz+a.yawVelocity*ax)*nz,vb=(b.vx-b.yawVelocity*bz)*nx+(b.vz+b.yawVelocity*bx)*nz;
-    const speed=va-vb,ta=ax*nz-az*nx,tb=bx*nz-bz*nx;
+    const speed=va-vb;interruptPadBoost(a,speed);interruptPadBoost(b,speed);const ta=ax*nz-az*nx,tb=bx*nz-bz*nx;
     const push=(hit.depth+.002)/(ma+mb);a.x-=nx*push*ma;a.z-=nz*push*ma;b.x+=nx*push*mb;b.z+=nz*push*mb;
     if(speed>0){const impulse=speed*1.08/(ma+mb+ta*ta*ma/inertia+tb*tb*mb/inertia);
       a.vx-=nx*impulse*ma;a.vz-=nz*impulse*ma;b.vx+=nx*impulse*mb;b.vz+=nz*impulse*mb;

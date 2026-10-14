@@ -1,3 +1,4 @@
+import {burnoutActive,drivingEmitters} from './driving-effects.js';
 import {isCoastalBeach} from '/shared/coastal-barriers.js';
 import {SceneMaterials} from './scene-materials.js';
 import {StaticShadows} from './static-shadows.js';
@@ -289,10 +290,10 @@ export class World{
     this.particleMesh=new THREE.InstancedMesh(new THREE.PlaneGeometry(2,2),new THREE.MeshBasicMaterial({map:this.texture('glow'),transparent:true,opacity:.5,depthWrite:false}),600);this.particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);this.particleMesh.frustumCulled=false;this.particleMesh.count=0;this.scene.add(this.particleMesh);this.fireMesh=new THREE.InstancedMesh(new THREE.PlaneGeometry(2,2),new THREE.MeshBasicMaterial({map:this.texture('glow'),transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}),600);this.fireMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);this.fireMesh.frustumCulled=false;this.fireMesh.count=0;this.scene.add(this.fireMesh);this.particleDummy=new THREE.Object3D();this.particleColor=new THREE.Color();
   }
   particle(x,y,z,kind,vx=0,vz=0){
-    if(this.particles.length>=600)return;const smoke=kind==='smoke'||kind==='steam';this.particles.push({x,y,z,vx:vx+(Math.random()-.5)*1.4,vz:vz+(Math.random()-.5)*1.4,vy:smoke?2+Math.random()*2:1+Math.random()*3,kind,life:smoke?.8+Math.random()*.8:.25+Math.random()*.4,max:smoke?1.6:.65,size:smoke?.16+Math.random()*.22:.25+Math.random()*.45});
+    if(this.particles.length>=600)return;if(kind==='burnout'){this.particles.push({x,y,z,vx:vx+(Math.random()-.5)*.6,vz:vz+(Math.random()-.5)*.6,vy:.5+Math.random()*.5,kind,life:.5+Math.random()*.4,max:.9,size:.12+Math.random()*.1});return;}const smoke=kind==='smoke'||kind==='steam';if(kind==='spark'){this.particles.push({x,y,z,vx:vx+(Math.random()-.5)*3,vz:vz+(Math.random()-.5)*3,vy:.4+Math.random()*1.6,kind,life:.12+Math.random()*.16,max:.28,size:.025+Math.random()*.025});return;}this.particles.push({x,y,z,vx:vx+(Math.random()-.5)*1.4,vz:vz+(Math.random()-.5)*1.4,vy:smoke?2+Math.random()*2:1+Math.random()*3,kind,life:smoke?.8+Math.random()*.8:.25+Math.random()*.4,max:smoke?1.6:.65,size:smoke?.16+Math.random()*.22:.25+Math.random()*.45});
   }
   updateParticles(dt){
-    let count=0,fireCount=0;for(const p of this.particles){p.life-=dt;if(p.life<=0)continue;p.x+=p.vx*dt;p.z+=p.vz*dt;p.y+=p.vy*dt;const fade=Math.min(1,p.life/.3),size=p.size*(p.kind!=='fire'?1+(p.max-p.life)*1.4:1)*fade;this.particleDummy.position.set(p.x,p.y,p.z);this.particleDummy.scale.setScalar(size);this.particleDummy.quaternion.copy(this.camera.quaternion);this.particleDummy.updateMatrix();const mesh=p.kind!=='fire'?this.particleMesh:this.fireMesh,index=p.kind!=='fire'?count++:fireCount++;mesh.setMatrixAt(index,this.particleDummy.matrix);this.particleColor.set(p.kind==='steam'?0xd9f5f4:p.kind==='smoke'?0x454950:p.life<.18?0xe64c22:0xffc43d);mesh.setColorAt(index,this.particleColor);}
+    let count=0,fireCount=0;for(const p of this.particles){p.life-=dt;if(p.life<=0)continue;p.x+=p.vx*dt;p.z+=p.vz*dt;p.y+=p.vy*dt;if(p.kind==='spark')p.vy-=9*dt;const fade=Math.min(1,p.life/.3),size=p.size*(p.kind!=='fire'?1+(p.max-p.life)*1.4:1)*fade;this.particleDummy.position.set(p.x,p.y,p.z);this.particleDummy.scale.setScalar(size);this.particleDummy.quaternion.copy(this.camera.quaternion);this.particleDummy.updateMatrix();const glow=p.kind==='fire'||p.kind==='spark',mesh=glow?this.fireMesh:this.particleMesh,index=glow?fireCount++:count++;mesh.setMatrixAt(index,this.particleDummy.matrix);this.particleColor.set(p.kind==='spark'?0xffd68a:p.kind==='burnout'?0xbfc4c8:p.kind==='steam'?0xd9f5f4:p.kind==='smoke'?0x454950:p.life<.18?0xe64c22:0xffc43d);mesh.setColorAt(index,this.particleColor);}
     this.particles=this.particles.filter(p=>p.life>0);this.particleMesh.count=count;this.particleMesh.instanceMatrix.needsUpdate=true;if(this.particleMesh.instanceColor)this.particleMesh.instanceColor.needsUpdate=true;this.fireMesh.count=fireCount;this.fireMesh.instanceMatrix.needsUpdate=true;if(this.fireMesh.instanceColor)this.fireMesh.instanceColor.needsUpdate=true;
   }
   combatObjects(state,dt,now){
@@ -328,7 +329,9 @@ export class World{
       const car=p.id===localId&&localCar&&!p.wrecked?localCar:p;const a=1;g.userData.snap=false;
       g.position.x+=(car.x-g.position.x)*a;g.position.z+=(car.z-g.position.z)*a;g.rotation.y+=angleDelta(-car.angle,g.rotation.y)*a;
       g.position.y=(car.y||0)+(1-Math.cos(car.roll||0)*Math.cos(car.pitch||0))*.5+rolloverLift(car);g.rotation.x=car.roll||0;g.rotation.z=car.pitch||0;g.visible=(!p.eliminated||p.wrecked)&&g.position.y>-15;
-      updateCarVisuals(g,car,dt);
+      const drivingInput=car.input||p.input;
+      updateCarVisuals(g,{...car,burnout:burnoutActive(car,state.phase,drivingInput)},dt);
+      if(g.visible&&this.emitParticles)for(const e of drivingEmitters(car,state.phase,drivingInput))this.particle(e.x,e.y,e.z,e.kind,-car.vx*.08,-car.vz*.08);
       const oldWeapon=g.userData.weaponModel;syncCarWeapon(g,p);if(g.userData.weaponModel&&g.userData.weaponModel!==oldWeapon){this.sceneMaterials.adopt(g.userData.weaponModel,true);this.staticShadows?.apply(g.userData.weaponModel);this.distanceFade.apply(g.userData.weaponModel);}
       g.userData.flame.visible=p.firing==='flame'&&!p.eliminated;
       const thrust=boostExhaustStrength(car.padBoostRemaining);g.userData.boostExhaust.visible=thrust>0&&!p.eliminated;for(const jet of g.userData.boostExhaust.children)jet.scale.set(.32*thrust,.13*Math.sqrt(thrust),.13*Math.sqrt(thrust));
