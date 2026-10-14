@@ -12,6 +12,7 @@ import {weatherSurface} from './surface-detail.js';
 import {buildLandscapeBackdrop} from './landscape-backdrop.js';
 import {buildSceneryDetails} from './scenery-details.js';
 import {createTyreTracks} from './tyre-tracks.js';
+import {createCarShadows} from './car-shadows.js';
 import {createNudgeEffects} from './nudge-effects.js';
 import {SkyBeamView} from './sky-beam.js';
 import {skySurfaces} from '/shared/sky-ground.js';
@@ -50,6 +51,7 @@ export class World{
     this.container=container;this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0x8094a3);
     this.weaponEffects=new WeaponEffects(this.scene);
     this.tyreTracks=createTyreTracks();this.scene.add(this.tyreTracks.mesh);
+    this.carShadows=createCarShadows();this.scene.add(this.carShadows.mesh);
     this.nudgeEffects=createNudgeEffects(MAX_PLAYERS);this.scene.add(this.nudgeEffects.group);
     skySurfaces();this.skyView=new SkyBeamView(this.scene);this.skyMove={x:0,y:0};this.skyAim=null;
     this.scene.fog=new THREE.FogExp2(0x8094a3,.0045);
@@ -324,7 +326,7 @@ export class World{
     this.deadline.visible=!!state&&state.phase!=='lobby';
     if(state?.chase){const d=state.chase;this.deadline.position.set(d.x,d.y||0,d.z);this.deadline.rotation.order='YXZ';this.deadline.rotation.set(0,-d.angle,Math.atan(d.grade||0));this.deadline.scale.z=((d.halfWidth||6)*2+2)/(ROAD_WIDTH+2);}
     const previewFleet=[];
-    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const fraction=previewProgress-i*1.7/TRACK_LENGTH,p=trackAt(fraction),lane=Math.min(p.halfWidth-CAR_WIDTH/2-.5,activeTrack.id==='ice'?iceSplit(p.x)+1.8:1.8),side=i===0?-lane:lane,x=p.x+p.nx*side,z=p.z+p.nz*side;g.position.set(x,p.y,z);g.rotation.set(0,-p.angle,Math.atan(p.grade||0));updateCarVisuals(g,{...p,vx:Math.cos(p.angle)*22,vz:Math.sin(p.angle)*22,steering:angleDelta(trackAt(fraction+.002).angle,p.angle)*4},dt);previewFleet.push({...p,x,z,progress:fraction-START_FRACTION});}});
+    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const fraction=previewProgress-i*1.7/TRACK_LENGTH,p=trackAt(fraction),lane=Math.min(p.halfWidth-CAR_WIDTH/2-.5,activeTrack.id==='ice'?iceSplit(p.x)+1.8:1.8),side=i===0?-lane:lane,x=p.x+p.nx*side,z=p.z+p.nz*side;g.position.set(x,p.y,z);g.rotation.set(0,-p.angle,Math.atan(p.grade||0));updateCarVisuals(g,{...p,vx:Math.cos(p.angle)*22,vz:Math.sin(p.angle)*22,steering:angleDelta(trackAt(fraction+.002).angle,p.angle)*4},dt);previewFleet.push({...p,x,z,trackFraction:fraction,progress:fraction-START_FRACTION});}});
     const present=new Set(),tyreCars=[];
     if(state)for(const p of state.players){present.add(p.id);let g=this.cars.get(p.id);if(!g){g=this.createCar(p.color);this.scene.add(g);this.cars.set(p.id,g);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;}
       const car=p.id===localId&&localCar&&!p.wrecked?localCar:p;const a=1;g.userData.snap=false;
@@ -346,6 +348,7 @@ export class World{
     const visibleCars=[...this.cars].filter(([id,g])=>g.visible).map(([id,g])=>{const p=state?.players.find(p=>p.id===id);return {...p,x:g.position.x,z:g.position.z,angle:-g.rotation.y,y:g.position.y,vx:0,vz:0,yawVelocity:0};});
     this.gustTrails?.update(state?.phase==='racing'?state.raceTime:0,visibleCars);
     this.tyreTracks.update(now/1000,tyreCars);
+    this.carShadows.update(state?visibleCars:previewFleet);
     this.nudgeEffects.update(now/1000,state?.phase==='racing'?visibleCars:[]);
     // Rendering is read-only: physics contacts are solved only on simulation ticks.
     this.followFrame(state?.camera||cameraFrame(previewChase,previewFleet),dt,state?visibleCars:previewFleet);
