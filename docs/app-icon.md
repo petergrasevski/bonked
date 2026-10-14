@@ -1,9 +1,25 @@
 # Bonked home-screen icon
 
-The ramming-cars icon was generated with the built-in ImageGen tool on 14 October 2026. The opaque square artwork is exported at 180, 192 and 512 pixels in `public/icons/bonked-ramming-*.png`. The Apple touch icon, web app manifest and install prompt use these new paths, avoiding reuse of the previous icon URLs. The app's manifest identity and start URL remain the same.
+The icon is a screenshot of the actual game renderer, with the original home-screen title artwork (`public/logo.svg`) overlaid. It uses the game's car models, paint colours, coastal circuit, lighting, shadows and nudge feedback. The two cars and close camera are staged for the capture; this is not an AI-generated rendering or a screenshot of a naturally occurring online race.
+
+Opaque square exports are stored at `public/icons/bonked-game-180.png`, `public/icons/bonked-game-192.png` and `public/icons/bonked-game-512.png`. The Apple touch icon, manifest and install prompt use these new paths. The manifest identity and start URL are unchanged.
+
+## Recreate the capture
+
+`scripts/capture-app-icon.mjs` opens a temporary capture page in headless Chrome. The page imports the existing game modules from a running local Bonked server and overlays the original title SVG. No production game code is modified for capture.
+
+The capture script requires Playwright and Chrome. Point `PLAYWRIGHT_MODULE` at an installed Playwright module if it is not available through normal package resolution.
+
+```sh
+node server.js
+node scripts/capture-app-icon.mjs http://127.0.0.1:3210 test-results/app-icon
+sips -z 512 512 test-results/app-icon/bonked-game-master.png --out public/icons/bonked-game-512.png
+sips -z 192 192 test-results/app-icon/bonked-game-master.png --out public/icons/bonked-game-192.png
+sips -z 180 180 test-results/app-icon/bonked-game-master.png --out public/icons/bonked-game-180.png
+```
+
+The screenshot before overlay is saved as `bonked-game-scene.png`; the full composite is `bonked-game-master.png`. Capture output under `test-results/` is ignored by Git.
+
+## Installed icon updates
 
 Existing iPhone/iPad Home Screen installations generally retain their installed icon. Remove the old Home Screen app and add Bonked again from Safari to reliably pick up this artwork. Chrome Android WebAPK installations can update manifest icons automatically, with browser-controlled timing. See [web.dev's platform update guidance](https://web.dev/learn/pwa/update).
-
-## Generation prompt
-
-Use case: logo-brand. Asset type: square home-screen app icon for the arcade combat racing game Bonked. Create a polished, bold 3D illustrated game icon: two low, wide, glossy GT sports cars, one warm coral red and one electric cyan blue, with dark fastback glass, black tyres, chunky alloy wheels and swept rear wings, actively side-swiping and shoving each other. Three-quarter overhead view; both cars clearly visible and touching side panels, small bright impact sparks at the contact point and short curved tyre skid marks express playful competitive nudging, not a catastrophic head-on crash. Huge highly legible full game title "BONKED" (B O N K E D, exactly six letters) across the top, cream-white chunky italic arcade display lettering with a dark outline, spanning most of the width. The title and two cars are the entire focal point. Deep dark petrol/navy backdrop and a simple asphalt suggestion, dramatic clean lighting, warm sparks, strong silhouettes, premium arcade-racer finish. Designed to remain recognizable as an iPhone home-screen icon at 60 pixels: large simple forms, minimal detail, no small text, no extra badges, no UI, no border or watermark. Fill a square canvas with opaque artwork extending right to its edges, no pre-rounded corners. Keep all title letters and cars comfortably inside the central 80% so OS corner clipping cannot cut them off. Exact text: "BONKED".
