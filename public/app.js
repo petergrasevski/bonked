@@ -1,4 +1,5 @@
 import {RenderDiagnostics} from './render-diagnostics.js';
+import {createClientUpdates,canReloadClient} from './client-updates.js';
 import {readGraphicsQuality,saveGraphicsQuality,resolutionLabel} from './graphics-settings.js';
 import {OptimisticBots} from './lobby-bots.js';
 import {readDevLogs,saveDevLogs} from './dev-settings.js';
@@ -82,10 +83,19 @@ let toastTimer;function toast(message){$('toast').textContent=message;$('toast')
 function saveSession(){try{if(session)sessionStorage.setItem('drift-room',JSON.stringify(session));else sessionStorage.removeItem('drift-room');}catch{}}
 function send(message){if(ws?.readyState===WebSocket.OPEN){ws.send(JSON.stringify(message));return true;}return false;}
 function setConnection(online,label){$('connection-dot').classList.toggle('online',online);$('connection-label').textContent=label;}
+const clientUpdates=createClientUpdates({
+  revision:document.querySelector('meta[name="bonked-revision"]')?.content,
+  safe:()=>canReloadClient({hidden:document.hidden,connected:ws?.readyState===WebSocket.OPEN,resuming,busy:entryBusy,session,state,fresh:performance.now()-lastState<1000}),
+  reload:()=>{saveSession();location.reload();},
+  notify:()=>{if(state?.phase==='racing'||state?.phase==='countdown')toast('Update ready. It will load when you return to the lobby.');},
+});
+window.addEventListener('pageshow',()=>clientUpdates.check());
+window.addEventListener('online',()=>clientUpdates.check());
+setInterval(()=>{if(!document.hidden)clientUpdates.check();},60000);
 function connect(){
   setConnection(false,retries?'RECONNECTING':'CONNECTING');
   ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);
-  ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');window.bonkedStartup?.connected(true);if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});});
+  ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');window.bonkedStartup?.connected(true);if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});clientUpdates.check();});
   ws.addEventListener('message',event=>{
     let msg;try{msg=JSON.parse(event.data);}catch{return;}
     if(msg.type==='server-ping'){send({type:'server-pong',id:msg.id});return;}
@@ -98,6 +108,7 @@ function connect(){
       const me=msg.players.find(p=>p.id===myId);if(!circuitLoader.loading&&!circuitLoader.error)reconcileSnapshot(msg);
       if(phase!==msg.phase){const previousPhase=phase;phase=msg.phase;onPhaseChange(previousPhase);}
       if(was&&me?.item&&!was.players.find(p=>p.id===myId)?.item){beep(720,.09,.03);}
+      clientUpdates.apply();
     }
   });
   ws.addEventListener('close',event=>{window.bonkedStartup?.connected(false);optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
@@ -114,7 +125,7 @@ function setBusy(busy){entryBusy=busy;updateEntryButtons();}
 updateEntryButtons();
 function enter(type){const name=$('name').value.trim();if(!name){$('name').focus();return toast('Enter your name first.');}voice.prepare();try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');updateEntryButtons();});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
-function clearRoom(){requestedTrack=null;optimisticBots.clear();trackPicker.sync(activeTrack.id,false,false);voice.leave();stopGameAudio();corrections.reset();combatPrediction.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);}
+function clearRoom(){requestedTrack=null;optimisticBots.clear();trackPicker.sync(activeTrack.id,false,false);voice.leave();stopGameAudio();corrections.reset();combatPrediction.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);clientUpdates.apply();}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 function changeCircuit(){
   $('settings').hidden=true;
@@ -227,7 +238,7 @@ function nudge(direction){triggerNudge(direction);flushControls();}
 holdButton('nudge-left',held=>{if(held)nudge(-1);});holdButton('nudge-right',held=>{if(held)nudge(1);});
 window.addEventListener('keydown',e=>{const enter=e.code==='Enter'||e.code==='NumpadEnter';if(enter&&state?.phase==='finished'&&!state.tournamentComplete&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!e.target.closest?.('input,textarea,select,button:not(#ready),a,[contenteditable=true]')){e.preventDefault();if(!e.repeat&&!$('ready').disabled)$('ready').click();return;}if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement||e.target.isContentEditable||((e.code==='Enter'||e.code==='NumpadEnter')&&e.target.closest?.('button,a'))||!state||state.phase==='lobby'||rotationBlocked()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen())return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','NumpadEnter','KeyW','KeyS','KeyA','KeyD','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if((e.code==='Enter'||e.code==='NumpadEnter')&&!e.repeat)fire();if((e.code==='ArrowLeft'||e.code==='KeyQ')&&!e.repeat)nudge(-1);if((e.code==='ArrowRight'||e.code==='KeyR')&&!e.repeat)nudge(1);unlockAudio();}});
 window.addEventListener('keyup',e=>{keys.delete(e.code);flushControls();});window.addEventListener('blur',releaseControls);
-document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){accumulator=0;stopGameAudio();}});
+document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){accumulator=0;stopGameAudio();lastState=-Infinity;}else clientUpdates.check();});
 portrait.addEventListener('change',()=>{releaseControls();world?.resize();});
 // iOS needs the callout, selection and touch-default behaviours handled separately.
 // Keep native editing in the two lobby inputs; game surfaces never select or zoom.

@@ -1,5 +1,6 @@
 import {safeGridStartFraction,randomGridSlots} from './shared/starting-grid.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
+import {clientRevision,assetHeaders,matchesETag} from './server-assets.js';
 import {VoiceRelayBudget} from './server-voice.js';
 import {botControls} from './bots.js';
 import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './shared/sky-beam.js';
@@ -21,6 +22,7 @@ import { createChase, updateChase, chaseSnapshot, cameraFrame } from './shared/c
 import { initCombat, createPickups, collectPickup, pressWeapon, updateCombat } from './shared/combat.js';
 import { targetScoreForPlayers, scoreRound, nextRoundDue } from './shared/tournament.js';
 const root=path.dirname(fileURLToPath(import.meta.url));
+const revision=await clientRevision(root);
 const rooms=new Map(),connections=new Map();
 const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
@@ -31,6 +33,7 @@ const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://localhost');
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);return res.end();}
+    if(url.pathname==='/api/version'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({revision}));}
     if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',version:NETWORK_VERSION,revision:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local',rooms:rooms.size,uptime:Math.round(process.uptime())}));}
     if(url.pathname==='/api/config'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({lanURLs:process.env.PUBLIC_URL?[process.env.PUBLIC_URL]:lanURLs()}));}
     if(url.pathname==='/api/qr'){
@@ -45,8 +48,11 @@ const server=http.createServer(async(req,res)=>{
       filename=path.join('public',requested);
       if(!path.resolve(root,filename).startsWith(path.join(root,'public')+path.sep)){res.writeHead(403);return res.end();}
     }
-    const data=await readFile(path.join(root,filename));
-    res.writeHead(200,{'Content-Type':mime[path.extname(filename)]||'application/octet-stream','Cache-Control':/^public\/track-titles\/[a-z]+\.[a-f0-9]{12}\.webp$/.test(filename)?'public, max-age=31536000, immutable':'no-cache','Content-Length':data.length,'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'"});
+    let data=await readFile(path.join(root,filename));
+    if(filename==='public/index.html')data=Buffer.from(data.toString().replace('<head>',`<head>\n<meta name="bonked-revision" content="${revision}">`));
+    const caching=assetHeaders(filename,data);
+    if(matchesETag(req.headers['if-none-match'],caching.ETag)){res.writeHead(304,caching);return res.end();}
+    res.writeHead(200,{'Content-Type':mime[path.extname(filename)]||'application/octet-stream',...caching,'Content-Length':data.length,'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'"});
     res.end(req.method==='HEAD'?undefined:data);
   }catch{res.writeHead(404);res.end('Not found');}
 });

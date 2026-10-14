@@ -2,7 +2,7 @@ FROM node:24-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY server.js server-diagnostics.js server-voice.js bots.js ./
+COPY server.js server-diagnostics.js server-assets.js server-voice.js bots.js ./
 COPY shared ./shared
 COPY public ./public
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3210
