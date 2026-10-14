@@ -419,3 +419,13 @@ It is off for both new and existing installations until explicitly enabled, and
 is saved locally. The existing server telemetry is unchanged.
 
 Solid wall, obstacle and car impacts interrupt pad boost. Boost acceleration accounts for sideways velocity, preventing repeated boost injection from creating excess speed after a collision. Brief, small amber sparks emit at recorded chassis contact points during wall/door scrapes, following the rendered car pose.
+
+## LAN party
+
+Run `npm ci` once, then `npm run lan` on the laptop. Open `http://localhost:3210`, choose **LAN party**, then **Host a game on this screen**. The laptop runs the authoritative server and renders the shared race without taking a driver slot. Its display starts with a 35 ms interpolation buffer, adapting up to 100 ms if local delivery jitters. Up to eight phones or bots can race.
+
+Connect phones to the same Wi-Fi and scan the lobby QR code with the phone’s Camera app. Enter a name and tap **Join with this phone**. Phones get a lightweight controller with automatic acceleration at GO, steering, reverse, weapon and nudge buttons, plus sky-beam aiming after elimination. Game audio plays on the shared laptop screen. Hold **HOLD TO REV** during the countdown for burnout smoke. If the laptop has multiple network interfaces, choose the Wi-Fi address in the host lobby before scanning. The full game remains available at the laptop’s root URL for players who prefer a race view on their phone.
+
+**Games on this laptop** lists open LAN lobbies on the server you have opened; it does not scan other machines on the network. To reach another laptop, scan its QR code or open its displayed address. The public website provides setup instructions; it cannot start a listening server inside the browser. Keep the laptop awake and permit Node through its firewall. Guest Wi-Fi with device isolation prevents phones reaching the host. Game traffic and assets stay on the LAN; internet is needed only to install dependencies initially. Microphone chat is not included in the lightweight controller.
+
+The host can select circuits, add/remove bots, start tournaments and return to the lobby. Host refreshes and brief phone disconnects resume with private tokens and the existing 20-second seat grace. Leaving the host ends its party. Active phone players keep the shared display from being disconnected as idle; individual human players now get ten minutes without interaction before removal.

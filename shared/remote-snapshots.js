@@ -5,13 +5,13 @@ const angular=new Set(['angle','pitch','roll']);
 // Render peers between authoritative samples instead of repeatedly guessing
 // their next turn. Use server timestamps, never packet arrival spacing.
 export class RemoteSnapshots{
-  constructor(){this.reset();}
-  reset(){this.frames=[];this.offset=null;this.cursor=null;this.sampleAt=null;this.lastArrival=null;this.jitter=0;this.delay=100;this.underruns=0;}
+  constructor({minDelay=100,maxDelay=220}={}){this.minDelay=minDelay;this.maxDelay=Math.max(minDelay,maxDelay);this.reset();}
+  reset(){this.frames=[];this.offset=null;this.cursor=null;this.sampleAt=null;this.lastArrival=null;this.jitter=0;this.delay=this.minDelay;this.underruns=0;}
   push(state,arrival){
     const time=state.time;if(!Number.isFinite(time))return;
     const last=this.frames.at(-1);if(last&&time<=last.time)return;
     if(last&&this.lastArrival!==null){const jitter=Math.abs((arrival-this.lastArrival)-(time-last.time));this.jitter+=.1*(Math.min(300,jitter)-this.jitter);}
-    this.delay=Math.min(220,100+this.jitter*2);
+    this.delay=Math.min(this.maxDelay,this.minDelay+this.jitter*2);
     const offset=arrival-time;
     // The fastest delivery estimates the clock difference plus baseline
     // one-way transit. Later, slower packets must not rewind the playhead.
