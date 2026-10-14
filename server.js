@@ -1,6 +1,7 @@
 import {safeGridStartFraction,randomGridSlots} from './shared/starting-grid.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
 import {clientRevision,assetHeaders,matchesETag} from './server-assets.js';
+import {DeploymentGate} from './server-deployment.js';
 import {VoiceRelayBudget} from './server-voice.js';
 import {botControls} from './bots.js';
 import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './shared/sky-beam.js';
@@ -27,11 +28,26 @@ const rooms=new Map(),connections=new Map();
 const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
 const MAX_ROOMS=100, GRACE_MS=20000;
+const deployment=new DeploymentGate({rooms,graceMs:GRACE_MS});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json','.json':'application/json','.wav':'audio/wav','.mp3':'audio/mpeg','.ogg':'audio/ogg','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
 function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}
 const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://localhost');
+    if(url.pathname==='/internal/deployment'){
+      // CI accesses this through authenticated Fly SSH. Proxy/public requests
+      // cannot impersonate loopback with forwarded headers.
+      if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)){res.writeHead(403);return res.end();}
+      res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
+      if(req.method==='GET')return res.end(JSON.stringify(deployment.status()));
+      if(req.method!=='POST'){res.writeHead(405);return res.end();}
+      const owner=req.headers['x-deployment-owner'];
+      if(typeof owner!=='string'||!/^[a-zA-Z0-9-]{16,80}$/.test(owner)){res.writeHead(400);return res.end();}
+      const action=url.searchParams.get('action');
+      if(action==='release')return res.end(JSON.stringify(deployment.release(owner)));
+      if(action!=='acquire'){res.writeHead(400);return res.end();}
+      const result=deployment.acquire(owner);res.writeHead(result.status);return res.end(JSON.stringify(result.body));
+    }
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);return res.end();}
     if(url.pathname==='/api/version'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({revision}));}
     if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',version:NETWORK_VERSION,revision:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local',rooms:rooms.size,uptime:Math.round(process.uptime())}));}
@@ -131,6 +147,7 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='net-report'){diagnostics.client(client,msg.metrics,now);return;}
     if(msg.type==='create'||msg.type==='join'){
       if(client.room)return fail(ws,'Already in a room.');
+      if(deployment.status().paused){send(ws,{type:'error',reason:'updating',retryAfterMs:2000,message:'Updating Bonked—please wait…'});return;}
       let room;
       if(msg.type==='create'){
         if(rooms.size>=MAX_ROOMS)return fail(ws,'The server is full. Try again shortly.');
