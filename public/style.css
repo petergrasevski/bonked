@@ -373,10 +373,3 @@ body.playing #menu-fps{display:none}
 @media(max-width:700px){.help-step{grid-template-columns:110px 1fr;gap:12px;padding:12px}.help-visual{width:110px}.help-step h3{font-size:15px}.help-step p{font-size:12px}.how-to-play-card{padding:22px}.help-grid{gap:10px}}
 @media(max-width:540px) and (orientation:portrait){.help-grid{grid-template-columns:1fr}.help-step{min-height:110px}.how-to-play-card{padding:20px}.help-heading{margin-bottom:14px}.how-to-play-card h2{font-size:27px}}
 @media(max-height:560px) and (orientation:landscape){.how-to-play-card{width:min(850px,96vw);padding:16px 22px}.help-heading{margin-bottom:10px}.how-to-play-card h2{font-size:25px;margin:2px 0 4px}.help-heading .eyebrow{display:none}.help-grid{gap:8px}.help-step{min-height:112px;padding:10px;grid-template-columns:105px 1fr;gap:10px}.help-visual{width:105px}.help-step h3{font-size:15px;margin:3px 0 5px}.help-step p{font-size:11px}.help-heading p{font-size:11px}}
-.lan-link{display:flex;align-items:center;text-decoration:none;font-size:14px}.entry-option:last-child{grid-column:1/-1;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;padding-top:12px;border-top:1px solid var(--line)}.entry-option:last-child p{grid-column:1}.entry-option:last-child .lan-link{grid-column:2;grid-row:1/3;align-self:center}
-@media(orientation:landscape) and (max-height:560px) and (min-width:600px){
-  #lobby:has(#entry-panel:not([hidden])){width:min(540px,calc(100vw - 40px))}
-  .entry-options{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .entry-option:last-child{grid-column:auto;grid-template-columns:1fr;grid-template-rows:auto 44px auto;padding-top:0;border-top:0}
-  .entry-option:last-child p{grid-column:auto}.entry-option:last-child .lan-link{grid-column:auto;grid-row:auto;align-self:stretch}
-}

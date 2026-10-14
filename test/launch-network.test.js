@@ -13,9 +13,9 @@ test('countdown sockets retain held gas and apply normal, perfect and early star
   for(let i=0;i<2;i++){const c=await client();c.send({type:'join',code:normal.state.code});await until(()=>c.id);}
   normal.send({type:'start'});await until(()=>clients.every(c=>c.state.phase==='countdown'));const start=normal.state.startAt,grid=normal.state.players.map(p=>({x:p.x,z:p.z}));
   pumping=setInterval(()=>{for(const c of clients)c.send({type:'input',seq:++c.seq,throttle:c.throttle,steer:0,accelPressedAt:c.at});},16);
-  // Early throttle is sustained from >2s early; normal starts at 1.5s; perfect at 1s.
+  // Spinout is sustained from >2s early; normal starts at 1.5s; perfect at 1s.
   const leads=[1500,1000,2500];await Promise.all(clients.map(async(c,i)=>{await sleep(Math.max(0,start-leads[i]-Date.now()));c.at=start-leads[i];c.throttle=1;c.send({type:'input',seq:++c.seq,throttle:1,accelPressedAt:c.at});}));
   assert.deepEqual(normal.state.players.map(p=>({x:p.x,z:p.z})),grid,'revving must not move the grid');
-  await until(()=>clients.every(c=>c.racing.length));const first=normal.racing[0];assert.deepEqual(first.players.map(p=>p.launchResult),['normal','boost','normal']);assert.ok(first.players[1].boost>0);assert.equal(first.players[2].spinout,0);
-  await until(()=>normal.state.time>=start+1600);for(const p of normal.state.players)assert.ok(Math.hypot(p.vx,p.vz)>2,'held gas must move every car without a start penalty');
+  await until(()=>clients.every(c=>c.racing.length));const first=normal.racing[0];assert.deepEqual(first.players.map(p=>p.launchResult),['normal','boost','spinout']);assert.ok(first.players[1].boost>0);assert.ok(first.players[2].spinout>0);
+  await until(()=>normal.state.time>=start+1600);for(const p of normal.state.players)assert.ok(Math.hypot(p.vx,p.vz)>2,'held gas must move every car after spinout finishes');
 });

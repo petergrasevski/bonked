@@ -129,7 +129,7 @@ function connect(){
       clientUpdates.apply();
     }
   });
-  ws.addEventListener('close',event=>{window.bonkedStartup?.connected(false);optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4000){idleDisconnected=true;resuming=false;clearRoom();setConnection(false,'IDLE');toast('Disconnected after 10 minutes idle. Tap to reconnect.');return;}if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
+  ws.addEventListener('close',event=>{window.bonkedStartup?.connected(false);optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4000){idleDisconnected=true;resuming=false;clearRoom();setConnection(false,'IDLE');toast('Disconnected after 2 minutes idle. Tap to reconnect.');return;}if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
   ws.addEventListener('error',()=>{});
 }
 connect();

@@ -1,4 +1,4 @@
-export const INACTIVITY_MS=10*60*1000;
+export const INACTIVITY_MS=120000;
 const actions=new Set(['activity','create','join','leave','start','ready','rematch','lobby','track','bot','remove-bot','reset-scores','item']);
 export class PlayerActivity{
   constructor(now){this.lastActivity=now;}

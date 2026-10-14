@@ -6,9 +6,7 @@ import {createHelpPreview} from '../public/how-to-play.js';
 import {createEliminationLine} from '../public/elimination-line.js';
 
 test('network traffic cannot keep an idle player connected',()=>{
- assert.equal(INACTIVITY_MS,600000);
  const activity=new PlayerActivity(1000);
- assert.equal(activity.expired(121000),false,'spectating for two minutes does not disconnect');
  for(const type of ['ping','server-pong','net-report','input'])activity.message(type,100000);
  assert.equal(activity.expired(1000+INACTIVITY_MS-1),false);
  assert.equal(activity.expired(1000+INACTIVITY_MS),true);

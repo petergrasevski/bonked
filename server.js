@@ -14,7 +14,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import {lanURLs as localURLs,seatExpired,RECONNECT_GRACE_MS} from './lan.js';
+import os from 'node:os';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -28,10 +28,10 @@ const revision=await clientRevision(root);
 const rooms=new Map(),connections=new Map();
 const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
-const MAX_ROOMS=100, GRACE_MS=RECONNECT_GRACE_MS, LAN_MODE=process.env.LAN_MODE==='1';
+const MAX_ROOMS=100, GRACE_MS=20000;
 const deployment=new DeploymentGate({rooms,graceMs:GRACE_MS});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json','.json':'application/json','.wav':'audio/wav','.mp3':'audio/mpeg','.ogg':'audio/ogg','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
-const lanURLs=()=>localURLs(PORT);
+function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}
 const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://localhost');
@@ -52,18 +52,13 @@ const server=http.createServer(async(req,res)=>{
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);return res.end();}
     if(url.pathname==='/api/version'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({revision}));}
     if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',version:NETWORK_VERSION,revision:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local',rooms:rooms.size,uptime:Math.round(process.uptime())}));}
-    if(url.pathname==='/api/config'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({lanMode:LAN_MODE,lanURLs:!LAN_MODE&&process.env.PUBLIC_URL?[process.env.PUBLIC_URL]:lanURLs()}));}
-    if(url.pathname==='/api/lan/rooms'){
-      if(!LAN_MODE){res.writeHead(404);return res.end();}
-      res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
-      return res.end(JSON.stringify([...rooms.values()].filter(r=>r.lan&&r.phase==='lobby').map(r=>({code:r.code,trackId:r.trackId,players:r.players.size,capacity:MAX_PLAYERS}))));
-    }
+    if(url.pathname==='/api/config'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({lanURLs:process.env.PUBLIC_URL?[process.env.PUBLIC_URL]:lanURLs()}));}
     if(url.pathname==='/api/qr'){
       const value=url.searchParams.get('url');
       if(!value||value.length>512||!/^https?:\/\//.test(value)){res.writeHead(400);return res.end();}
       res.setHeader('Content-Type','image/svg+xml');return res.end(await QRCode.toString(value,{type:'svg',margin:1,color:{dark:'#101d26',light:'#ffffff'}}));
     }
-    const routes={'/shared/contact-feedback.js':'shared/contact-feedback.js','/shared/coastal-barriers.js':'shared/coastal-barriers.js','/shared/rollover.js':'shared/rollover.js','/shared/beach-profile.js':'shared/beach-profile.js','/shared/sky-ground.js':'shared/sky-ground.js','/shared/sky-beam.js':'shared/sky-beam.js','/shared/shockwave.js':'shared/shockwave.js','/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/network-timing.js':'shared/network-timing.js','/shared/remote-snapshots.js':'shared/remote-snapshots.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/combat-prediction.js':'shared/combat-prediction.js','/shared/tournament.js':'shared/tournament.js'};
+    const routes={'/shared/coastal-barriers.js':'shared/coastal-barriers.js','/shared/rollover.js':'shared/rollover.js','/shared/beach-profile.js':'shared/beach-profile.js','/shared/sky-ground.js':'shared/sky-ground.js','/shared/sky-beam.js':'shared/sky-beam.js','/shared/shockwave.js':'shared/shockwave.js','/shared/coastal-crabs.js':'shared/coastal-crabs.js','/shared/desert-storm.js':'shared/desert-storm.js','/vendor/three.module.js':'node_modules/three/build/three.module.js','/vendor/three.core.js':'node_modules/three/build/three.core.js','/vendor/BufferGeometryUtils.js':'node_modules/three/examples/jsm/utils/BufferGeometryUtils.js','/vendor/RoundedBoxGeometry.js':'node_modules/three/examples/jsm/geometries/RoundedBoxGeometry.js','/shared/game.js':'shared/game.js','/shared/landscape.js':'shared/landscape.js','/shared/edge-physics.js':'shared/edge-physics.js','/shared/boost-pads.js':'shared/boost-pads.js','/shared/network-timing.js':'shared/network-timing.js','/shared/remote-snapshots.js':'shared/remote-snapshots.js','/shared/netcode.js':'shared/netcode.js','/shared/chase.js':'shared/chase.js','/shared/camera.js':'shared/camera.js','/shared/combat.js':'shared/combat.js','/shared/weapon-geometry.js':'shared/weapon-geometry.js','/shared/desert-features.js':'shared/desert-features.js','/shared/prediction.js':'shared/prediction.js','/shared/combat-prediction.js':'shared/combat-prediction.js','/shared/tournament.js':'shared/tournament.js'};
     let filename=routes[url.pathname];
     if(!filename){
       const requested=decodeURIComponent(url.pathname==='/'?'index.html':url.pathname).replace(/^\/+/, '')||'index.html';
@@ -116,8 +111,8 @@ voiceWss.on('connection',ws=>{
 function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(typeof data==='string'?data:JSON.stringify(data));else if(ws?.readyState===WebSocket.OPEN)diagnostics.backpressure++;}
 function fail(ws,message,requestId){send(ws,{type:'error',message,...(typeof requestId==='string'?{requestId:requestId.slice(0,80)}:{})});}
 function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
-function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);send(room.display?.ws,encoded);}
-function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',lan:!!room.lan,code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:room.phase==='countdown'?(Date.now()-p.lastInput<=INPUT_TIMEOUT_MS?p.input:NEUTRAL):p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
+function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
+function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
 function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION,randomizeGrid=false}={}){
   selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
@@ -138,8 +133,7 @@ function addPlayer(room,ws,name,bot=false){
   const p={id:randomUUID(),token:randomBytes(24).toString('hex'),name:String(name||'Driver').trim().slice(0,18)||'Driver',color,colorName:COLOR_NAMES[COLORS.indexOf(color)],car:spawnCar(Array.from({length:MAX_PLAYERS},(_,i)=>i).find(slot=>![...room.players.values()].some(p=>p.car.gridSlot===slot))),ws,bot,score:0,ready:false,input:{...NEUTRAL},seq:0,lastInput:Date.now(),disconnectedAt:null};
   room.players.set(p.id,p);if(!room.host&&!bot)room.host=p.id;return p;
 }
-function closeLANRoom(room){rooms.delete(room.code);for(const p of room.players.values()){p.voice?.close(1000,'LAN host left');const c=connections.get(p.ws);if(c){c.room=null;c.player=null;send(p.ws,{type:'left'});}}}
-function removePlayer(room,p){if(p===room.display){closeLANRoom(room);return;}p.voice?.close(1000,'Left lobby');room.players.delete(p.id);if(room.host===p.id)room.host=[...room.players.values()].find(p=>!p.bot&&p.ws)?.id||[...room.players.values()].find(p=>!p.bot)?.id;if(!room.display&&![...room.players.values()].some(p=>!p.bot)){rooms.delete(room.code);return;}publish(room);}
+function removePlayer(room,p){p.voice?.close(1000,'Left lobby');room.players.delete(p.id);if(room.host===p.id)room.host=[...room.players.values()].find(p=>!p.bot&&p.ws)?.id||[...room.players.values()].find(p=>!p.bot)?.id;if(![...room.players.values()].some(p=>!p.bot)){rooms.delete(room.code);return;}publish(room);}
 function useItem(room,p,now){return pressWeapon(room,p,now);}
 wss.on('connection',(ws,req)=>{
   // Browsers must connect from the same origin; non-browser test clients have no Origin.
@@ -161,23 +155,19 @@ wss.on('connection',(ws,req)=>{
       let room;
       if(msg.type==='create'){
         if(rooms.size>=MAX_ROOMS)return fail(ws,'The server is full. Try again shortly.');
-        if(msg.display&&!LAN_MODE)return fail(ws,'Start the LAN server on your laptop first.');
-        room={lan:LAN_MODE&&!!msg.display,trackId:Object.hasOwn(TRACKS,msg.trackId)?msg.trackId:'coast',code:roomCode(),players:new Map(),host:null,createdAt:now};resetRoom(room,{newTournament:true});rooms.set(room.code,room);
+        room={trackId:Object.hasOwn(TRACKS,msg.trackId)?msg.trackId:'coast',code:roomCode(),players:new Map(),host:null,createdAt:now};resetRoom(room,{newTournament:true});rooms.set(room.code,room);
       }else room=rooms.get(String(msg.code||'').toUpperCase());
       if(!room)return fail(ws,'Room not found. Check the three-letter code.');
-      let player=room.display&&typeof msg.token==='string'&&room.display.token===msg.token?room.display:[...room.players.values()].find(p=>!p.bot&&typeof msg.token==='string'&&p.token===msg.token);
-      if(msg.type==='join'&&msg.display&&!player)return fail(ws,'Host session expired. Create a new LAN game.');
+      let player=[...room.players.values()].find(p=>!p.bot&&typeof msg.token==='string'&&p.token===msg.token);
       if(player){const old=player.ws;player.ws=ws;player.disconnectedAt=null;player.lastInput=now;player.input={...NEUTRAL};if(old&&old!==ws)old.close(4001,'Connected elsewhere');}
-      else if(msg.type==='create'&&msg.display){player={id:randomUUID(),token:randomBytes(24).toString('hex'),ws,display:true};room.display=player;room.host=player.id;}
       else{
         if(room.phase!=='lobby')return fail(ws,'This race has started. Join after it finishes.');
         if(room.players.size>=MAX_PLAYERS)return fail(ws,'This room already has eight drivers.');
         player=addPlayer(room,ws,msg.name);
       }
-      client.room=room;client.player=player;send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code,seq:player.seq||0,display:!!player.display});publish(room);return;
+      client.room=room;client.player=player;send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code,seq:player.seq});publish(room);return;
     }
-    const room=client.room,p=client.player;if(!room||!p||p.ws!==ws||!rooms.has(room.code))return;selectTrack(room.trackId);
-    if(p.display&&['input','item','ready'].includes(msg.type))return;
+    const room=client.room,p=client.player;if(!room||!p||p.ws!==ws)return;selectTrack(room.trackId);
     if(msg.type==='input'){
       if(!Number.isSafeInteger(msg.seq)||msg.seq<=p.seq||msg.seq-p.seq>10000)return;
       const next=sanitizeInput(msg);if(room.phase==='countdown')recordLaunchInput(p,next,msg.accelPressedAt,now,room.startAt);
@@ -199,12 +189,11 @@ wss.on('connection',(ws,req)=>{
     }
     if(msg.type==='remove-bot'&&room.phase==='lobby'){const bot=room.players.get(msg.playerId);if(!bot?.bot)return fail(ws,'Choose a bot to remove.');room.players.delete(bot.id);publish(room);return;}
     if(msg.type==='start'&&room.phase==='lobby'){
-      if(!room.players.size)return fail(ws,'Connect a phone or add a bot first.');
       startRound(room,now);
     }
     if(msg.type==='rematch'&&room.phase==='finished'&&room.tournamentComplete){startRound(room,now);}
   });
-  ws.on('close',()=>{connections.delete(ws);const {room,player:p}=client;if(!room||!p||p.ws!==ws||!rooms.has(room.code))return;selectTrack(room.trackId);p.ws=null;p.input={...NEUTRAL};p.disconnectedAt=Date.now();if(room.host===p.id&&!p.display)room.host=[...room.players.values()].find(p=>p.ws)?.id||p.id;publish(room);});
+  ws.on('close',()=>{connections.delete(ws);const {room,player:p}=client;if(!room||!p||p.ws!==ws)return;selectTrack(room.trackId);p.ws=null;p.input={...NEUTRAL};p.disconnectedAt=Date.now();if(room.host===p.id)room.host=[...room.players.values()].find(p=>p.ws)?.id||p.id;publish(room);});
 });
 let previous=performance.now(),accumulator=0,tick=0;
 const timer=setInterval(()=>{
@@ -212,8 +201,7 @@ const timer=setInterval(()=>{
   while(accumulator>=STEP){const tickStart=performance.now();accumulator-=STEP;tick++;diagnostics.ticks++;const now=Date.now();
     for(const room of rooms.values()){
       selectTrack(room.trackId);
-      if(room.display&&seatExpired(room.display,now)){closeLANRoom(room);continue;}
-      for(const p of room.players.values())if(seatExpired(p,now))removePlayer(room,p);
+      for(const p of room.players.values())if(!p.bot&&!p.ws&&now-p.disconnectedAt>GRACE_MS)removePlayer(room,p);
       if(!rooms.has(room.code))continue;
       if(nextRoundDue(room,now))startRound(room,now,true);
       if(room.phase==='countdown'&&now>=room.startAt){room.phase='racing';for(const p of room.players.values())applyLaunch(p.car,!p.bot&&p.input.throttle>.1&&!p.input.reverse&&now-p.lastInput<=250?p.accelPressedAt:null,room.startAt);}
@@ -255,7 +243,7 @@ const timer=setInterval(()=>{
   for(const room of publishRooms)if(rooms.has(room.code))publish(room);
 },8);
 const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),10000);
-const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(c.activity.expired(Date.now())&&!(c.player?.display&&[...c.room.players.values()].some(p=>!p.bot&&p.ws))){const {room,player}=c;if(room&&player){c.room=null;c.player=null;removePlayer(room,player);}c.ws.close(4000,'Inactive for ten minutes');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});}},10000);
+const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(c.activity.expired(Date.now())){const {room,player}=c;if(room&&player){c.room=null;c.player=null;removePlayer(room,player);}c.ws.close(4000,'Inactive for two minutes');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
 for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();skySurfaces();}selectTrack('coast');

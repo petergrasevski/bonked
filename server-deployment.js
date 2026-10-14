@@ -2,7 +2,7 @@ export const DEPLOY_PAUSE_MS=10*60*1000;
 export function roomOccupancy(rooms,now,graceMs){
   let occupiedRooms=0,players=0;
   for(const room of rooms.values()){
-    const humans=[...room.players.values(),...(room.display?[room.display]:[])].filter(p=>!p.bot&&(p.ws?.readyState===1||p.disconnectedAt==null||now-p.disconnectedAt<=graceMs));
+    const humans=[...room.players.values()].filter(p=>!p.bot&&(p.ws?.readyState===1||p.disconnectedAt==null||now-p.disconnectedAt<=graceMs));
     if(humans.length){occupiedRooms++;players+=humans.length;}
   }
   return {occupiedRooms,players};

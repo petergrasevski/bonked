@@ -4,10 +4,10 @@ import {spawnCar,STEP,NEUTRAL,stepCar,healthSpeedFactor,TOP_SPEED,launchResult,a
 import {predictFleet} from '../shared/prediction.js';
 const gas={...NEUTRAL,throttle:1};
 const at=(fraction=.01,side=0)=>{const c=spawnCar(),p=trackAt(fraction);return Object.assign(c,{x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle});};
-test('launch window is inclusive at ±20ms; early holds are safe; other starts are normal',()=>{
+test('launch window is inclusive at ±20ms; >2s early spins; other starts are normal',()=>{
   for(const lead of [980,1000,1020])assert.equal(launchResult(10000-lead,10000),'boost');
   for(const lead of [0,979,1021,1500,2000])assert.equal(launchResult(10000-lead,10000),'normal');
-  for(const lead of [2001,3000])assert.equal(launchResult(10000-lead,10000),'normal');
+  for(const lead of [2001,3000])assert.equal(launchResult(10000-lead,10000),'spinout');
   assert.equal(launchResult(null,10000),'normal');
 });
 test('countdown records one hold edge, resets on release and bounds network timestamps',()=>{
@@ -17,11 +17,11 @@ test('countdown records one hold edge, resets on release and bounds network time
   recordLaunchInput(p,gas,5000,9200,10000);assert.equal(p.accelPressedAt,9200);
   recordLaunchInput(p,gas,99999,9200,10000);assert.equal(p.accelPressedAt,9200);
 });
-test('launch boost accelerates faster while early held gas drives normally',()=>{
+test('launch boost accelerates faster, and spinout completes before held gas resumes',()=>{
   const normal=at(),boost=at(),spin=at();applyLaunch(normal,8500,10000);applyLaunch(boost,9000,10000);applyLaunch(spin,7000,10000);const angle=spin.angle;
   for(let i=0;i<30;i++){stepCar(normal,gas);stepCar(boost,gas);stepCar(spin,gas);}
-  assert.ok(Math.hypot(boost.vx,boost.vz)>Math.hypot(normal.vx,normal.vz)*1.2);assert.equal(Math.hypot(spin.vx,spin.vz),Math.hypot(normal.vx,normal.vz));assert.equal(spin.angle,normal.angle);assert.equal(spin.spinout,0);
-  for(let i=0;i<50;i++)stepCar(spin,gas);assert.ok(Math.hypot(spin.vx,spin.vz)>3);assert.ok(Math.abs(spin.angle-angle)<.1);
+  assert.ok(Math.hypot(boost.vx,boost.vz)>Math.hypot(normal.vx,normal.vz)*1.2);assert.equal(Math.hypot(spin.vx,spin.vz),0);assert.notEqual(spin.angle,angle);
+  for(let i=0;i<50;i++)stepCar(spin,gas);assert.ok(Math.hypot(spin.vx,spin.vz)>3);assert.ok(Math.abs((spin.angle-angle)-Math.PI*2)<1e-8);
 });
 test('engine speed stays full through 60HP then scales linearly to 80% at 1HP',()=>{
   assert.equal(healthSpeedFactor(100),1);assert.equal(healthSpeedFactor(1),.8);assert.equal(healthSpeedFactor(30.5),.9);for(const health of [60,61,80,100])assert.equal(healthSpeedFactor(health),1);

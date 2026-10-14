@@ -1,4 +1,4 @@
-// Keep automatic driving at GO; manual throttle can rev during the countdown.
+// Keep auto-drive out of the countdown: revving early would cause a launch spinout.
 export function driveThrottle({mobile=false,controllerConnected=false,phase,reverse=false,accelerating=false}={}){
   return reverse?0:(accelerating||(mobile&&!controllerConnected&&phase==='racing'))?1:0;
 }

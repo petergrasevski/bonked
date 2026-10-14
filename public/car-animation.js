@@ -26,9 +26,9 @@ export function createWheelAssembly(rubber){
   for(const mesh of [tyres,rims]){mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.frustumCulled=false;mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);}
   setWheelMatrices(group,0,0);return group;
 }
-function setWheelMatrices(group,steer,spin,rearSpin=spin){
+function setWheelMatrices(group,steer,spin){
   for(let i=0;i<4;i++){
-    dummy.position.set(...WHEEL_CENTERS[i]);dummy.scale.set(1,1,1);dummy.rotation.order='YXZ';dummy.rotation.set(0,i>=2?-steer*.48:0,i<2?rearSpin:spin);dummy.updateMatrix();
+    dummy.position.set(...WHEEL_CENTERS[i]);dummy.scale.set(1,1,1);dummy.rotation.order='YXZ';dummy.rotation.set(0,i>=2?-steer*.48:0,spin);dummy.updateMatrix();
     for(const mesh of group.children)mesh.setMatrixAt(i,dummy.matrix);
   }
   for(const mesh of group.children){mesh.instanceMatrix.needsUpdate=true;mesh.boundingSphere=null;mesh.boundingBox=null;}
@@ -44,8 +44,7 @@ export function updateCarVisuals(car,pose,dt){
   const speed=(pose.vx||0)*Math.cos(pose.angle||0)+(pose.vz||0)*Math.sin(pose.angle||0);
   const active=!pose.wrecked&&!pose.eliminated;
   car.userData.wheelSpin=((car.userData.wheelSpin||0)-speed*Math.max(0,Math.min(.1,dt))/.36)%(Math.PI*2);
-  car.userData.burnoutSpin=pose.burnout?((car.userData.burnoutSpin||0)-12*Math.max(0,Math.min(.1,dt))/.36)%(Math.PI*2):car.userData.wheelSpin;
-  const wheels=car.getObjectByName('wheel-assembly');if(wheels)setWheelMatrices(wheels,active?steer:0,car.userData.wheelSpin,car.userData.burnoutSpin);
+  const wheels=car.getObjectByName('wheel-assembly');if(wheels)setWheelMatrices(wheels,active?steer:0,car.userData.wheelSpin);
   const braking=active&&!!(pose.input?.reverse||pose.input?.brake||speed<-.15);
   car.userData.braking=braking;
   if(car.userData.rearLights)car.userData.rearLights.emissiveIntensity=braking?5.5:.35;
