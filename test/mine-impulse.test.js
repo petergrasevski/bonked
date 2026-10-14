@@ -11,12 +11,16 @@ test('a single mine hops modestly; repeated impulses build height and rotation',
 test('mine impulse adds to signed vertical momentum and shields block it',()=>{
   const c=car();c.vy=-2;mineImpulse(c);assert.ok(Math.abs(c.vy-3.2)<1e-9);c.shield=1;const before=structuredClone(c);mineImpulse(c,1,1);assert.deepEqual(c,before);
 });
-test('three physical mines in a row trigger during a short hop',()=>{
-  const c=car(),p={id:'target',car:c,input:{...NEUTRAL}},r={players:new Map([[p.id,p]]),phase:'racing',startAt:0};initCombat(r);
-  const dx=Math.cos(c.angle),dz=Math.sin(c.angle);c.vx=dx*30;c.vz=dz*30;
-  r.mines=[0,3,6].map((d,id)=>({id,x:c.x+dx*d,z:c.z+dz*d,y:0,angle:c.angle,pitch:0,armAt:0,until:10000}));let height=0;
-  for(let i=0;i<100;i++){updateCombat(r,STEP,i*STEP*1000);stepCar(c,NEUTRAL);height=Math.max(height,c.y);}
-  assert.equal(r.mines.length,0);assert.equal(c.health,16);assert.ok(height>2);assert.equal(c.falling,false);
+test('physical mine clusters stay grounded at full health and build height as damage accumulates',()=>{
+  const heights=[];
+  for(const count of [1,2,3]){
+    const c=car(),p={id:'target',car:c,input:{...NEUTRAL}},r={players:new Map([[p.id,p]]),phase:'racing',startAt:0};initCombat(r);
+    const dx=Math.cos(c.angle),dz=Math.sin(c.angle);c.vx=dx*30;c.vz=dz*30;
+    r.mines=Array.from({length:count},(_,id)=>({id,x:c.x+dx*id*3,z:c.z+dz*id*3,y:0,angle:c.angle,pitch:0,armAt:0,until:10000}));let height=0;
+    for(let i=0;i<100;i++){updateCombat(r,STEP,i*STEP*1000);stepCar(c,NEUTRAL);height=Math.max(height,c.y);}
+    assert.equal(r.mines.length,0);assert.equal(c.health,100-count*28);assert.equal(c.falling,false);heights.push(height);
+  }
+  assert.equal(heights[0],0);assert.ok(heights[1]>.05);assert.ok(heights[2]>.5&&heights[2]>heights[1]*3);
 });
 test('upright single-mine landing preserves forward momentum',()=>{
   const c=car();c.vx=20*Math.cos(c.angle);c.vz=20*Math.sin(c.angle);mineImpulse(c);let airborne=false;

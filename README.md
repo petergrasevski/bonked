@@ -81,7 +81,7 @@ A separate authenticated `/voice` WebSocket relays 16 kHz mono PCM in 20 ms pack
 
 Delayed microphone packets can arrive together. The server allows a bounded 25-frame catch-up burst and refills its relay allowance at 60 frames per second, above the normal 50-frame rate. Excess frames are discarded while the audio connection stays open: listening continues and outgoing audio resumes as the allowance refills. Authentication failures and malformed audio still close the socket. Network stalls longer than the playback buffer can still cause brief gaps; they no longer force a voice reconnect merely by bunching valid packets.
 
-For manual acceleration (keyboard or gamepad), holding accelerate through the countdown continues driving at GO. Start holding it with **1,000 ms remaining, within ±20 ms**, for a 0.8-second launch boost (35% extra acceleration, 10% extra speed ceiling). Hold continuously from **more than 2,000 ms before GO** and the car spins for 1.1 seconds before accelerating. Releasing GO resets the attempt. Controls carry their original press timestamp in the synchronized server clock; the server bounds timestamp compensation to 250 ms and owns the outcome. Countdown numbers update at animation-frame frequency.
+For manual acceleration (keyboard or gamepad), holding accelerate through the countdown continues driving at GO. Start holding it with **1,000 ms remaining, within ±20 ms**, for a 0.8-second launch boost (35% extra acceleration, 10% extra speed ceiling). Holding earlier has no penalty. Holding the accelerator during countdown emits light smoke from the rear wheels. Releasing GO resets the attempt. Controls carry their original press timestamp in the synchronized server clock; the server bounds timestamp compensation to 250 ms and owns the outcome. Countdown numbers update at animation-frame frequency.
 
 Drifting leaves two narrow, connected rear-tyre tracks with subtle rubber grooves. Their darkness follows sideways slip, with softer marks on ice; they conform to road slopes and fade over four seconds. Straight-line boosts do not leave skid marks. Tracks use one fixed-size client render batch, sampled at up to 30 Hz, with no server or network changes.
 
@@ -272,7 +272,7 @@ Engine audio is now mixed for every nearby live car, including bots, using stere
 
 Coastal water uses displaced swells, irregular fine ripple normals, Fresnel sky reflection, sunlight glints, a generated shallow-water colour map, subtle whitecaps and animated foam along the causeway. It uses two scene draws, with no mirror-camera renders or screen-space reflection passes. Fog blends the water into the existing atmosphere. Regression tests cover spectator listening position, engines for other drivers, rev/gear behaviour, throttle response and audio lifecycle; browser QA exercises a real elimination with opponent engines still active and real Web Audio offline rendering.
 
-Neon-blue double-chevron boost pads are 1.5 car widths wide. They ramp forward speed linearly to 150% of normal top speed over 0.4 seconds, then ease back over 2 seconds. Each pad turns dull blue for a one-second shared cooldown; already-boosted cars cannot consume another pad. Swept, height-aware contacts prevent missed triggers or collecting a pad on another deck. Pad availability belongs to each room; the boost envelope runs in shared authoritative/predicted physics. The light-blue bases are 50% transparent, and the forward chevrons advance at three frames per second. Twin exhaust flames grow with acceleration and fade through the two-second decay. All pads on a course render in three batched draws; their surfaces follow the road triangles exactly through mountain curves and changes of grade.
+Neon-blue double-chevron boost pads are 1.5 car widths wide. They ramp forward speed linearly to 150% of normal top speed over 0.4 seconds, then ease back over 2 seconds. Each pad turns dull blue for a one-second shared cooldown; already-boosted cars cannot consume another pad. Swept, height-aware contacts prevent missed triggers or collecting a pad on another deck. Pad availability belongs to each room; the boost envelope runs in shared authoritative/predicted physics. The light-blue bases are 50% transparent, and the forward chevrons advance at three frames per second. After collisions, boost stays active but lost kinetic energy reduces its thrust; speed rebuilds with bounded acceleration instead of snapping back to 150%. Twin exhaust flames reflect this reduced thrust and fade through the two-second decay. All pads on a course render in three batched draws; their surfaces follow the road triangles exactly through mountain curves and changes of grade.
 
 Saltwater has paired pads at the start and middle of its long gentle stretches, excluding the pair nearest the starting line. Glacier has four rows at the one-third/two-thirds points of the two straights: paired to one side, opposite edges, paired centrally, and a full row. Redrock has pads along the outside of the mole field, the mountain climb/descent, and a row at the narrow finish approach.
 
@@ -387,10 +387,13 @@ unmuting or returning resumes the saved position instead of restarting the song.
 
 ### Mines, coastal shoulders and automatic resolution
 
-Mine hits add 5.2 m/s of vertical velocity and modest contact-dependent angular
-velocity. Close mine clusters accumulate height and spin; an upright mine landing
-retains 88% of horizontal velocity. Other weapon launches and lethal damage keep
-their existing behavior. This remains an arcade simulation with gravity and tyre/
+Weapon knockback uses pre-hit health: `0.06 + 2.8 × (1 − health/100)^1.7`.
+Fresh cars barely change course and stay grounded; damaged cars receive much
+stronger mine, missile, railgun and chain impulses, with roll, pitch and yaw derived
+from the contact point. Tiny lifts below 0.5 m/s are suppressed. Close mine clusters
+accumulate height and spin; an upright weapon landing retains 88% of horizontal
+velocity. Lethal hits keep their scaled impulse on the wreck. Pulse retains its
+dedicated push strength. This remains an arcade simulation with gravity and tyre/
 chassis contacts, rather than a full suspension or rigid-body engine.
 
 Saltwater Circuit's visible dry banks support tyres using the same triangles as
@@ -417,3 +420,13 @@ cache ignores old resolution choices measured before the rendering optimizations
 Settings → Dev logs opts into the FPS/ping display and client console reports.
 It is off for both new and existing installations until explicitly enabled, and
 is saved locally. The existing server telemetry is unchanged.
+
+### Contact feedback and round transitions
+
+Wall and car rubbing emit large orange sparks from body-local contact points,
+following the rendered chassis through prediction corrections. Sparks reuse the
+bounded weapon particle/ribbon batches. Machine-gun tracers start at the muzzle
+on their first rendered frame and retain readable screen width as the camera zooms.
+Next-round countdowns discard old fleet corrections and snap every car to the fresh
+grid. Desktop round results show a subtle “Press Enter” ready hint. Inactive players
+remain connected for ten minutes, including time spent spectating bots.

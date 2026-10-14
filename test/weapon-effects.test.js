@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {WeaponEffects,WEAPON_EFFECT_LIMITS,createWeaponShieldMaterial} from '../public/weapon-effects.js';
+import {WeaponEffects,WEAPON_EFFECT_LIMITS,createWeaponShieldMaterial,tracerHalfWidth} from '../public/weapon-effects.js';
+import {CAR_LENGTH} from '../shared/game.js';
 import {SkyBeamView,createSkyStrike} from '../public/sky-beam.js';
 
 const camera=()=>{const c=new THREE.PerspectiveCamera();c.position.set(-20,25,20);c.lookAt(0,0,0);c.updateMatrixWorld();return c;};
@@ -70,4 +71,28 @@ test('effect expiry uses the predicted combat clock and falls back to snapshot t
   ]);s.combatTime=1500;
   update(view,s,0);assert.deepEqual(view.events.map(e=>e.id),['active']);assert.ok(Math.abs(view.events[0].age-.7)<1e-9);
   view.reset();delete s.combatTime;update(view,s,0);assert.equal(view.events.length,2);assert.ok(Math.abs(view.events.find(e=>e.id==='active').age-.2)<1e-9);view.dispose();
+});
+
+
+test('machinegun first-frame tracers bridge the muzzle gap and scale with camera distance',()=>{
+  const view=new WeaponEffects(new THREE.Scene()),s=state(),car=new THREE.Group(),bullet=new THREE.Group(),cam=camera();
+  car.position.set(10,4,20);car.rotation.y=-Math.PI/2;car.updateMatrixWorld();
+  bullet.position.copy(car.localToWorld(new THREE.Vector3(24,.9,0)));bullet.quaternion.copy(car.quaternion);
+  s.projectiles=[{id:'bullet',kind:'machinegun',owner:'driver'}];
+  view.update(s,new Map([['driver',car]]),new Map([['bullet',bullet]]),new Map(),new Map(),cam,0,1000,900);
+  const positions=view.lines.geometry.attributes.position,muzzle=car.localToWorld(new THREE.Vector3(CAR_LENGTH/2+.5,.9,0));
+  for(const [axis,get]of ['getX','getY','getZ'].entries())assert.ok(Math.abs((positions[get](0)+positions[get](1))/2-muzzle.getComponent(axis))<1e-5);
+  assert.equal(view.lines.geometry.drawRange.count,12,'muzzle-to-bullet segment and bright bullet core appear immediately');
+  const point=new THREE.Vector3();cam.position.set(0,0,80);const near=tracerHalfWidth(cam,point,900);cam.position.z=200;const far=tracerHalfWidth(cam,point,900);
+  assert.ok(far>near*2);assert.ok(Math.abs(far/near-2.5)<1e-8,'zoom retains a consistent apparent width');
+  assert.ok(tracerHalfWidth(cam,point,450)>far,'lower viewport resolution stays readable');view.dispose();
+});
+test('scrape sparks originate at rendered body contacts and stop after separation',()=>{
+  const view=new WeaponEffects(new THREE.Scene()),s=state(),car=new THREE.Group();car.position.set(10,6,20);car.rotation.y=-Math.PI/2;car.updateMatrixWorld();
+  s.players=[{id:'driver',vx:30,vz:0,contactTime:.14,contact:{x:1,y:.6,z:1,nx:0,nz:1,speed:30,kind:'wall'}}];
+  const origin=car.localToWorld(new THREE.Vector3(1,.6,1)),before=structuredClone(s);
+  update(view,s,.04,{cars:new Map([['driver',car]])});const sparks=view.particles.filter(p=>p.streak);assert.equal(sparks.length,5);
+  for(const p of sparks){assert.ok(Math.hypot(p.x-p.vx*.04-origin.x,p.y-p.vy*.04-origin.y,p.z-p.vz*.04-origin.z)<1e-7);assert.ok(p.size>=.18);}
+  assert.deepEqual(s,before,'cosmetic effects cannot write into authoritative contacts');s.players[0].contactTime=0;
+  for(let i=0;i<20;i++)update(view,s,.05,{cars:new Map([['driver',car]])});assert.equal(view.particles.length,0);view.dispose();
 });

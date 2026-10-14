@@ -31,6 +31,11 @@ export function createWeaponShieldMaterial(){
     }`});
 }
 
+// Keep tracers readable at every camera distance without changing their path.
+export function tracerHalfWidth(camera,point,viewportHeight=900){
+  const distance=Math.hypot(point.x-camera.position.x,point.y-camera.position.y,point.z-camera.position.z);
+  return Math.max(.035,Math.min(.35,distance*Math.tan((camera.fov||58)*Math.PI/360)*2/Math.max(1,viewportHeight)));
+}
 export class WeaponEffects{
   constructor(scene){
     this.group=new THREE.Group();this.group.name='layered-weapon-effects';scene.add(this.group);
@@ -47,7 +52,7 @@ export class WeaponEffects{
   dispose(){this.group.removeFromParent();for(const mesh of this.group.children){if(mesh.isInstancedMesh)mesh.dispose();mesh.geometry.dispose();mesh.material.dispose();}this.reset();}
   particle(x,y,z,color,size,life,vx=0,vy=0,vz=0,smoke=false,growth=0,gravity=0){
     if(this.particles.length>=WEAPON_EFFECT_LIMITS.particles)return;
-    this.particles.push({x,y,z,color,size,life,max:life,vx,vy,vz,smoke,growth,gravity});
+    const particle={x,y,z,color,size,life,max:life,vx,vy,vz,smoke,growth,gravity};this.particles.push(particle);return particle;
   }
   burst(x,y,z,color,count=12,speed=8){
     for(let i=0;i<count;i++){const a=Math.random()*TAU,v=speed*(.3+Math.random()*.7);this.particle(x,y,z,color,.08+Math.random()*.08,.25+Math.random()*.45,Math.cos(a)*v,2+Math.random()*v,Math.sin(a)*v,false,0,16);}
@@ -81,7 +86,7 @@ export class WeaponEffects{
       this.particle(e.x,y,e.z,0x8d8d84,.45,.6,0,1,0,true,.9);
     }
   }
-  drawEvent(e,dt){
+  drawEvent(e,dt,camera,viewportHeight){
     e.age+=dt;const t=e.age/e.duration;if(t>=1)return false;const fade=(1-t)**2,color=e.color||0xffa550,y=(e.y??0)+.15;
     if(e.toX!==undefined){
       const toY=e.toY??e.y??.85,fromY=e.y??.85,dx=e.toX-e.x,dy=toY-fromY,dz=e.toZ-e.z,length=Math.hypot(dx,dy,dz)||1;
@@ -92,7 +97,8 @@ export class WeaponEffects{
         const segments=Math.min(160,Math.ceil(length/1.1)),nx=-dz/length,nz=dx/length,r=.16+t*.5;
         for(let i=0;i<segments;i++){const a=i/segments,b=(i+1)/segments,pa=a*length*1.7-e.age*3,pb=b*length*1.7-e.age*3;this.line(e.x+dx*a+nx*Math.cos(pa)*r,fromY+dy*a+Math.sin(pa)*r,e.z+dz*a+nz*Math.cos(pa)*r,e.x+dx*b+nx*Math.cos(pb)*r,fromY+dy*b+Math.sin(pb)*r,e.z+dz*b+nz*Math.cos(pb)*r,.028,color,fade*.6);}
       }else{
-        this.line(e.x,fromY,e.z,e.toX,toY,e.toZ,e.kind==='shotgun'?.045:.035,color,fade);
+        const width=e.kind==='tracer'?tracerHalfWidth(camera,{x:e.x,y:fromY,z:e.z},viewportHeight):.045;
+        this.line(e.x,fromY,e.z,e.toX,toY,e.toZ,width,color,fade);
         this.line(e.x,fromY,e.z,e.toX,toY,e.toZ,e.kind==='shotgun'?.13:.1,color,fade*.2);
       }
     }else if(e.kind==='pulse'){
@@ -103,14 +109,14 @@ export class WeaponEffects{
     }else if(e.kind==='shield-hit'){this.ring(e.x,y+.5,e.z,2+t*2,0x88ebff,fade*.6);}
     return true;
   }
-  update(state,cars,rockets,mines,chains,camera,dt,now){
+  update(state,cars,rockets,mines,chains,camera,dt,now,viewportHeight=900){
     const round=state?.phase==='racing'?`${state.code}:${state.round}:${state.trackId}`:null;
     if(round!==this.round){this.reset();this.round=round;}if(!round)return;
     dt=Math.min(.05,Math.max(0,dt));this.clock+=dt;this.emission+=dt;const emit=this.emission>=1/35;if(emit)this.emission%=1/35;
     camera.getWorldDirection(this.cameraDirection);this.lineCount=0;this.ringCount=0;
     for(const e of state.effects||[])if(!this.seen.has(e.id)){this.seen.add(e.id);this.event(e,Math.max(0,(e.until-(state.combatTime??state.time))/1000));}
     if(this.seen.size>WEAPON_EFFECT_LIMITS.seen)this.seen=new Set([...this.seen].slice(-WEAPON_EFFECT_LIMITS.seen/2));
-    this.events=this.events.filter(e=>this.drawEvent(e,dt));
+    this.events=this.events.filter(e=>this.drawEvent(e,dt,camera,viewportHeight));
     const ids=new Set();
     for(const shot of state.projectiles||[]){
       const g=rockets.get(shot.id);if(!g)continue;ids.add(shot.id);const p=g.position,previous=this.projectiles.get(shot.id);
@@ -125,7 +131,13 @@ export class WeaponEffects{
         // Two rotating energy filaments describe the bolt volume and direction.
         for(let k=0;k<2;k++)for(let i=0;i<10;i++){const a=i/10*TAU+now*.012+k*Math.PI,b=a+.5,r=.72;this.a.set(-.6+k*.6,Math.cos(a)*r,Math.sin(a)*r).applyQuaternion(g.quaternion).add(p);this.b.set(-.6+k*.6,Math.cos(b)*r,Math.sin(b)*r).applyQuaternion(g.quaternion).add(p);this.line(this.a.x,this.a.y,this.a.z,this.b.x,this.b.y,this.b.z,.04,0xb6faff,.85);}
       }
-      if(previous&&p.distanceTo(previous)<30&&kind!=='rocket')this.line(previous.x,previous.y,previous.z,p.x,p.y,p.z,kind==='plasma'?.12:.045,kind==='plasma'?0x38c8ff:0xffe2a0,.6);
+      if(kind==='machinegun'){
+        const width=tracerHalfWidth(camera,p,viewportHeight),owner=cars.get(shot.owner),start=previous||(owner?owner.localToWorld(new THREE.Vector3(CAR_LENGTH/2+.5,.9,0)):p.clone().addScaledVector(forward,-2.5));
+        if(!previous||p.distanceTo(previous)<30)this.line(start.x,start.y,start.z,p.x,p.y,p.z,width,0xffefb8,.95);
+        if(!previous)this.event({kind:'tracer',x:start.x,y:start.y,z:start.z,toX:p.x,toY:p.y,toZ:p.z,duration:70,color:'#fff1b8'},.07);
+        const tail=p.clone().addScaledVector(forward,-Math.max(2.5,width*12));this.line(tail.x,tail.y,tail.z,p.x,p.y,p.z,width,0xfff8df,1);
+      }
+      if(previous&&p.distanceTo(previous)<30&&kind==='plasma')this.line(previous.x,previous.y,previous.z,p.x,p.y,p.z,.12,0x38c8ff,.6);
       this.projectiles.set(shot.id,p.clone());
     }
     for(const id of this.projectiles.keys())if(!ids.has(id))this.projectiles.delete(id);
@@ -133,6 +145,14 @@ export class WeaponEffects{
     for(const ball of state.chains||[]){const mesh=chains.get(ball.id)?.children[0];if(!mesh)continue;const p=mesh.position,speed=Math.hypot(ball.renderVx??ball.vx??0,ball.renderVz??ball.vz??0);if(emit&&speed>6){this.particle(p.x,p.y-.65,p.z,0xffcb80,.1,.25,-(ball.vx||0)*.12,1,-(ball.vz||0)*.12,false,0,12);this.particle(p.x,p.y-.8,p.z,0x9b9690,.24,.35,0,.2,0,true,.5);}}
     for(const player of state.players||[]){
       const g=cars.get(player.id);if(!g?.visible||player.eliminated)continue;
+      const contact=player.contact;
+      if(emit&&player.contactTime>0&&contact?.speed>2&&['wall','car'].includes(contact.kind)){
+        const origin=g.localToWorld(new THREE.Vector3(contact.x,contact.y,contact.z)),count=Math.min(6,2+Math.floor(contact.speed/10));
+        for(let i=0;i<count;i++){
+          const spark=this.particle(origin.x,origin.y,origin.z,i%2?0xffa331:0xffecad,.18+Math.random()*.12,.3+Math.random()*.25,-(player.vx||0)*.2-contact.nx*(2+Math.random()*4)+(Math.random()-.5)*5,3+Math.random()*5,-(player.vz||0)*.2-contact.nz*(2+Math.random()*4)+(Math.random()-.5)*5,false,0,15);
+          if(spark)spark.streak=true;
+        }
+      }
       if(player.shield>0&&g.userData.shield?.material.uniforms)g.userData.shield.material.uniforms.time.value=now/1000;
       if(player.firing==='flame'&&emit){
         const forward=new THREE.Vector3(1,0,0).applyQuaternion(g.quaternion);for(let i=0;i<4;i++){const point=g.localToWorld(new THREE.Vector3(CAR_LENGTH/2+Math.random()*.7,.72,(Math.random()-.5)*.3)),speed=15+Math.random()*5;this.particle(point.x,point.y,point.z,i===0?0xfff2ad:i===1?0xffad31:0xff4c13,.2+Math.random()*.13,Math.min(.58,(FLAME_RANGE-CAR_LENGTH/2)/speed),forward.x*speed,forward.y*speed+.3+Math.random(),forward.z*speed,false,1.7);}
@@ -153,7 +173,7 @@ export class WeaponEffects{
       p.life-=dt;if(p.life<=0)return false;const old={x:p.x,y:p.y,z:p.z};p.vy-=p.gravity*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;
       const age=p.max-p.life,fade=Math.min(1,p.life/.16),size=p.size+age*p.growth;
       this.stamp(p.smoke?this.smoke:this.glow,p.smoke?smokeCount++:glowCount++,p.x,p.y,p.z,size,size,p.color,fade*(p.smoke?.48:.85),camera.quaternion);
-      if(p.gravity)this.line(old.x,old.y,old.z,p.x,p.y,p.z,.024,p.color,fade*.8);return true;
+      if(p.gravity)this.line(p.streak?p.x-p.vx*.055:old.x,p.streak?p.y-p.vy*.055:old.y,p.streak?p.z-p.vz*.055:old.z,p.x,p.y,p.z,p.streak?.055:.024,p.color,fade*.8);return true;
     });
     this.glow.count=glowCount;this.smoke.count=smokeCount;this.rings.count=this.ringCount;
     for(const mesh of [this.glow,this.smoke,this.rings]){mesh.instanceMatrix.needsUpdate=true;mesh.geometry.attributes.tint.needsUpdate=true;}

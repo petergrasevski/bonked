@@ -63,9 +63,10 @@ In the 23:12 capture, the final five seconds have steady frame/delivery timing a
 roughly 0.6 m corrections, consistent with the earlier net-v3 reports. These cannot
 establish an improvement from a change that was not running.
 
-Remote sky-target presentation was also updated to use authoritative sample ticks,
-measured target velocity, and rendered race time. Its previous position-only spring
-preserved continuous position but could still pulse in speed at snapshot cadence.
-The local cursor remains immediate. Constant-speed, irregular-update tests cover
-30/60/120 Hz; additional tests verify bounded outage extrapolation and the actual
-SkyBeamView wiring. Future lag captures include both displayed and raw targets.
+Remote sky-target presentation initially estimated velocity between simulation
+ticks. Further player feedback found remaining jitter, so it now uses a bounded
+140 ms interpolation buffer with time-aware cubic interpolation, monotonic playback,
+no extrapolation beyond the latest sample, and a critically damped visual spring.
+The local cursor remains immediate. Constant-speed irregular-update tests cover
+30/60/120 Hz; additional tests verify outage bounds, teleport resets and the actual
+SkyBeamView wiring. Lag captures include both displayed and raw targets.

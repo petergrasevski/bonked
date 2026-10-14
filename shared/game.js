@@ -1,7 +1,7 @@
 import {coastalHasBarrier} from './coastal-barriers.js';
 import {coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
-import {boostLayout,boostSpeed} from './boost-pads.js';
+import {boostLayout,boostSpeed,softenPadBoostImpact} from './boost-pads.js';
 import {stepRollover,shoveRollover} from './rollover.js';
 import {SEA_LEVEL} from './beach-profile.js';
 import {bodyOffset,WHEEL_POINTS,wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
@@ -22,12 +22,12 @@ export const healthSpeedFactor = health => 1 - .2 * damageSeverity(health);
 export function launchResult(pressedAt,startAt){
   if(!Number.isFinite(pressedAt))return 'normal';
   const lead=startAt-pressedAt;
-  return lead>2000?'spinout':Math.abs(lead-1000)<=20?'boost':'normal';
+  return Math.abs(lead-1000)<=20?'boost':'normal';
 }
 export function applyLaunch(car,pressedAt,startAt){
   car.launchResult=launchResult(pressedAt,startAt);
   if(car.launchResult==='boost')car.boost=START_BOOST_SECONDS;
-  if(car.launchResult==='spinout')car.spinout=START_SPIN_SECONDS;
+  car.spinout=0;
 }
 // Only the current uninterrupted hold counts. A late or implausible timestamp
 // falls back to receipt time; the client never chooses its launch outcome.
@@ -210,7 +210,7 @@ export function constrainObstacles(car){
     const nx=(dx*c-dz*s)/d,nz=(dx*s+dz*c)/d;
     car.x+=nx*(depth+.002);car.z+=nz*(depth+.002);
     const impact=-(car.vx*nx+car.vz*nz);
-    if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;car.impactTime=.4;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
+    if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;softenPadBoostImpact(car,speedBefore,Math.hypot(car.vx,car.vz));car.impactTime=.4;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
   }
 }
 // Timed hazards share the explicit simulation clock with instanced visuals.
@@ -228,7 +228,7 @@ export function collideDesertMoles(car,raceSeconds=car.raceTime||0,{damage=true}
     if(d<1e-6){const ex=CAR_LENGTH/2-Math.abs(ox),ez=CAR_WIDTH/2-Math.abs(oz);if(ex<ez){dx=ox>0?-1:1;dz=0;depth=mole.radius+ex;}else{dx=0;dz=oz>0?-1:1;depth=mole.radius+ez;}d=1;}
     const nx=(dx*c-dz*s)/d,nz=(dx*s+dz*c)/d;car.x+=nx*(depth+.002);car.z+=nz*(depth+.002);
     const impact=-(car.vx*nx+car.vz*nz);if(impact<=0)continue;
-    car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;car.impactTime=Math.max(car.impactTime||0,.5);
+    const speedBefore=Math.hypot(car.vx,car.vz);car.vx+=nx*impact*1.15;car.vz+=nz*impact*1.15;softenPadBoostImpact(car,speedBefore,Math.hypot(car.vx,car.vz));car.impactTime=Math.max(car.impactTime||0,.5);
     const amount=Math.min(18,3+impact*.25),canDamage=(car.moleCooldown||0)<=0&&impact>4;
     if(canDamage){if(damage)damageCar(car,amount);car.moleCooldown=.65;}
     impacts.push({id:mole.id,speed:impact,damage:canDamage&&damage?amount:0});
@@ -240,7 +240,7 @@ export const gridSlotDistance=slot=>6+Math.floor(slot/2)*5.5;
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - gridSlotDistance(slot)/TRACK_LENGTH;
   const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
-  return { raceTime:0,moleCooldown:0,steering:0,padBoostRemaining:0,padBoostFrom:0,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
+  return { raceTime:0,contact:null,contactTime:0,moleCooldown:0,steering:0,padBoostRemaining:0,padBoostFrom:0,padBoostPower:1,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
   return { steer: Number.isFinite(raw?.steer)?clamp(raw.steer,-1,1):0,throttle:Number.isFinite(raw?.throttle)?clamp(raw.throttle,0,1):0,reverse:raw?.reverse===true,brake:raw?.brake===true,fire:raw?.fire===true,nudge:raw?.nudge===-1?-1:raw?.nudge===1?1:0 };
@@ -283,6 +283,28 @@ export function resolveNudges(cars,{damage=true}={}){
       }
     }
   }
+}
+// Contact coordinates stay in the body's local frame, so visual correction
+// cannot detach sparks from the chassis. This state is shared with prediction.
+export function recordContact(car,x,y,z,nx,nz,speed,kind='wall'){
+  if(speed<2)return;
+  if(car.contactTime>.1&&(car.contact?.speed||0)>speed)return;
+  const dx=x-car.x,dz=z-car.z,c=Math.cos(car.angle),s=Math.sin(car.angle);
+  car.contact={x:clamp(dx*c+dz*s,-CAR_LENGTH/2,CAR_LENGTH/2),y:clamp(y-car.y,.1,1.3),z:clamp(-dx*s+dz*c,-CAR_WIDTH/2,CAR_WIDTH/2),nx,nz,speed:Math.min(80,speed),kind};car.contactTime=.14;
+}
+// Resistance depends on damage already sustained; torque comes from the hit lever arm.
+export const weaponImpactScale=health=>.06+2.8*(1-clamp(health,0,100)/100)**1.7;
+export function weaponImpact(car,kick,healthBefore=car.health){
+  if(car.shield>0)return;
+  const scale=kick.fixedImpulse?1:weaponImpactScale(healthBefore),jx=(kick.x||0)*scale,jz=(kick.z||0)*scale,lift=(kick.mine?5.2:kick.up||0)*scale,up=lift<.5?0:lift;
+  car.vx+=jx;car.vz+=jz;
+  if(up>0){car.vy=Math.min(24,car.vy+up);if(up>.5)car.y=Math.max(car.y,(car.groundY||0)+.02);car.mineFlight=true;car.edgeBalance=false;}
+  const point=kick.point||{x:car.x,y:car.y+.5,z:car.z},dx=point.x-car.x,dz=point.z-car.z,c=Math.cos(car.angle),s=Math.sin(car.angle);
+  const fore=clamp(dx*c+dz*s,-CAR_LENGTH/2,CAR_LENGTH/2),side=clamp(-dx*s+dz*c,-CAR_WIDTH/2,CAR_WIDTH/2),height=clamp((point.y??car.y+.5)-car.y-.6,-.6,.9),forwardKick=jx*c+jz*s,sideKick=-jx*s+jz*c;
+  car.rollVelocity=clamp(car.rollVelocity+(height*sideKick-side*up)*.45,-9,9);
+  car.pitchVelocity=clamp(car.pitchVelocity+(fore*up-height*forwardKick)*.16,-9,9);
+  car.yawVelocity=clamp(car.yawVelocity+(fore*sideKick-side*forwardKick)*.18,-7,7);
+  if(up>1||Math.hypot(jx,jz)>1)car.impactTime=Math.max(car.impactTime,.8);
 }
 export function damageCar(car,amount){
   if(car.wrecked||car.eliminated||car.finished||car.shield>0)return false;
@@ -389,8 +411,8 @@ export function constrainRoad(car){
     if(car.y-t.y<1.4){
       if(hasBarrier(t.fraction,side)&&corrected>t.halfWidth-extent){corrected=t.halfWidth-extent;normal=-side;}
       if(gap>.3&&hasBarrier(t.fraction,side,true)&&corrected<gap+extent){corrected=gap+extent;normal=side;}
-      if(normal){car.x+=t.nx*(side*corrected-lateral);car.z+=t.nz*(side*corrected-lateral);
-        const impact=-(car.vx*t.nx+car.vz*t.nz)*normal;if(impact>0){const speed=Math.hypot(car.vx,car.vz);car.vx+=t.nx*normal*impact*1.12;car.vz+=t.nz*normal*impact*1.12;car.impactTime=.3;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speed,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
+      if(normal){recordContact(car,car.x-t.nx*normal*extent,car.y+.6,car.z-t.nz*normal*extent,-t.nx*normal,-t.nz*normal,Math.hypot(car.vx,car.vz));car.x+=t.nx*(side*corrected-lateral);car.z+=t.nz*(side*corrected-lateral);
+        const impact=-(car.vx*t.nx+car.vz*t.nz)*normal;if(impact>0){const speed=Math.hypot(car.vx,car.vz);car.vx+=t.nx*normal*impact*1.12;car.vz+=t.nz*normal*impact*1.12;softenPadBoostImpact(car,speed,Math.hypot(car.vx,car.vz));car.impactTime=.3;if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speed,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}}
       }
     }
     supportRoad(car,t);
@@ -401,9 +423,10 @@ export function constrainRoad(car){
   const limit=t.halfWidth-extent,side=(car.x-t.x)*t.nx+(car.z-t.z)*t.nz<0?-1:1;
   if(car.y-t.y<1.4&&hasBarrier(t.fraction,side)&&t.distance>limit){
     const nx=(car.x-t.x)/(t.distance||1),nz=(car.z-t.z)/(t.distance||1);
+    recordContact(car,t.x+nx*t.halfWidth,car.y+.6,t.z+nz*t.halfWidth,nx,nz,Math.hypot(car.vx,car.vz));
     car.x=t.x+nx*limit;car.z=t.z+nz*limit;
     const impact=car.vx*nx+car.vz*nz;
-    if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx-=nx*impact*1.12;car.vz-=nz*impact*1.12;car.impactTime=Math.max(car.impactTime,.3);
+    if(impact>0){const speedBefore=Math.hypot(car.vx,car.vz);car.vx-=nx*impact*1.12;car.vz-=nz*impact*1.12;softenPadBoostImpact(car,speedBefore,Math.hypot(car.vx,car.vz));car.impactTime=Math.max(car.impactTime,.3);
       if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}
     }
   }
@@ -412,7 +435,7 @@ export function constrainRoad(car){
 }
 export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
-  for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown'])car[key]=Math.max(0,(car[key]||0)-dt);
+  for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown','contactTime'])car[key]=Math.max(0,(car[key]||0)-dt);
   car.tasePhase=(car.tasePhase||0)+dt;
   const padSpeed=boostSpeed(car,dt,TOP_SPEED);
   verticalStep(car,dt);
@@ -455,7 +478,8 @@ export function stepCar(car, input, dt=STEP) {
     forward+=force*dt;forward*=Math.exp(-(braking?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
-    if(padSpeed!==null&&!input.reverse)forward=Math.max(forward,padSpeed);
+    // Boost supplies bounded thrust, so impacts cannot restore the old speed in one tick.
+    if(padSpeed!==null&&!input.reverse)forward+=Math.min(Math.max(0,padSpeed-forward),120*(car.padBoostPower??1)*dt);
     const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
     // At speed, the rear tyres shed grip so the body turns ahead of its
     // momentum: a physical tail-out slide that settles as the rack centres.
@@ -525,9 +549,12 @@ export function collideCars(cars,{road=false,damage=true}={}){
     const ma=a.wrecked?.4:1,mb=b.wrecked?.4:1,inertia=(CAR_LENGTH**2+CAR_WIDTH**2)/12;
     const ax=hit.x-a.x,az=hit.z-a.z,bx=hit.x-b.x,bz=hit.z-b.z;
     const va=(a.vx-a.yawVelocity*az)*nx+(a.vz+a.yawVelocity*ax)*nz,vb=(b.vx-b.yawVelocity*bz)*nx+(b.vz+b.yawVelocity*bx)*nz;
+    const contactSpeed=Math.max(0,va-vb,Math.abs((a.vx-b.vx)*(-nz)+(a.vz-b.vz)*nx));
+    recordContact(a,hit.x,Math.max(a.y,b.y)+.6,hit.z,nx,nz,contactSpeed,'car');recordContact(b,hit.x,Math.max(a.y,b.y)+.6,hit.z,-nx,-nz,contactSpeed,'car');
+
     const speed=va-vb,ta=ax*nz-az*nx,tb=bx*nz-bz*nx;
     const push=(hit.depth+.002)/(ma+mb);a.x-=nx*push*ma;a.z-=nz*push*ma;b.x+=nx*push*mb;b.z+=nz*push*mb;
-    if(speed>0){const impulse=speed*1.08/(ma+mb+ta*ta*ma/inertia+tb*tb*mb/inertia);
+    if(speed>0){const beforeA=Math.hypot(a.vx,a.vz),beforeB=Math.hypot(b.vx,b.vz);const impulse=speed*1.08/(ma+mb+ta*ta*ma/inertia+tb*tb*mb/inertia);
       a.vx-=nx*impulse*ma;a.vz-=nz*impulse*ma;b.vx+=nx*impulse*mb;b.vz+=nz*impulse*mb;
       shoveRollover(a,-nx*impulse*ma,-nz*impulse*ma);shoveRollover(b,nx*impulse*mb,nz*impulse*mb);
       a.yawVelocity=clamp(a.yawVelocity-ta*impulse*ma/inertia,-3,3);b.yawVelocity=clamp(b.yawVelocity+tb*impulse*mb/inertia,-3,3);
@@ -537,6 +564,7 @@ export function collideCars(cars,{road=false,damage=true}={}){
       const friction=clamp(-tangentSpeed/(ma+mb),-impulse*.25,impulse*.25);
       a.vx-=tx*friction*ma;a.vz-=tz*friction*ma;b.vx+=tx*friction*mb;b.vz+=tz*friction*mb;
       shoveRollover(a,-tx*friction*ma,-tz*friction*ma);shoveRollover(b,tx*friction*mb,tz*friction*mb);
+      softenPadBoostImpact(a,beforeA,Math.hypot(a.vx,a.vz));softenPadBoostImpact(b,beforeB,Math.hypot(b.vx,b.vz));
       a.impactTime=b.impactTime=.65;
       if(damage&&pass===0&&speed>7){if(a.contactCooldown<=0){damageCar(a,(speed-7)*.35);a.contactCooldown=.2;}if(b.contactCooldown<=0){damageCar(b,(speed-7)*.35);b.contactCooldown=.2;}}
     }

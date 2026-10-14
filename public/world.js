@@ -331,10 +331,14 @@ export class World{
       updateCarVisuals(g,car,dt);
       const oldWeapon=g.userData.weaponModel;syncCarWeapon(g,p);if(g.userData.weaponModel&&g.userData.weaponModel!==oldWeapon){this.sceneMaterials.adopt(g.userData.weaponModel,true);this.staticShadows?.apply(g.userData.weaponModel);this.distanceFade.apply(g.userData.weaponModel);}
       g.userData.flame.visible=p.firing==='flame'&&!p.eliminated;
-      const thrust=boostExhaustStrength(car.padBoostRemaining);g.userData.boostExhaust.visible=thrust>0&&!p.eliminated;for(const jet of g.userData.boostExhaust.children)jet.scale.set(.32*thrust,.13*Math.sqrt(thrust),.13*Math.sqrt(thrust));
+      const thrust=boostExhaustStrength(car.padBoostRemaining)*Math.sqrt(car.padBoostPower??1);g.userData.boostExhaust.visible=thrust>0&&!p.eliminated;for(const jet of g.userData.boostExhaust.children)jet.scale.set(.32*thrust,.13*Math.sqrt(thrust),.13*Math.sqrt(thrust));
       g.userData.shield.visible=p.shield>0&&!p.eliminated;
       g.userData.paint.emissive.setHex(p.tased>0?0x2868c5:0);g.userData.paint.emissiveIntensity=p.tased>0?.7:0;
       g.userData.paint.color.copy(g.userData.baseColor).multiplyScalar(p.wrecked?.22:1-damageSeverity(p.health??100)*.396);
+      if(g.visible&&state.phase==='countdown'&&p.input?.throttle>.1&&!p.input.reverse&&now-(g.userData.burnoutAt||-Infinity)>66){
+        g.userData.burnoutAt=now;
+        for(const side of [-1,1]){const wheel=g.localToWorld(new THREE.Vector3(-CAR_LENGTH*.31,.18,side*CAR_WIDTH*.44));this.particle(wheel.x,wheel.y,wheel.z,'steam',-Math.cos(car.angle),-Math.sin(car.angle));}
+      }
       if(g.visible&&this.emitParticles){const level=damageLevel(p.health??100),fx=Math.cos(car.angle),fz=Math.sin(car.angle);if(level>0){for(let j=0;j<level;j++)this.particle(car.x+fx*1.2,g.position.y+.9,car.z+fz*1.2,'smoke',-car.vx*.12,-car.vz*.12);if(level>=3)for(let j=0;j<level-1;j++)this.particle(car.x+fx*1.2+(Math.random()-.5),g.position.y+.7,car.z+fz*1.2+(Math.random()-.5),'fire');}
       }
       if(g.visible&&state.phase==='racing')tyreCars.push({...car,id:p.id,eliminated:p.eliminated});
@@ -350,7 +354,7 @@ export class World{
     this.followFrame(state?.camera||cameraFrame(previewChase,previewFleet),dt,state?visibleCars:previewFleet);
     this.skyView.update(state,localId,this.camera,this.follow,this.skyMove,dt);this.skyAim=this.skyView.aim;
     this.boxes.forEach((g,i)=>{const pickup=state?.pickups[i];g.visible=g.userData.available=!state||pickup?.readyAt<=state.time;this.setPickupModel(g,pickup?.item||WEAPON_IDS[i%WEAPON_IDS.length]);g.userData.model.rotation.y=now*.00045+i;g.position.y=(PICKUP_LOCATIONS[i]?.y||0)+1.9+Math.sin(now*.0017+i)*.18;g.userData.halo.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.08-g.position.y;g.userData.ring.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.13-g.position.y;});
-    this.combatObjects(state,dt,now);this.weaponEffects.update(state,this.cars,this.rockets,this.mines,this.chains,this.camera,dt,now);animateLandmarks(this,now);this.updateParticles(dt);
+    this.combatObjects(state,dt,now);this.weaponEffects.update(state,this.cars,this.rockets,this.mines,this.chains,this.camera,dt,now,this.container.clientHeight);animateLandmarks(this,now);this.updateParticles(dt);
     this.atmosphere.update(this.camera,now,this.follow?.y||0,state?(state.phase==='racing'?state.raceTime:0):now/1000,this.follow);this.cullDistantScenery(this.camera);this.renderer.render(this.scene,this.camera);
   }
   screenPosition(id){const g=this.cars.get(id);if(!g)return null;const p=g.position.clone();p.y+=3.3;p.project(this.camera);const r=this.container.getBoundingClientRect();return {x:r.left+(p.x+1)/2*r.width,y:r.top+(1-p.y)/2*r.height};}

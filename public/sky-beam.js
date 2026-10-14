@@ -7,35 +7,37 @@ export function advanceSkyCursor(cursor,move,dt){
 }
 // Keep position and velocity continuous between network updates, using the same
 // critically damped correction as cars. This is visual only; never predict a hit.
-export function smoothSkyTarget(previous,target,dt,timing){
-  const timed=Number.isFinite(timing?.sampleTime)&&Number.isFinite(timing?.renderTime);
-  if(!previous||Math.hypot(target.x-previous.x,target.z-previous.z)>60){
-    previous={x:target.x,z:target.z,vx:0,vz:0};
-    if(timed)previous.sample={x:target.x,z:target.z,time:timing.sampleTime};
-    return previous;
-  }
-  let desired=target,velocity={x:0,z:0};
-  if(timed){
-    const sample=previous.sample;
-    if(sample&&timing.sampleTime>sample.time){
-      const elapsed=(timing.sampleTime-sample.time)/1000;
-      let vx=elapsed<=.25?(target.x-sample.x)/elapsed:0,vz=elapsed<=.25?(target.z-sample.z)/elapsed:0;
-      const limit=Math.min(1,120/Math.max(1,Math.hypot(vx,vz)));vx*=limit;vz*=limit;
-      previous.targetVelocity={x:vx,z:vz};
-    }
-    if(!sample||timing.sampleTime>sample.time)previous.sample={x:target.x,z:target.z,time:timing.sampleTime};
-    const age=Math.max(0,timing.renderTime-timing.sampleTime)/1000,lead=Math.min(.15,age),v=previous.targetVelocity||velocity;
-    desired={x:target.x+v.x*lead,z:target.z+v.z*lead};
-    if(age<.15)velocity=v;
-  }
-  // Solve relative to a moving target. Easing toward held 20 Hz positions
-  // preserves continuity but still creates periodic speed pulses.
+export function smoothSkyTarget(previous,target,dt){
+  if(!previous||Math.hypot(target.x-previous.x,target.z-previous.z)>60)return {x:target.x,z:target.z,vx:0,vz:0};
   const omega=24,decay=Math.exp(-omega*dt);
-  for(const [axis,rate]of [['x','vx'],['z','vz']]){
-    const targetRate=velocity[axis],offset=previous[axis]-(desired[axis]-targetRate*dt),v=previous[rate]-targetRate,c=v+omega*offset;
-    previous[axis]=desired[axis]+(offset+c*dt)*decay;previous[rate]=targetRate+(v-omega*c*dt)*decay;
+  for(const [axis,velocity]of [['x','vx'],['z','vz']]){
+    const offset=previous[axis]-target[axis],v=previous[velocity],c=v+omega*offset;
+    previous[axis]=target[axis]+(offset+c*dt)*decay;previous[velocity]=(v-omega*c*dt)*decay;
   }
   return previous;
+}
+// Remote aiming is visual only: a short playback buffer trades a little marker
+// latency for smooth movement without guessing noisy camera-relative velocities.
+export class SkyTargetPlayback{
+  constructor(){this.samples=[];this.cursor=null;}
+  push(target,time){
+    if(!Number.isFinite(time)||time<=(this.samples.at(-1)?.time??-Infinity))return;
+    if(this.samples.length&&Math.hypot(target.x-this.samples.at(-1).x,target.z-this.samples.at(-1).z)>60){this.samples=[];this.cursor=null;}
+    this.samples.push({x:target.x,z:target.z,time});if(this.samples.length>12)this.samples.shift();
+  }
+  sample(time){
+    if(!this.samples.length)return null;
+    const first=this.samples[0],last=this.samples.at(-1);
+    this.cursor=Math.max(this.cursor??first.time,Math.min(time-140,last.time));
+    let index=this.samples.findIndex(p=>p.time>=this.cursor);if(index<0)return last;if(index===0)return first;
+    const a=this.samples[index-1],b=this.samples[index],p=this.samples[index-2]||a,n=this.samples[index+1]||b,span=b.time-a.time,t=(this.cursor-a.time)/span,t2=t*t,t3=t2*t,result={};
+    for(const axis of ['x','z']){
+      const m0=(b[axis]-p[axis])/(b.time-p.time),m1=(n[axis]-a[axis])/(n.time-a.time);
+      const value=(2*t3-3*t2+1)*a[axis]+(t3-2*t2+t)*span*m0+(-2*t3+3*t2)*b[axis]+(t3-t2)*span*m1;
+      result[axis]=Math.max(Math.min(a[axis],b[axis]),Math.min(Math.max(a[axis],b[axis]),value));
+    }
+    return result;
+  }
 }
 // A bright descending core, a softer sheath and orbiting ion knots are one
 // group; all geometry is owned by the strike and released at impact.
@@ -83,8 +85,12 @@ export class SkyBeamView{
     const present=new Set(),time=state?.combatTime??state?.time??0,roundKey=state?.code+':'+state?.round+':'+state?.trackId;
     if(active)for(const p of state.players){let target=p.id===localId?this.aim:p.skyTarget;if(p.bot||!p.eliminated||!target)continue;
       present.add(p.id);let mesh=this.targets.get(p.id);if(!mesh){mesh=this.marker(p.color);this.targets.set(p.id,mesh);}
-      if(mesh.userData.round!==roundKey){mesh.userData.round=roundKey;mesh.userData.motion=null;mesh.userData.cell=null;}
-      if(p.id!==localId){mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,target,dt,{sampleTime:state.simulationTick!==undefined?state.simulationTick*(1000/60):state.time,renderTime:state.simulationTick!==undefined?state.raceTime*1000:time});target=clampSkyAimToTrack(mesh.userData.motion);}
+      if(mesh.userData.round!==roundKey){mesh.userData.round=roundKey;mesh.userData.motion=null;mesh.userData.playback=new SkyTargetPlayback();mesh.userData.cell=null;}
+      if(p.id!==localId){
+        const sampleTime=state.simulationTick!==undefined?state.simulationTick*(1000/60):state.time,renderTime=state.simulationTick!==undefined?state.raceTime*1000:time;
+        mesh.userData.playback.push(target,sampleTime);const buffered=mesh.userData.playback.sample(renderTime)||target;
+        mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,buffered,dt);target=clampSkyAimToTrack(mesh.userData.motion);
+      }
       const cell=Math.floor(target.x/12)+','+Math.floor(target.z/12);
       if(mesh.userData.cell!==cell){mesh.userData.cell=cell;const vertices=skyPatch(target.x,target.z);let attr=mesh.geometry.attributes.position;if(attr.array.length<vertices.length){attr=new THREE.BufferAttribute(new Float32Array(3*2**Math.ceil(Math.log2(vertices.length/3))),3).setUsage(THREE.DynamicDrawUsage);mesh.geometry.setAttribute('position',attr);}attr.array.set(vertices);attr.needsUpdate=true;mesh.geometry.setDrawRange(0,vertices.length/3);}
       // Use the same dark, high-contrast player targets on every circuit.

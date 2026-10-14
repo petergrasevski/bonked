@@ -32,11 +32,11 @@ test('shield blocks damage and launches for eight seconds',()=>{
   const p=trackAt(.01);Object.assign(a.car,{x:p.x,z:p.z,angle:p.angle});for(let i=0;i<479;i++)stepCar(a.car,NEUTRAL);assert.ok(a.car.shield>0);damageCar(a.car,10);assert.equal(a.car.health,100);stepCar(a.car,NEUTRAL);stepCar(a.car,NEUTRAL);damageCar(a.car,10);assert.equal(a.car.health,90);
 });
 test('railgun instantly pierces multiple aligned cars and leaves a lingering trail',()=>{
-  const a=player('a'),b=player('b',20),c=player('c',40),side=player('side',20,6),r=room(a,b,c,side);fire(r,a,'railgun');assert.equal(b.car.health,25);assert.equal(c.car.health,25);assert.ok(b.car.vy>0&&b.car.vy<15);assert.ok(c.car.vy>0&&c.car.vy<15);assert.equal(side.car.health,100);assert.equal(r.projectiles.length,0);assert.equal(r.effects.find(e=>e.kind==='rail').until,1800);assert.equal(a.car.item,null);
+  const a=player('a'),b=player('b',20),c=player('c',40),side=player('side',20,6),r=room(a,b,c,side);fire(r,a,'railgun');assert.equal(b.car.health,25);assert.equal(c.car.health,25);assert.equal(b.car.vy,0,'fresh chassis resist launch impulses');assert.equal(c.car.vy,0);assert.equal(side.car.health,100);assert.equal(r.projectiles.length,0);assert.equal(r.effects.find(e=>e.kind==='rail').until,1800);assert.equal(a.car.item,null);
 });
 test('three separate mine presses, near-immediate arming and ballistic launch',()=>{
   const a=player('a'),b=player('b',-3.5,1),r=room(a,b);giveWeapon(a.car,'mine');assert.ok(pressWeapon(r,a,0));assert.equal(a.car.ammo,2);
-  updateCombat(r,STEP,99);assert.equal(b.car.health,100);updateCombat(r,STEP,100);assert.equal(b.car.health,72);assert.ok(b.car.vy>=5&&b.car.vy<6);assert.notEqual(b.car.rollVelocity,0);
+  updateCombat(r,STEP,99);assert.equal(b.car.health,100);updateCombat(r,STEP,100);assert.equal(b.car.health,72);assert.equal(b.car.vy,0,'a fresh car does not get launched by its first mine');assert.notEqual(b.car.rollVelocity,0);
   r.players.delete('b');run(r,.25,100);assert.ok(pressWeapon(r,a,350));run(r,.25,350);assert.ok(pressWeapon(r,a,600));assert.equal(a.car.item,null);assert.equal(r.mines.length,2);
 });
 test('mine-like launches can land upright or on a recoverable roof',()=>{
@@ -44,7 +44,7 @@ test('mine-like launches can land upright or on a recoverable roof',()=>{
 });
 test('ball and chain obeys its tether and transfers motion through turns',()=>{
   const a=player('a'),r=room(a);fire(r,a,'chain');const ball=r.chains[0];for(let i=1;i<600;i++){a.car.x+=.3;a.car.z=Math.sin(i*.02)*4;a.car.angle=Math.atan2(Math.cos(i*.02)*.08,.3);a.car.vx=18;a.car.vz=Math.cos(i*.02)*4.8;updateCombat(r,STEP,i*STEP*1000);assert.ok(Math.hypot(ball.x-ball.anchorX,ball.z-ball.anchorZ)<=ball.length+.001);assert.ok(Number.isFinite(ball.vx)&&Math.abs(ball.vx)<100);}assert.ok(Math.abs(ball.vz)>1);
-  const b=player('b',ball.x+.5,ball.z);b.car.y=ball.y-.75;r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.ok(b.car.vy>0&&b.car.vy<15);assert.equal(r.chains.length,0);
+  const b=player('b',ball.x+.5,ball.z);b.car.y=ball.y-.75;r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.equal(b.car.vy,0,'fresh chassis resist launch impulses');assert.equal(r.chains.length,0);
 });
 test('flamethrower has three seconds of held fuel, limited forward reach and continuous damage',()=>{
   const a=player('a'),b=player('b',7),c=player('c',18),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-64)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
@@ -72,4 +72,19 @@ test('all three shotgun barrels deal independent damage with matching visible sh
 });
 test('flame reaches 1.5 times its former range but still respects the far limit',()=>{
   const a=player('a'),near=player('near',15),far=player('far',17),r=room(a,near,far);giveWeapon(a.car,'flame');a.input.fire=true;run(r,1);assert.ok(Math.abs(near.car.health-88)<1e-6);assert.equal(far.car.health,100);
+});
+
+
+test('mines, missiles, railgun and chain use pre-hit damage in the authoritative hit path',()=>{
+  for(const weapon of ['mine','rocket','railgun','chain']){
+    const results=[100,30].map(health=>{
+      const a=player('a'),b=player('b',weapon==='mine'?-3.5:weapon==='chain'?-5:20,weapon==='mine'?1:0),r=room(a,b);b.car.health=health;
+      if(weapon==='chain'){
+        fire(r,a,weapon);const ball=r.chains[0];b.car.x=ball.x+.5;b.car.z=ball.z+.5;b.car.y=ball.y-.75;updateCombat(r,STEP,17);
+      }else{fire(r,a,weapon);if(weapon==='mine')updateCombat(r,STEP,100);else if(weapon==='rocket')run(r,.7);}
+      assert.equal(b.car.health,Math.max(0,health-DAMAGE[weapon]),weapon+' deals its normal damage');return b.car;
+    });
+    assert.equal(results[0].vy,0,weapon+' does not launch a fresh car');assert.ok(results[1].vy>8,weapon+' launches a heavily damaged car');
+    assert.ok(Math.abs(results[1].pitchVelocity)+Math.abs(results[1].rollVelocity)>1,weapon+' transfers angular momentum');
+  }
 });

@@ -1,9 +1,16 @@
 import {DESERT_MOLE_ZONE,DESERT_NARROW} from './desert-features.js';
+// Keep the boost burning after contact, but scale recovery thrust by retained energy.
+export function softenPadBoostImpact(car,speedBefore,speedAfter){
+  if(!(car.padBoostRemaining>0)||speedBefore<1||speedAfter>=speedBefore)return;
+  const retained=Math.max(.1,Math.min(1,speedAfter/speedBefore));
+  car.padBoostPower=Math.max(.1,(car.padBoostPower??1)*retained*retained);
+}
 export const PAD_RAMP=.4,PAD_DECAY=2,PAD_DURATION=PAD_RAMP+PAD_DECAY,PAD_COOLDOWN=1;
 const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 export function boostSpeed(car,dt,topSpeed){
   if(!(car.padBoostRemaining>0))return null;
   car.padBoostRemaining=Math.max(0,car.padBoostRemaining-dt);
+  car.padBoostPower=Math.min(1,(car.padBoostPower??1)+dt*.12);
   const age=PAD_DURATION-car.padBoostRemaining,peak=topSpeed*1.5;
   return age<=PAD_RAMP?car.padBoostFrom+(peak-car.padBoostFrom)*Math.min(1,age/PAD_RAMP):peak+(topSpeed-peak)*smooth((age-PAD_RAMP)/PAD_DECAY);
 }
@@ -50,7 +57,7 @@ export function collectBoostPad(car,pads,raceTime,previous=car){
     if(!touches||interval[0]>interval[1])continue;
     const t=interval[0],x=previous.x+dx*t,z=previous.z+dz*t,y=(previous.y??car.y)+(car.y-(previous.y??car.y))*t,roadY=samplePadRoad(pad.surface,x,z)??pad.y+((x-pad.x)*c+(z-pad.z)*s)*(pad.grade||0);
     if(Math.abs(y-roadY)>.55)continue;
-    car.padBoostFrom=Math.max(0,car.vx*Math.cos(car.angle)+car.vz*Math.sin(car.angle));car.padBoostRemaining=PAD_DURATION;pad.readyAt=raceTime+PAD_COOLDOWN;return pad;
+    car.padBoostFrom=Math.max(0,car.vx*Math.cos(car.angle)+car.vz*Math.sin(car.angle));car.padBoostRemaining=PAD_DURATION;car.padBoostPower=1;pad.readyAt=raceTime+PAD_COOLDOWN;return pad;
   }
   return null;
 }

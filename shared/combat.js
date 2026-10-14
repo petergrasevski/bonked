@@ -1,5 +1,5 @@
 import {shotgunRays,weaponBasis,weaponDirection,weaponMuzzle,rayCar3D,sweepTrackWalls,MUZZLE_HEIGHT} from './weapon-geometry.js';
-import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, launchCar, mineImpulse, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
+import { CAR_LENGTH, TOP_SPEED, TRACK_LENGTH, angleDelta, clamp, damageCar, weaponImpact, rayCar, PICKUP_LOCATIONS, nearestTrack, trackAt, roadSurfaceAt, terrainAt } from './game.js';
 import {PULSE_RADIUS,pulsePush} from './shockwave.js';
 export const WEAPONS = {
   pulse:{name:'Pulse',icon:'◎',ammo:1,hint:'two shockwaves, one second apart'},
@@ -36,13 +36,11 @@ function effect(room,kind,x,z,now,extra={}){if(room.visualOnly&&!room.shotEvent)
 function sound(room,kind,car,now){if(room.visualOnly&&!room.shotEvent)return;room.sounds??=[];room.sounds.push({id:eventId(room,'sound-'+kind),kind,owner:car.owner??players(room).find(p=>p.car===car)?.id??null,x:car.x,y:car.y||0,z:car.z,at:now});if(room.sounds.length>96)room.sounds.shift();}
 function hit(room,p,amount,now,kick={}){
   if(room.visualOnly)return false; // Only the server can award damage or weapon impulses.
-  const c=p.car,protectedByShield=c.shield>0,wasWreck=c.wrecked;
+  const c=p.car,protectedByShield=c.shield>0,wasWreck=c.wrecked,healthBefore=c.health;
   const damaged=damageCar(c,amount);
   if(protectedByShield)effect(room,'shield-hit',c.x,c.z,now,{y:c.y,color:'#66dcff',duration:160});
   if(!damaged)return false;
-  c.vx+=kick.x||0;c.vz+=kick.z||0;c.impactTime=Math.max(c.impactTime,.8);
-  if(kick.mine)mineImpulse(c,kick.side||0,kick.fore||0);
-  else if(kick.up)launchCar(c,kick.up,kick.side||0,kick.fore||0);
+  weaponImpact(c,kick,healthBefore);
   if(!wasWreck&&c.wrecked){c.eliminatedAt=now-room.startAt;c.explosionShown=true;sound(room,'explosion',c,now);effect(room,'explosion',c.x,c.z,now,{y:c.y,duration:1100});}
   else if(amount>=8)effect(room,'hit',c.x,c.z,now,{y:c.y,duration:220});
   return true;
@@ -50,7 +48,7 @@ function hit(room,p,amount,now,kick={}){
 function pulse(room,owner,now){
   const c=room.players.get(owner)?.car;if(!c||c.eliminated)return;
   effect(room,'pulse',c.x,c.z,now,{y:c.y,duration:650,color:'#b681ff',radius:PULSE_RADIUS});
-  for(const p of targets(room,owner)){const dx=p.car.x-c.x,dz=p.car.z-c.z,d=Math.hypot(dx,dz);if(d<PULSE_RADIUS&&Math.abs(p.car.y-c.y)<3){const k=pulsePush(d);hit(room,p,DAMAGE.pulse,now,{x:dx/(d||1)*k,z:dz/(d||1)*k});}}
+  for(const p of targets(room,owner)){const dx=p.car.x-c.x,dz=p.car.z-c.z,d=Math.hypot(dx,dz);if(d<PULSE_RADIUS&&Math.abs(p.car.y-c.y)<3){const k=pulsePush(d);hit(room,p,DAMAGE.pulse,now,{x:dx/(d||1)*k,z:dz/(d||1)*k,fixedImpulse:true});}}
 }
 function projectile(room,p,kind,angle,now){
   const c=p.car,speed=kind==='plasma'?TOP_SPEED*1.5:kind==='machinegun'?350:65,d=weaponDirection(c),muzzle=weaponMuzzle(c);
@@ -113,7 +111,7 @@ export function pressWeapon(room,p,now){
   if(id==='shield'){c.shield=8;effect(room,'shield-hit',c.x,c.z,now,{y:c.y,color:'#66dcff'});}
   if(['rocket','machinegun','plasma'].includes(id))projectile(room,p,id,c.angle,now);
   if(id==='railgun'){
-    for(const {target}of rayHits(room,p,0,150,.25))hit(room,target,DAMAGE.railgun,now,{x:Math.cos(c.angle)*8,z:Math.sin(c.angle)*8,up:7,fore:.12});
+    for(const {target,t}of rayHits(room,p,0,150,.25)){const origin=weaponMuzzle(c,0,0),direction=weaponDirection(c);hit(room,target,DAMAGE.railgun,now,{x:Math.cos(c.angle)*8,z:Math.sin(c.angle)*8,up:7,point:{x:origin.x+direction.x*150*t,y:origin.y+direction.y*150*t,z:origin.z+direction.z*150*t}});}
     beam(room,'rail',c,0,150,now,{color:'#98ecff',duration:1800});
   }
   if(id==='mine'){
@@ -182,7 +180,7 @@ export function updateCombat(room,dt,now){
     if(shot.kind==='machinegun')effect(room,'tracer',oldX,oldZ,now,{y:oldY,toX:shot.x,toY:shot.y,toZ:shot.z,duration:80,color:'#ffe7a3'});
     if(target||hitWall){
       sound(room,shot.kind==='rocket'?'explosion':'impact',shot,now);
-      if(!hitWall)hit(room,target.p,DAMAGE[shot.kind],now,{x:Math.cos(shot.angle)*(shot.kind==='rocket'?12:1),z:Math.sin(shot.angle)*(shot.kind==='rocket'?12:1)});
+      if(!hitWall)hit(room,target.p,DAMAGE[shot.kind],now,{x:Math.cos(shot.angle)*(shot.kind==='rocket'?12:1),z:Math.sin(shot.angle)*(shot.kind==='rocket'?12:1),up:shot.kind==='rocket'?8:0,point:{x:shot.x,y:shot.y,z:shot.z}});
       shot.until=0;if(shot.kind==='rocket')effect(room,'explosion',shot.x,shot.z,now,{y:shot.y,duration:650});
     }
   }
@@ -190,8 +188,8 @@ export function updateCombat(room,dt,now){
   for(const mine of room.mines){if(now<mine.armAt)continue;for(const p of targets(room,null)){
     const c=p.car,along=(c.x-mine.x)*Math.cos(mine.angle||0)+(c.z-mine.z)*Math.sin(mine.angle||0),surfaceY=(mine.y||0)+along*Math.tan(mine.pitch||0);
     if(Math.abs(c.y-surfaceY)>1.4||c.eliminated||Math.hypot(c.x-mine.x,c.z-mine.z)>3)continue;
-    const dx=mine.x-c.x,dz=mine.z-c.z,side=-dx*Math.sin(c.angle)+dz*Math.cos(c.angle),fore=dx*Math.cos(c.angle)+dz*Math.sin(c.angle);
-    hit(room,p,DAMAGE.mine,now,{mine:true,side,fore,x:-dx*.65,z:-dz*.65});mine.until=0;sound(room,'explosion',mine,now);effect(room,'explosion',mine.x,mine.z,now,{y:mine.y,duration:850});break;
+    const dx=mine.x-c.x,dz=mine.z-c.z;
+    hit(room,p,DAMAGE.mine,now,{mine:true,x:-dx*.65,z:-dz*.65,point:{x:mine.x,y:mine.y,z:mine.z}});mine.until=0;sound(room,'explosion',mine,now);effect(room,'explosion',mine.x,mine.z,now,{y:mine.y,duration:850});break;
   }}room.mines=room.mines.filter(m=>m.until>now);
   for(const ball of room.chains){
     const owner=room.players.get(ball.owner),c=owner?.car;if(!c||c.eliminated){ball.dead=true;continue;}
@@ -211,8 +209,8 @@ export function updateCombat(room,dt,now){
     ball.anchorX=anchor.x;ball.anchorY=anchor.y;ball.anchorZ=anchor.z;
     ball.renderVx=(ball.x-previous.x)/dt;ball.renderVy=(ball.y-previous.y)/dt;ball.renderVz=(ball.z-previous.z)/dt;
     for(const p of targets(room,ball.owner)){if(rayCar3D(previous,{x:ball.x-previous.x,y:ball.y-previous.y,z:ball.z-previous.z},p.car,.95)!==null){
-      const dx=p.car.x-ball.x,dz=p.car.z-ball.z,d=Math.hypot(dx,dz)||1,side=-dx*Math.sin(p.car.angle)+dz*Math.cos(p.car.angle);
-      hit(room,p,DAMAGE.chain,now,{x:dx/d*16,z:dz/d*16,up:7,side:side*.4,fore:.4});ball.dead=true;sound(room,'explosion',ball,now);effect(room,'explosion',ball.x,ball.z,now,{y:ball.y,duration:700});break;
+      const dx=p.car.x-ball.x,dz=p.car.z-ball.z,d=Math.hypot(dx,dz)||1;
+      hit(room,p,DAMAGE.chain,now,{x:dx/d*16,z:dz/d*16,up:7,point:{x:ball.x,y:ball.y,z:ball.z}});ball.dead=true;sound(room,'explosion',ball,now);effect(room,'explosion',ball.x,ball.z,now,{y:ball.y,duration:700});break;
     }}
   }room.chains=room.chains.filter(b=>!b.dead);
   room.effects=room.effects.filter(e=>e.until>now);

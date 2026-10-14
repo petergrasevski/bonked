@@ -168,12 +168,13 @@ perfect prediction of unpredictable steering, weapon hits or collisions.
 
 The local spectator cursor remains immediate and screen-anchored to the rendered
 camera. Other players' markers use a separate critically damped visual filter.
-In net-v4 that filter estimates target velocity between authoritative simulation
-ticks and advances toward the rendered race time, avoiding repeated acceleration
-into held 20 Hz target positions. Extrapolation is limited to 150 ms and measured
-speed to 120 game metres/second. Long gaps clear the velocity estimate, and large
-teleports or round changes reset it. Only marker presentation is extrapolated;
-beam positions, firing and hits remain authoritative.
+Remote targets now play authoritative simulation-tick samples through a bounded
+140 ms interpolation buffer, with time-aware cubic interpolation and no prediction
+beyond the latest sample. This avoids magnifying noisy camera-relative target
+velocities. A critically damped spring softens remaining corrections. The cursor
+never rewinds; large teleports and round changes reset playback. Local aiming
+stays immediate. Beam positions, firing and hits remain authoritative; only other
+players' target markers carry the added visual delay.
 
 Lag-report frame events now include displayed `skyTargets` and each car's latest
 authoritative `skyTarget`, allowing target/camera motion to be compared. This adds

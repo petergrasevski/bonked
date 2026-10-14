@@ -30,6 +30,7 @@ export class RoundResults{
     if(this.focusKey!==focusKey){this.focusKey=focusKey;const list=this.find('standings'),own=list.querySelector('.me');if(own)list.scrollLeft+=own.getBoundingClientRect().left-list.getBoundingClientRect().left-(list.clientWidth-own.clientWidth)/2;}
     this.find('results-lobby').hidden=state.host!==myId;
     const ready=this.find('ready');ready.hidden=!!complete;ready.disabled=!!me?.ready;ready.textContent=me?.ready?'Ready ✓':'Ready';
+    const hint=this.find('ready-key-hint');if(hint)hint.hidden=!!complete||!!me?.ready;
     this.find('rematch').hidden=!complete||state.host!==myId;this.find('rematch-hint').textContent=complete&&state.host!==myId?'Waiting for host.':'';
     this.progress(state,serverNow);
   }

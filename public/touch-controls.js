@@ -1,4 +1,4 @@
-// Keep auto-drive out of the countdown: revving early would cause a launch spinout.
+// Touch auto-drive begins at GO; manual countdown revving is optional.
 export function driveThrottle({mobile=false,controllerConnected=false,phase,reverse=false,accelerating=false}={}){
   return reverse?0:(accelerating||(mobile&&!controllerConnected&&phase==='racing'))?1:0;
 }

@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {WebSocket} from 'ws';
 import {botInput} from '../shared/game.js';
+import {botControls} from '../bots.js';
 import {safeGridStartFraction} from '../shared/starting-grid.js';
 const port=33211,base=`http://127.0.0.1:${port}`;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -34,9 +35,17 @@ test('eight real socket clients: lobby, authority, reconnect, elimination, share
   await until(()=>host.state.phase==='racing',5000);
   for(const p of host.state.players)for(const key of ['renderVx','renderVz','renderRise','renderTurn','renderPitch','renderRoll','renderProgress'])assert.ok(Number.isFinite(p[key]),`snapshot carries measured ${key}`);
   const eliminations=new Set();
-  let snapshots=0,lastTime=0,pickups=0;const driveUntil=Date.now()+6000;
-  driving=setInterval(()=>{for(const c of racers){const p=c.state?.players.find(p=>p.id===c.welcome.id);if(!p)continue;if(c!==host&&Date.now()>driveUntil)continue;c.seq=Math.max(c.seq,p.seq)+1;c.send({type:'input',seq:c.seq,...botInput(p)});if(p.item){pickups++;if(c===host)c.send({type:'item'});}}for(const event of host.state.sounds||[])if(event.kind==='elimination')eliminations.add(event.owner);if(host.state.time!==lastTime){snapshots++;lastTime=host.state.time;}},1000/60);
-  await until(()=>host.state.phase==='finished',55000);clearInterval(driving);
+  let snapshots=0,lastTime=0,pickups=0;const driveUntil=Date.now()+6000;let leadDriver=host;
+  // After peers stop, a surviving driver keeps racing with real recovery/avoidance.
+  // Random combat must not leave only parked cars after the original host is hit.
+  function drivingInput(c,p){
+    if(c!==leadDriver||Date.now()<=driveUntil)return botInput(p);
+    const room={raceTime:c.state.raceTime,players:new Map(c.state.players.map(car=>[car.id,{id:car.id,car}])),pickups:[],boostPads:[],mines:c.state.mines};
+    const driver=c.testDriver??={};driver.id=p.id;driver.car=p;driver.fireLatch=p.fireLatch;
+    return {...botControls(room,driver,Date.now(),()=>.5),fire:false,nudge:0};
+  }
+  driving=setInterval(()=>{if(!host.state.players.some(p=>p.id===leadDriver?.welcome.id&&!p.eliminated))leadDriver=racers.find(c=>host.state.players.some(p=>p.id===c.welcome.id&&!p.eliminated));for(const c of racers){const p=c.state?.players.find(p=>p.id===c.welcome.id);if(!p)continue;if(c!==leadDriver&&Date.now()>driveUntil)continue;c.seq=Math.max(c.seq,p.seq)+1;c.send({type:'input',seq:c.seq,...drivingInput(c,p)});if(p.item){pickups++;if(c===host)c.send({type:'item'});}}for(const event of host.state.sounds||[])if(event.kind==='elimination')eliminations.add(event.owner);if(host.state.time!==lastTime){snapshots++;lastTime=host.state.time;}},1000/60);
+  await until(()=>host.state.phase==='finished',55000).catch(error=>{throw new Error('Round did not finish: '+JSON.stringify(host.state.players.map(p=>({id:p.id,eliminated:p.eliminated,overturned:p.overturned,health:p.health,speed:Math.hypot(p.vx,p.vz),progress:p.progress}))),{cause:error});});clearInterval(driving);
   assert.ok(eliminations.size>0,'death-line eliminations must reach clients as sound events');
   const winner=host.state.players.find(p=>p.id===host.state.winnerId);
   assert.ok(snapshots>100,'server should continuously send snapshots');assert.ok(pickups>0,'drivers collect and use items');assert.equal(host.state.players.filter(p=>p.eliminated).length,7);assert.equal(host.state.winnerId,host.state.players.find(p=>!p.eliminated).id);assert.ok(winner.finished);assert.ok(host.state.camera.pitch>=26*Math.PI/180&&host.state.camera.pitch<=70*Math.PI/180);assert.ok(Number.isFinite(host.state.camera.from)&&host.state.camera.to>host.state.camera.from);assert.ok(host.state.chase.active);

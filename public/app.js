@@ -135,7 +135,7 @@ function connect(){
       clientUpdates.apply();
     }
   });
-  ws.addEventListener('close',event=>{window.bonkedStartup?.connected(false);optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4000){idleDisconnected=true;resuming=false;clearRoom();setConnection(false,'IDLE');toast('Disconnected after 2 minutes idle. Tap to reconnect.');return;}if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
+  ws.addEventListener('close',event=>{window.bonkedStartup?.connected(false);optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4000){idleDisconnected=true;resuming=false;clearRoom();setConnection(false,'IDLE');toast('Disconnected after 10 minutes idle. Tap to reconnect.');return;}if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
   ws.addEventListener('error',()=>{});
 }
 connect();
@@ -155,7 +155,8 @@ function reconcileSnapshot(msg,receivedAt,now){
   const old=oldFleet.find(p=>p.id===myId);if(old&&msg.phase==='racing')network.add('correctionM',Math.hypot(old.x-predicted.x,old.z-predicted.z));
   const fleet=[predicted,...predictedOthers],fleetCorrectionM=Math.max(0,...fleet.map(p=>{const old=oldFleet.find(o=>o.id===p.id);return old?Math.hypot(old.x-p.x,old.z-p.z):0;}));
   lagRecorder.add('snapshot',{receivedAt,serverTime:msg.time,raceTime:msg.raceTime,phase:msg.phase,track:msg.trackId,round:msg.round,ack:me.seq,pending:pending.length,replaySteps:replay.length,serverTick,predictionTick:predictionClock.tick,clockRate:predictionClock.rate,clockRebases:predictionClock.rebases,predictionLeadMs:((predicted.raceTime||0)-(msg.raceTime||0))*1000,fleetCorrectionM});
-  corrections.reconcile(oldFleet,fleet,msg.phase==='racing'?predictionClock.remainder:0,beforeRemainder);
+  if(msg.phase==='countdown')corrections.reset();
+  else corrections.reconcile(oldFleet,fleet,msg.phase==='racing'?predictionClock.remainder:0,beforeRemainder);
 }
 function updateEntryButtons(){$('create').disabled=entryBusy;$('join').disabled=entryBusy||!/^[A-Z]{3}$/.test($('code').value);}
 function setBusy(busy){entryBusy=busy;updateEntryButtons();}
@@ -177,7 +178,7 @@ $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.c
 const itemMeta=WEAPONS;
 function onPhaseChange(previousPhase){
   const playing=state&&state.phase!=='lobby';$('how-to-play-open').hidden=playing;document.body.classList.toggle('playing',playing);$('race-ui').hidden=!playing;$('entry-panel').hidden=!!state;$('room-panel').hidden=!state;$('results').hidden=state?.phase!=='finished';if(!(previousPhase==='countdown'&&state?.phase==='racing'))releaseControls();pending=[];
-  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
+  if(state?.phase==='countdown'){snapshotToReconcile={state,at:lastState};predicted=null;predictedOthers=[];history=[];world?.resetRound();corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};predictedOthers=state.players.filter(p=>p.id!==myId).map(p=>({...p}));}
   if(state?.phase==='finished')renderResults();
 }
 function node(tag,className,text){const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;}

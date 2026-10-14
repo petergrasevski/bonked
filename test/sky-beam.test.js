@@ -6,7 +6,7 @@ import {updateSkyBeams,resetSkyBeams,sanitizeSkyAim,SKY_DELAY,SKY_COOLDOWN} from
 import {skyGroundAt,skyRayGround,skyPatch} from '../shared/sky-ground.js';
 import {pulsePush,PULSE_RADIUS} from '../shared/shockwave.js';
 import * as THREE from 'three';
-import {SkyBeamView,advanceSkyCursor,smoothSkyTarget} from '../public/sky-beam.js';
+import {SkyBeamView,advanceSkyCursor,smoothSkyTarget,SkyTargetPlayback} from '../public/sky-beam.js';
 import {readController} from '../public/controller.js';
 import {joystickVector} from '../public/touch-controls.js';
 function scene(){
@@ -112,31 +112,23 @@ test('uneven 20 Hz target updates move continuously at 30/60/120 Hz without pack
   }
 });
 
-test('remote targets advance on the race clock without 20Hz speed pulses',()=>{
+test('buffered remote targets move steadily through uneven arrivals at 30/60/120Hz',()=>{
  for(const hz of [30,60,120]){
-  const dt=1/hz;let pose,last,sample=0,nextPacket=0,previous;
-  const speeds=[];
+  const playback=new SkyTargetPlayback(),dt=1/hz;let pose,previous,packet=0;const speeds=[];
   for(let frame=0;frame<hz*5;frame++){
    const now=frame*dt*1000;
-   while(nextPacket+15+[0,9,2,13][Math.round(nextPacket/50)%4]<=now){sample=nextPacket;nextPacket+=50;}
-   pose=smoothSkyTarget(pose,{x:sample*.03,z:sample*-.015},dt,{sampleTime:sample,renderTime:now+25});
-   if(previous&&now>1000)speeds.push((pose.x-previous.x)/dt);
-   previous={...pose};
+   while(packet*50+15+[0,9,2,13][packet%4]<=now){playback.push({x:packet*1.5,z:-packet*.75},packet*50);packet++;}
+   const target=playback.sample(now+25);if(!target)continue;pose=smoothSkyTarget(pose,target,dt);
+   if(previous&&now>1000)speeds.push((pose.x-previous.x)/dt);previous={...pose};
   }
-  const rms=Math.sqrt(speeds.reduce((n,v)=>n+(v-30)**2,0)/speeds.length);
-  assert.ok(rms<.1,`${hz}Hz speed error ${rms}`);
-  assert.ok(Math.min(...speeds)>29&&Math.max(...speeds)<31);
+  const rms=Math.sqrt(speeds.reduce((n,v)=>n+(v-30)**2,0)/speeds.length);assert.ok(rms<.1,`${hz}Hz error ${rms}`);
  }
 });
-test('timed remote target extrapolation is bounded during loss and resets on teleports',()=>{
- let pose=smoothSkyTarget(null,{x:0,z:0},0,{sampleTime:0,renderTime:0});
- pose=smoothSkyTarget(pose,{x:1.5,z:0},1/60,{sampleTime:50,renderTime:60});
- for(let frame=0;frame<180;frame++)pose=smoothSkyTarget(pose,{x:1.5,z:0},1/60,{sampleTime:50,renderTime:60+frame*1000/60});
- assert.ok(pose.x<=6.001&&pose.x>=1.5,'extrapolation never runs beyond 150ms');
- const reset=smoothSkyTarget(pose,{x:200,z:0},1/60,{sampleTime:10000,renderTime:10000});
- assert.equal(reset.x,200);assert.equal(reset.vx,0);assert.equal(reset.targetVelocity,undefined);
+test('remote target playback is bounded during loss, cannot rewind, and resets on teleport',()=>{
+ const playback=new SkyTargetPlayback();playback.push({x:0,z:0},0);playback.push({x:1.5,z:0},50);
+ assert.equal(playback.sample(10000).x,1.5);assert.equal(playback.sample(0).x,1.5);
+ playback.push({x:200,z:0},10000);assert.equal(playback.sample(10000).x,200);
 });
-
 test('remote marker view uses authoritative sample ticks and the rendered race clock',()=>{
  selectTrack('ice');const road=trackAt(.12),view=new SkyBeamView(new THREE.Scene());
  const camera=new THREE.PerspectiveCamera(58,1,.2,1000),frame={x:road.x,z:road.z,spread:10};
@@ -145,8 +137,8 @@ test('remote marker view uses authoritative sample ticks and the rendered race c
  view.update(state,'local',camera,frame,{x:0,y:0},1/60);
  state.simulationTick=63;state.raceTime=1.08;remote.skyTarget={x:road.x+1.5,z:road.z};
  view.update(state,'local',camera,frame,{x:0,y:0},1/60);
- const motion=view.targets.get('remote').userData.motion;
- assert.equal(motion.sample.time,1050);assert.ok(Math.abs(motion.targetVelocity.x-30)<1e-8);
+ const playback=view.targets.get('remote').userData.playback;
+ assert.equal(playback.samples.at(-1).time,1050);assert.equal(playback.samples.length,2);
  assert.deepEqual(remote.skyTarget,{x:road.x+1.5,z:road.z},'presentation never changes the server target');
  view.update(null,'local',camera,frame,{x:0,y:0},1/60);assert.equal(view.targets.size,0);
 });
