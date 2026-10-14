@@ -436,6 +436,12 @@ export function stepCar(car, input, dt=STEP) {
   if(uncontrolled){
     const drag=car.y-(car.groundY||0)>.05||car.falling?.15:car.wrecked?2.4:3;
     car.vx*=Math.exp(-drag*dt);car.vz*=Math.exp(-drag*dt);car.angle+=car.yawVelocity*dt;
+    if(activeTrack.id==='desert'&&car.rampFlight&&!car.mineFlight&&!spinStep&&!car.wrecked&&!car.overturned&&!car.falling&&!car.finished&&car.y-(car.groundY||0)>.05){
+      // Gentle jump correction: about 13 degrees/s of heading and 7 degrees/s
+      // of travel at full steering. Rotate momentum without adding speed/lift.
+      const turn=car.steering*dt,courseTurn=turn*.125,c=Math.cos(courseTurn),s=Math.sin(courseTurn),vx=car.vx;
+      car.angle+=turn*.225;car.vx=vx*c-car.vz*s;car.vz=vx*s+car.vz*c;
+    }
   }else{
     if(car.finished)input=NEUTRAL;
     let c=Math.cos(car.angle),s=Math.sin(car.angle);
