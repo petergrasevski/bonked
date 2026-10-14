@@ -1,3 +1,4 @@
+import {isCoastalBeach} from '/shared/coastal-barriers.js';
 import {SceneMaterials} from './scene-materials.js';
 import {StaticShadows} from './static-shadows.js';
 import {DistanceFade,sceneRange} from './scene-distance.js';
@@ -153,7 +154,7 @@ export class World{
     if(activeTrack.id==='ice')buildIceShelf(this);
     else for(const side of [-1,1]){
       const vertices=[];for(let i=0;i<SEGMENTS.length;i++){const p=SEGMENTS[i],q=SEGMENTS[(i+1)%SEGMENTS.length],off=side*(p.halfWidth+.6),offQ=side*(q.halfWidth+.6);
-        if(activeTrack.id==='coast'&&!hasBarrier((p.start+p.len*.5)/TRACK_LENGTH,side))continue;
+        if(activeTrack.id==='coast'&&isCoastalBeach((p.start+p.len*.5)/TRACK_LENGTH))continue;
         const points=[[p.x+p.nx*off,p.y-.18,p.z+p.nz*off],[q.x+q.nx*offQ,q.y-.18,q.z+q.nz*offQ],[p.x+p.nx*off,p.y-2,p.z+p.nz*off],[q.x+q.nx*offQ,q.y-2,q.z+q.nz*offQ]];for(const j of [0,1,2,1,3,2])vertices.push(...points[j]);}
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geo.computeVertexNormals();const mat=this.mat(C.cliff);mat.side=THREE.DoubleSide;this.mesh(geo,mat);
     }

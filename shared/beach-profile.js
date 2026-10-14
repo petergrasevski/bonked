@@ -1,3 +1,4 @@
+import {isCoastalBeach} from './coastal-barriers.js';
 // Shared between the visible coast, its collision mesh and the ocean swash.
 // The bank meets the sandy road at its top, then curves down to the seabed.
 export const BEACH_STEPS=12;
@@ -15,7 +16,9 @@ export function beachSegments(ctx){
   const pairs=[];
   for(const side of [-1,1])for(let i=0;i<ctx.segments.length;i++){
     const a=ctx.segments[i],b=ctx.segments[(i+1)%ctx.segments.length];
-    if(!ctx.hasBarrier((a.start+a.len*.5)/ctx.trackLength,side))pairs.push({a,b,side});
+    // Bumper openings on asphalt keep the sheer causeway edge; only the
+    // original beach sections grow sand banks.
+    if(isCoastalBeach((a.start+a.len*.5)/ctx.trackLength))pairs.push({a,b,side});
   }
   return pairs;
 }

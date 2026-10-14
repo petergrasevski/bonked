@@ -1,3 +1,4 @@
+import {isCoastalBeach} from '../shared/coastal-barriers.js';
 import {useBakedNoise,noise2DGLSL} from './baked-noise.js';
 import * as THREE from 'three';
 import {hasBarrier,TRACK_LENGTH,getLandscape} from '../shared/game.js';
@@ -79,7 +80,7 @@ export function createCoastalWater(track,segments,fog,lighting,landforms=[]){
   const put=(corners)=>{for(const j of [0,1,2,1,3,2]){vertices.push(...corners[j].p);uv.push(...corners[j].uv);}};
   for(const side of [-1,1])for(let i=0;i<segments.length;i++){
     const a=segments[i],b=segments[(i+1)%segments.length];
-    if(!hasBarrier((a.start+a.len*.5)/TRACK_LENGTH,side))continue;
+    if(isCoastalBeach((a.start+a.len*.5)/TRACK_LENGTH))continue;
     const corners=[];
     for(const [s,distance]of [[a,a.start],[b,a.start+a.len]])for(const edge of [0,1]){const offset=(s.halfWidth+.65+edge*3.4)*side;corners.push({p:[s.x+s.nx*offset,-2.06,s.z+s.nz*offset],uv:[distance/5,edge]});}
     put(corners);

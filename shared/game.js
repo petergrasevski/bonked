@@ -1,4 +1,5 @@
-import {COAST_BEACH_SECTIONS,coastalCrabs,collideCrabs} from './coastal-crabs.js';
+import {coastalHasBarrier} from './coastal-barriers.js';
+import {coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
 import {boostLayout,boostSpeed} from './boost-pads.js';
 import {stepRollover,shoveRollover} from './rollover.js';
@@ -108,7 +109,7 @@ export function hasBarrier(fraction,side=0,inner=false){
   }
   if(inner)return false;
   if(activeTrack.id==='desert')return desertHasBarrier(fraction);
-  const section=Math.floor(((fraction%1+1)%1)*24);return !COAST_BEACH_SECTIONS.includes(section);
+  return coastalHasBarrier(fraction,side);
 }
 export function selectTrack(id='coast'){
   if(!Object.hasOwn(TRACKS,id))throw new Error('Unknown track');
@@ -397,8 +398,8 @@ export function constrainRoad(car){
   }
   if(t.distance>t.halfWidth+.6){supportRoad(car,t);return t;}
   const extent=Math.abs(Math.cos(car.angle)*t.nx+Math.sin(car.angle)*t.nz)*CAR_LENGTH/2+Math.abs(-Math.sin(car.angle)*t.nx+Math.cos(car.angle)*t.nz)*CAR_WIDTH/2;
-  const limit=t.halfWidth-extent;
-  if(car.y-t.y<1.4&&hasBarrier(t.fraction)&&t.distance>limit){
+  const limit=t.halfWidth-extent,side=(car.x-t.x)*t.nx+(car.z-t.z)*t.nz<0?-1:1;
+  if(car.y-t.y<1.4&&hasBarrier(t.fraction,side)&&t.distance>limit){
     const nx=(car.x-t.x)/(t.distance||1),nz=(car.z-t.z)/(t.distance||1);
     car.x=t.x+nx*limit;car.z=t.z+nz*limit;
     const impact=car.vx*nx+car.vz*nz;
