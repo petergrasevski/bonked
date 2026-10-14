@@ -14,6 +14,7 @@ import {buildSceneryDetails} from './scenery-details.js';
 import {createTyreTracks} from './tyre-tracks.js';
 import {createCarShadows} from './car-shadows.js';
 import {createNudgeEffects} from './nudge-effects.js';
+import {createEliminationLine} from './elimination-line.js';
 import {SkyBeamView} from './sky-beam.js';
 import {skySurfaces} from '/shared/sky-ground.js';
 import {rolloverLift} from '/shared/rollover.js';
@@ -259,12 +260,7 @@ export class World{
     }
   }
   buildEliminationLine(){
-    this.deadline=new THREE.Group();
-    const glow=new THREE.MeshBasicMaterial({color:0xff443d,transparent:true,opacity:.25,side:THREE.DoubleSide,depthWrite:false});
-    this.box(0,.15,0,1.2,.12,ROAD_WIDTH+2,new THREE.MeshBasicMaterial({color:0xff514f}),this.deadline);
-    this.box(0,2.0,0,.1,4,ROAD_WIDTH+2,glow,this.deadline);
-    for(const side of [-1,1])this.cylinder(0,2,side*(ROAD_WIDTH/2+1),.15,.15,4,0xff514f,6,this.deadline);
-    this.scene.add(this.deadline);this.deadline.visible=false;
+    this.deadline=createEliminationLine();this.scene.add(this.deadline);this.deadline.visible=false;
   }
   followFrame(frame,dt,cars){
     const aspect=this.container.clientWidth/Math.max(1,this.container.clientHeight);

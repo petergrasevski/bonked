@@ -82,6 +82,7 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
       <div class="settings-column settings-audio">
         <div class="audio-volume"><label for="effects-volume">Sound effects</label><output id="effects-volume-value" for="effects-volume">40%</output><input id="effects-volume" type="range" min="0" max="100" step="1" value="40"></div>
         <div class="audio-volume"><label for="music-volume">Music</label><output id="music-volume-value" for="music-volume">100%</output><input id="music-volume" type="range" min="0" max="100" step="1" value="100"></div>
+        <button id="how-to-play-settings" class="setting-row">How to play <span>?</span></button>
         <button id="change-circuit" class="setting-row" hidden>Change circuit</button>
         <button id="exit-race" class="setting-row">Leave race <span>↗</span></button>
       </div>
@@ -99,7 +100,19 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
 </div>
 <div id="dialog" class="modal-backdrop" hidden><section class="modal"><button id="close-dialog" class="close" aria-label="Close dialog"></button><div id="dialog-body"></div></section></div>
 <div id="install-guide" class="modal-backdrop" hidden><section class="modal install-card" role="dialog" aria-modal="true" aria-labelledby="install-title"><img src="/icons/bonked-game-192.png" width="56" height="56" alt=""><h2 id="install-title"></h2><p id="install-intro"></p><ol id="install-steps"></ol><p id="install-note"></p><div class="install-actions"><button id="install-native" class="primary" hidden>Install app</button><button id="install-fullscreen" class="secondary" hidden>Enter fullscreen</button><button id="install-continue" class="secondary">Continue in browser</button></div></section></div>
-<div id="party-bar"><button id="voice-toggle" hidden aria-pressed="false" aria-label="Enable microphone" title="Enable microphone"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/><path class="mic-slash" d="M3 3l18 18"/></svg></button><button id="audio-toggle" aria-pressed="false" aria-label="Mute game audio" title="Mute game audio (voice chat stays on)"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M11 4 6 8H3v8h3l5 4Z"/><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/><path class="speaker-slash" d="M3 3l18 18"/></svg></button></div><div id="controller-status"></div><div id="toast" role="status"></div><div id="rotate-hint" role="alert"><div class="rotate-phone">↻</div><h2>Rotate your phone</h2><p>Landscape required.</p></div>
+<div id="how-to-play" class="modal-backdrop" hidden>
+  <section class="modal how-to-play-card" role="dialog" aria-modal="true" aria-labelledby="how-to-play-title">
+    <button class="close" aria-label="Close how to play"></button>
+    <div class="help-heading"><span class="eyebrow">BONKED</span><h2 id="how-to-play-title">How to play</h2><p data-help-copy="drive"></p></div>
+    <div class="help-grid">
+      <article class="help-step"><div class="help-visual" data-help-visual="objective"></div><div><span class="help-number">01</span><h3>Last car standing</h3><p>Be the last car alive each round. Earn points to win the tournament.</p></div></article>
+      <article class="help-step"><div class="help-visual" data-help-visual="weapon"></div><div><span class="help-number">02</span><h3>Grab a weapon</h3><p>Drive into a pickup. <span data-help-copy="weapon"></span></p></div></article>
+      <article class="help-step"><div class="help-visual" data-help-visual="line"></div><div><span class="help-number">03</span><h3>Keep up</h3><p>Fall behind the red death line and you’re out.</p></div></article>
+      <article class="help-step"><div class="help-visual" data-help-visual="sky"></div><div><span class="help-number">04</span><h3>Out? Bonk from above.</h3><p>Use the sky beam to shove cars around. <span data-help-copy="sky"></span></p></div></article>
+    </div>
+  </section>
+</div>
+<div id="party-bar"><button id="how-to-play-open" aria-label="How to play" title="How to play">?</button><button id="voice-toggle" hidden aria-pressed="false" aria-label="Enable microphone" title="Enable microphone"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/><path class="mic-slash" d="M3 3l18 18"/></svg></button><button id="audio-toggle" aria-pressed="false" aria-label="Mute game audio" title="Mute game audio (voice chat stays on)"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M11 4 6 8H3v8h3l5 4Z"/><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/><path class="speaker-slash" d="M3 3l18 18"/></svg></button></div><div id="controller-status"></div><div id="toast" role="status"></div><div id="rotate-hint" role="alert"><div class="rotate-phone">↻</div><h2>Rotate your phone</h2><p>Landscape required.</p></div>
 <script>
 import('/startup.js').then(({start})=>start()).catch(error=>{
   console.error('Bonked loader failed',error);

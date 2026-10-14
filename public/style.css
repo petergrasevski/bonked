@@ -358,3 +358,18 @@ body.playing #menu-fps{display:none}
 #render-debug{display:grid;gap:8px}#render-debug .setting-row{letter-spacing:0}
 #render-stats{white-space:pre-line;font-size:11px;line-height:1.5;color:#cbd7df;font-variant-numeric:tabular-nums}
 .settings-card .render-help{font-size:10px;line-height:1.4;color:#9db0bd;margin:0}
+
+/* Short, live-model onboarding. Uses the same metal panel as settings. */
+#how-to-play{z-index:24}
+.how-to-play-card{width:min(900px,96vw);padding:28px 30px;max-height:92dvh}
+.help-heading{padding-right:36px;margin-bottom:22px}.help-heading .eyebrow{color:#e9aa64;font-size:10px;letter-spacing:2px}
+.how-to-play-card h2{margin:5px 0 7px;font-size:32px}.help-heading p{margin:0;color:#9fb3c0;font-size:12px}
+.help-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.help-step{display:grid;grid-template-columns:145px 1fr;gap:17px;align-items:center;min-height:156px;padding:14px;border:1px solid #718b9d36;background:#0c1b2590}
+.help-visual{width:145px;aspect-ratio:320/208;border-radius:3px;overflow:hidden;background:#10212c}.help-visual canvas{display:block;width:100%;height:100%}
+.help-number{color:#e9aa64;font-size:10px;font-weight:700;letter-spacing:1px}.help-step h3{font-family:Righteous,system-ui,sans-serif;font-weight:400;font-size:17px;line-height:1.25;margin:5px 0 9px;color:#f1f5f5}.help-step p{margin:0;font-size:13px;line-height:1.5;color:#b9cbd4}
+#how-to-play-open{display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid #ffffff40;background:#10202bea;color:#dce9e5;border-radius:50%;font-size:24px;font-weight:600}
+#how-to-play-open[hidden]{display:none}
+@media(max-width:700px){.help-step{grid-template-columns:110px 1fr;gap:12px;padding:12px}.help-visual{width:110px}.help-step h3{font-size:15px}.help-step p{font-size:12px}.how-to-play-card{padding:22px}.help-grid{gap:10px}}
+@media(max-width:540px) and (orientation:portrait){.help-grid{grid-template-columns:1fr}.help-step{min-height:110px}.how-to-play-card{padding:20px}.help-heading{margin-bottom:14px}.how-to-play-card h2{font-size:27px}}
+@media(max-height:560px) and (orientation:landscape){.how-to-play-card{width:min(850px,96vw);padding:16px 22px}.help-heading{margin-bottom:10px}.how-to-play-card h2{font-size:25px;margin:2px 0 4px}.help-heading .eyebrow{display:none}.help-grid{gap:8px}.help-step{min-height:112px;padding:10px;grid-template-columns:105px 1fr;gap:10px}.help-visual{width:105px}.help-step h3{font-size:15px;margin:3px 0 5px}.help-step p{font-size:11px}.help-heading p{font-size:11px}}

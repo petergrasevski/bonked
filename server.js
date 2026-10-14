@@ -1,6 +1,7 @@
 import {safeGridStartFraction,randomGridSlots} from './shared/starting-grid.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
 import {clientRevision,assetHeaders,matchesETag} from './server-assets.js';
+import {PlayerActivity} from './server-activity.js';
 import {DeploymentGate} from './server-deployment.js';
 import {VoiceRelayBudget} from './server-voice.js';
 import {botControls} from './bots.js';
@@ -101,6 +102,7 @@ voiceWss.on('connection',ws=>{
     // Discard excess frames instead of disconnecting both sending and listening.
     // Refill continuously so an ordinary microphone resumes without a retry.
     if(!audioBudget.take(performance.now()))return;
+    connections.get(player.ws)?.activity.voice(data,Date.now());
     const frame=Buffer.allocUnsafe(641);frame[0]=COLORS.indexOf(player.color);data.copy(frame,1);
     for(const peer of room.players.values())if(peer!==player&&peer.ws&&peer.voice?.readyState===WebSocket.OPEN&&peer.voice.bufferedAmount<8192)peer.voice.send(frame);
   });
@@ -137,11 +139,13 @@ wss.on('connection',(ws,req)=>{
   // Browsers must connect from the same origin; non-browser test clients have no Origin.
   if(req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host){ws.close(1008,'Origin rejected');return;}}catch{ws.close(1008);return;}}
   if(wss.clients.size>650){ws.close(1013,'Server full');return;}
-  const client={diagnosticId:randomBytes(3).toString('hex'),ws,room:null,player:null,alive:true,budget:0,window:Date.now()};connections.set(ws,client);
+  const client={diagnosticId:randomBytes(3).toString('hex'),ws,room:null,player:null,alive:true,activity:new PlayerActivity(Date.now()),budget:0,window:Date.now()};connections.set(ws,client);
   ws.on('error',()=>{});ws.on('pong',()=>{client.alive=true;if(client.pingAt)diagnostics.ping.add(performance.now()-client.pingAt);});
   ws.on('message',data=>{
     const now=Date.now();if(now-client.window>1000){client.window=now;client.budget=0;}if(++client.budget>150){ws.close(1008,'Too many messages');return;}
     let msg;try{msg=JSON.parse(data);}catch{return fail(ws,'Invalid message.');}if(!msg||typeof msg!=='object')return;
+    client.activity.message(msg.type,now);
+    if(msg.type==='activity')return;
     if(msg.type==='ping')return send(ws,{type:'pong',sent:msg.sent,time:now,diagnostics:diagnostics.last});
     if(msg.type==='server-pong'){if(msg.id===client.appPingId&&client.appPingAt){client.applicationRttMs=performance.now()-client.appPingAt;diagnostics.applicationPing.add(client.applicationRttMs);client.appPingAt=null;}return;}
     if(msg.type==='net-report'){diagnostics.client(client,msg.metrics,now);return;}
@@ -239,7 +243,7 @@ const timer=setInterval(()=>{
   for(const room of publishRooms)if(rooms.has(room.code))publish(room);
 },8);
 const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),10000);
-const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});if(!c.room&&Date.now()-c.window>60000)c.ws.close(1000,'Idle');}},10000);
+const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(c.activity.expired(Date.now())){const {room,player}=c;if(room&&player){c.room=null;c.player=null;removePlayer(room,player);}c.ws.close(4000,'Inactive for two minutes');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.
 for(const id of Object.keys(TRACKS)){selectTrack(id);getLandscape();skySurfaces();}selectTrack('coast');

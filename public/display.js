@@ -26,7 +26,7 @@ export function getInstallGuide(device){
   ],note:'If you see Create shortcut, use Install when available so the game opens without the address bar.'};
   return {title:'Give the race the whole screen',device:'Desktop browser',intro:'Enter fullscreen to make more room for the circuit.',steps:['Choose Enter fullscreen below.','Press Escape when you want to leave fullscreen.'],note:'On a phone, adding Bonked to the Home Screen also removes the browser controls.'};
 }
-export function initDisplayGuide({onOpen=()=>{},onClose=()=>{}}={}){
+export function initDisplayGuide({onOpen=()=>{},onClose=()=>{},autoShow=true}={}){
   const device=detectDevice(navigator),dialog=document.getElementById('install-guide');
   const $=id=>document.getElementById(id);
   const modes=['standalone','fullscreen'].map(mode=>matchMedia(`(display-mode: ${mode})`));
@@ -58,6 +58,6 @@ export function initDisplayGuide({onOpen=()=>{},onClose=()=>{}}={}){
   window.addEventListener('appinstalled',()=>{installPrompt=null;update();});
   document.addEventListener('fullscreenchange',update);for(const mode of modes)mode.addEventListener('change',update);
   update();let dismissed=false;try{dismissed=sessionStorage.getItem('bonked-display-guide-dismissed')==='1';}catch{}
-  if(device.mobile&&presentation()==='browser'&&!dismissed)show();
+  if(autoShow&&device.mobile&&presentation()==='browser'&&!dismissed)show();
   return {show,presentation,isOpen:()=>!dialog.hidden};
 }

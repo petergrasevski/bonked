@@ -20,7 +20,7 @@ export async function start(){
   const startup=window.bonkedStartup=createStartup({view:{
     status:message=>{$('startup-status').textContent=message;},
     slow:value=>{$('startup-help').hidden=!value;$('startup-retry').hidden=!value;},
-    ready:()=>{$('startup').hidden=true;document.body.classList.remove('booting');},
+    ready:()=>{$('startup').hidden=true;document.body.classList.remove('booting');window.dispatchEvent(new Event('bonked-ready'));},
     error:message=>{$('startup-status').textContent=message;$('startup').classList.add('failed');$('startup').setAttribute('aria-busy','false');$('startup-help').hidden=true;$('startup-retry').hidden=false;},
   }});
   try{
