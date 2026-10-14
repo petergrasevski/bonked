@@ -77,10 +77,10 @@ test('other players see human spectator targets and their cooldown, but never bo
   const state={phase:'racing',time:1000,players:[{id:'me',eliminated:false},remote,{...remote,id:'bot',bot:true}]};
   view.update(state,'me',camera,{}, {x:0,y:0},1/60);
   assert.deepEqual([...view.targets.keys()],['remote']);assert.equal(view.aim,null);
-  const marker=view.targets.get('remote');assert.equal(marker.material.uniforms.opacity.value,.18);
+  const marker=view.targets.get('remote');assert.equal(marker.material.uniforms.opacity.value,.3);
   assert.equal(marker.material.uniforms.center.value.x,remote.skyTarget.x);
   remote.skyTarget.x+=2;state.time=2000;view.update(state,'me',camera,{}, {x:0,y:0},1/60);
-  assert.ok(marker.material.uniforms.center.value.x>remote.skyTarget.x-2&&marker.material.uniforms.center.value.x<remote.skyTarget.x,'remote target moves smoothly instead of snapping');assert.equal(marker.material.uniforms.opacity.value,.5);
+  assert.ok(marker.material.uniforms.center.value.x>remote.skyTarget.x-2&&marker.material.uniforms.center.value.x<remote.skyTarget.x,'remote target moves smoothly instead of snapping');assert.equal(marker.material.uniforms.opacity.value,.72);
   state.round=2;view.update(state,'me',camera,{}, {x:0,y:0},1/60);assert.equal(marker.material.uniforms.center.value.x,remote.skyTarget.x,'new round discards old smoothing');
   view.update(null,'me',camera,{}, {x:0,y:0},1/60);assert.equal(view.targets.size,0);
 });

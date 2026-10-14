@@ -45,7 +45,7 @@ const weaponHud=new WeaponHUD($('desktop-weapon'),()=>world);
 const resultsScreen=new RoundResults($('results'));
 const trackPicker=createTrackPicker($('track-picker'),()=>world,chooseCircuit,()=>circuitLoader.loading);
 const optimisticBots=new OptimisticBots();
-try{world=new World($('scene'));}catch(error){console.error(error);$('dialog').hidden=false;$('dialog-body').innerHTML='<h2>WebGL 2 required.</h2><p>This game needs WebGL 2. Try a recent Safari or Chrome browser with hardware acceleration enabled.</p>';}
+try{world=await World.load($('scene'),{progress:stage=>window.bonkedStartup?.progress(({'Caching scenery shadows':'Finishing touches','Preparing race objects':'Getting the race ready'}[stage]||stage)+'…')});}catch(error){window.bonkedStartup?.fail('Could not prepare 3D graphics. Try a recent Safari or Chrome browser with hardware acceleration enabled.');throw error;}
 let ws,state=null,myId=null,predicted=null,predictedOthers=[],sequence=0,pending=[],history=[],clockOffset=0,rtt=0,lastState=0,lastFrame=performance.now(),accumulator=0,uiAt=0,retries=0,intent=null,session=null,rosterKey='',phase=null;
 let resuming=false,entryBusy=false;
 let requestedTrack=null;
@@ -85,7 +85,7 @@ function setConnection(online,label){$('connection-dot').classList.toggle('onlin
 function connect(){
   setConnection(false,retries?'RECONNECTING':'CONNECTING');
   ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);
-  ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});});
+  ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');window.bonkedStartup?.connected(true);if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});});
   ws.addEventListener('message',event=>{
     let msg;try{msg=JSON.parse(event.data);}catch{return;}
     if(msg.type==='server-ping'){send({type:'server-pong',id:msg.id});return;}
@@ -100,7 +100,7 @@ function connect(){
       if(was&&me?.item&&!was.players.find(p=>p.id===myId)?.item){beep(720,.09,.03);}
     }
   });
-  ws.addEventListener('close',event=>{optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
+  ws.addEventListener('close',event=>{window.bonkedStartup?.connected(false);optimisticBots.clear();voice.leave();stopGameAudio();setConnection(false,event.code===4001?'OPEN IN ANOTHER TAB':'RECONNECTING');releaseControls();if(event.code===4001){session=null;saveSession();clearRoom();toast('This driver is connected in another tab.');return;}const delay=Math.min(4000,500*2**retries++);setTimeout(connect,delay);});
   ws.addEventListener('error',()=>{});
 }
 connect();
