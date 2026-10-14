@@ -227,7 +227,7 @@ Eight landmarks are spaced about 303 road metres apart (roughly ten seconds at r
 
 ### Fly.io hosting
 
-`fly.toml` deploys [Bonked on Fly.io](https://bonked.fly.dev) to Sydney using the existing Dockerfile, one shared CPU and 256 MB RAM. HTTPS and `/health` checks are enabled. The machine starts on requests and stops when idle.
+`fly.toml` deploys [Bonked on Fly.io](https://bonked.fly.dev) to Sydney using the existing Dockerfile, one performance CPU and 2 GB RAM. HTTPS and `/health` checks are enabled. The machine starts on requests and stops when idle. A three-room, eighteen-driver load test exhausted the former shared CPU's burst credits and caused severe delays and disconnects; a performance CPU provides a full core's sustained allowance.
 
 Pushes to `main` run `.github/workflows/fly-deploy.yml`: install dependencies, run the regression suite, deploy one machine, then check public eight-player multiplayer. The repository's `FLY_API_TOKEN` Actions secret must contain a Fly deploy token scoped to the `bonked` app. Rotate that token before its expiry.
 
