@@ -1,3 +1,4 @@
+import {safeGridStartFraction} from './shared/starting-grid.js';
 import {ServerDiagnostics} from './server-diagnostics.js';
 import {botControls} from './bots.js';
 import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './shared/sky-beam.js';
@@ -87,7 +88,7 @@ function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.sna
 function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
 function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION}={}){
-  selectTrack(room.trackId);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
+  selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
   if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
   room.round=newTournament?1:(room.round||1)+(advanceRound?1:0);room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
   room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;

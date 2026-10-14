@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {WebSocket} from 'ws';
 import {botInput} from '../shared/game.js';
+import {safeGridStartFraction} from '../shared/starting-grid.js';
 const port=33211,base=`http://127.0.0.1:${port}`;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,ms=3000){const end=Date.now()+ms;while(Date.now()<end){const value=fn();if(value)return value;await sleep(20);}throw new Error('Condition timed out');}
@@ -41,7 +42,7 @@ test('eight real socket clients: lobby, authority, reconnect, elimination, share
   assert.ok(host.state.players.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.z)));
   assert.ok(host.state.players.find(p=>p.id===host.welcome.id).finishTime>3000);
   assert.equal(host.state.players.find(p=>p.id===host.welcome.id).score,3);assert.equal(host.state.roundResults.length,8);const checkpoint=host.state.players.find(p=>p.id===host.welcome.id).trackFraction;
-  for(const c of racers)c.send({type:'ready',round:host.state.round});await until(()=>host.state.phase==='countdown');assert.equal(host.state.round,2);assert.equal(host.state.roundStartFraction,checkpoint);assert.ok(host.state.players.every(p=>!p.finished&&!p.eliminated&&p.item===null));assert.equal(host.state.players.find(p=>p.id===host.welcome.id).score,3);
+  for(const c of racers)c.send({type:'ready',round:host.state.round});await until(()=>host.state.phase==='countdown');assert.equal(host.state.round,2);assert.equal(host.state.roundStartFraction,safeGridStartFraction(checkpoint,8));assert.ok(host.state.players.every(p=>!p.finished&&!p.eliminated&&p.item===null));assert.equal(host.state.players.find(p=>p.id===host.welcome.id).score,3);
   // Host leaves explicitly: room ownership passes to a connected driver.
   host.send({type:'leave'});await until(()=>clients[1].state.players.length===7);assert.equal(clients[1].state.host,clients[1].welcome.id);
 });

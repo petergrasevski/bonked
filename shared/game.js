@@ -235,8 +235,9 @@ export function collideDesertMoles(car,raceSeconds=car.raceTime||0,{damage=true}
   return impacts;
 }
 export function collideCoastalCrabs(car,seconds=car.raceTime||0){collideCrabs(car,CRABS,seconds,{length:CAR_LENGTH,width:CAR_WIDTH});}
+export const gridSlotDistance=slot=>6+Math.floor(slot/2)*5.5;
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
-  const fraction = startFraction - (6 + Math.floor(slot/2)*5.5)/TRACK_LENGTH;
+  const fraction = startFraction - gridSlotDistance(slot)/TRACK_LENGTH;
   const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
   return { raceTime:0,moleCooldown:0,steering:0,padBoostRemaining:0,padBoostFrom:0,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
