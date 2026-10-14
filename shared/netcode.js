@@ -13,7 +13,7 @@ function motionRates(car,retained){
 export class RenderCorrections {
   constructor(){this.errors=new Map();this.velocities=new Map();this.rates=new Map();}
   reset(){this.errors.clear();this.velocities.clear();this.rates.clear();}
-  reconcile(before,after,remainder=0){
+  reconcile(before,after,remainder=0,beforeRemainder=remainder){
     const old=new Map(before.map(p=>[p.id,p]));
     for(const car of after){
       const previous=old.get(car.id),e=this.errors.get(car.id)||{},velocity=this.velocities.get(car.id)||{},retained=this.rates.get(car.id);
@@ -27,7 +27,7 @@ export class RenderCorrections {
         const delta=['angle','pitch','roll'].includes(key)?angleDelta(previous[key]||0,car[key]||0):(previous[key]||0)-(car[key]||0),rateDelta=oldMotion[key]-newMotion[key];
         // Reconciliation can arrive halfway between ticks. Preserve that
         // fractional pose too, rather than jumping when derivatives change.
-        error[key]=(e[key]||0)+delta+rateDelta*remainder;
+        error[key]=(e[key]||0)+delta+oldMotion[key]*beforeRemainder-newMotion[key]*remainder;
         nextVelocity[key]=(velocity[key]||0)+rateDelta;
       }
       this.errors.set(car.id,error);this.velocities.set(car.id,nextVelocity);this.rates.set(car.id,rates);

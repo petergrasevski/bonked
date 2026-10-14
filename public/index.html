@@ -93,6 +93,12 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
           <output id="render-stats" aria-label="Last scene rendering statistics"></output>
           <p class="render-help">Last scene sample. JS time excludes GPU work.</p>
         </div>
+        <div id="lag-report-controls" hidden>
+          <button id="report-lag" class="setting-row">Report recent lag <span>↓</span></button>
+          <p class="render-help">Saves the last 30 seconds of game timing, including before Dev logs was enabled. No names or voice audio.</p>
+          <a id="download-lag" class="setting-row" hidden>Download last lag report <span>↓</span></a>
+          <p id="lag-report-status" class="render-help" role="status" aria-live="polite"></p>
+        </div>
         <button id="copy-network" class="setting-row" hidden>Copy network log <span>↗</span></button>
       </div>
     </div>

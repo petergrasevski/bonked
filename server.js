@@ -35,6 +35,11 @@ function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,
 const server=http.createServer(async(req,res)=>{
   try{
     const url=new URL(req.url,'http://localhost');
+    if(url.pathname==='/internal/lag-reports'){
+      if(!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress)){res.writeHead(403);return res.end();}
+      if(req.method!=='GET'){res.writeHead(405);return res.end();}
+      res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(JSON.stringify(diagnostics.incidents));
+    }
     if(url.pathname==='/internal/deployment'){
       // CI accesses this through authenticated Fly SSH. Proxy/public requests
       // cannot impersonate loopback with forwarded headers.
@@ -51,7 +56,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);return res.end();}
     if(url.pathname==='/api/version'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({revision}));}
-    if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',version:NETWORK_VERSION,revision:process.env.RENDER_GIT_COMMIT?.slice(0,7)||'local',rooms:rooms.size,uptime:Math.round(process.uptime())}));}
+    if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({status:'ok',version:NETWORK_VERSION,revision,rooms:rooms.size,uptime:Math.round(process.uptime())}));}
     if(url.pathname==='/api/config'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({lanURLs:process.env.PUBLIC_URL?[process.env.PUBLIC_URL]:lanURLs()}));}
     if(url.pathname==='/api/qr'){
       const value=url.searchParams.get('url');
@@ -112,10 +117,10 @@ function send(ws,data){if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<128
 function fail(ws,message,requestId){send(ws,{type:'error',message,...(typeof requestId==='string'?{requestId:requestId.slice(0,80)}:{})});}
 function roomCode(){let code;do{code=Array.from(randomBytes(3),b=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[b%26]).join('');}while(rooms.has(code));return code;}
 function broadcast(room,data){const encoded=JSON.stringify(data);diagnostics.snapshotBytes+=Buffer.byteLength(encoded)*[...room.players.values()].filter(p=>p.ws).length;diagnostics.snapshots++;for(const p of room.players.values())send(p.ws,encoded);}
-function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
+function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,simulationTick:room.simulationTick||0,raceTime:room.raceTime||0,time:Date.now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:p.simInput||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
 function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
 function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION,randomizeGrid=false}={}){
-  selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
+  selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.simulationTick=0;room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
   if(newTournament)room.targetScore=targetScoreForPlayers(room.players.size);
   room.round=newTournament?1:(room.round||1)+(advanceRound?1:0);room.roundStartFraction=startFraction;room.finishProgress=startFraction-START_FRACTION+LAPS;
   room.roundResults=[];room.nextRoundAt=null;room.tournamentComplete=false;room.tournamentWinnerId=null;
@@ -148,6 +153,7 @@ wss.on('connection',(ws,req)=>{
     if(msg.type==='activity')return;
     if(msg.type==='ping')return send(ws,{type:'pong',sent:msg.sent,time:now,diagnostics:diagnostics.last});
     if(msg.type==='server-pong'){if(msg.id===client.appPingId&&client.appPingAt){client.applicationRttMs=performance.now()-client.appPingAt;diagnostics.applicationPing.add(client.applicationRttMs);client.appPingAt=null;}return;}
+    if(msg.type==='lag-report'){const capture=diagnostics.incident(client,msg.id,revision,now);if(capture)send(ws,{type:'lag-report',id:msg.id,capture});return;}
     if(msg.type==='net-report'){diagnostics.client(client,msg.metrics,now);return;}
     if(msg.type==='create'||msg.type==='join'){
       if(client.room)return fail(ws,'Already in a room.');
@@ -207,7 +213,7 @@ const timer=setInterval(()=>{
       if(room.phase==='countdown'&&now>=room.startAt){room.phase='racing';for(const p of room.players.values())applyLaunch(p.car,!p.bot&&p.input.throttle>.1&&!p.input.reverse&&now-p.lastInput<=250?p.accelPressedAt:null,room.startAt);}
       if(room.phase==='racing'){
         const motionBefore=new Map([...room.players.values()].map(p=>[p.id,captureMotion(p.car)]));
-        room.raceTime=(room.raceTime||0)+STEP;
+        room.simulationTick=(room.simulationTick||0)+1;room.raceTime=room.simulationTick*STEP;
         for(const p of room.players.values()){
           const input=p.bot?botControls(room,p,now):now-p.lastInput>INPUT_TIMEOUT_MS?NEUTRAL:p.input;
           if(!p.bot&&now-p.lastInput>INPUT_TIMEOUT_MS)diagnostics.staleInputs++;
@@ -242,7 +248,7 @@ const timer=setInterval(()=>{
   // Catch-up ticks produce one current snapshot, not a burst of stale ones.
   for(const room of publishRooms)if(rooms.has(room.code))publish(room);
 },8);
-const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),10000);
+const diagnosticTimer=setInterval(()=>diagnostics.report(rooms,connections),1000);
 const heartbeat=setInterval(()=>{for(const ws of voiceWss.clients){if(!ws.voiceAlive){ws.terminate();continue;}ws.voiceAlive=false;ws.ping();}for(const c of connections.values()){if(c.activity.expired(Date.now())){const {room,player}=c;if(room&&player){c.room=null;c.player=null;removePlayer(room,player);}c.ws.close(4000,'Inactive for two minutes');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.pingAt=performance.now();c.ws.ping();c.appPingAt=performance.now();c.appPingId=randomBytes(8).toString('hex');send(c.ws,{type:'server-ping',id:c.appPingId});}},10000);
 wss.on('error',error=>{console.error(`Cannot start game server on ${HOST}:${PORT}: ${error.code||error.message}`);clearInterval(timer);clearInterval(heartbeat);process.exit(1);});
 // Prebuild contact meshes before accepting players, never on the first fall.

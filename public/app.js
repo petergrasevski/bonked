@@ -1,3 +1,4 @@
+import {LagRecorder,createLagReportUI} from '/lag-recorder.js';
 import {HowToPlay} from './how-to-play.js';
 import {RenderDiagnostics} from './render-diagnostics.js';
 import {createClientUpdates,canReloadClient} from './client-updates.js';
@@ -8,7 +9,7 @@ import {CircuitLoader,yieldToLobby} from './circuit-loading.js';
 import {CarNameTooltip} from './car-name-tooltip.js';
 import {NetworkDiagnostics} from './network-diagnostics.js';
 import {CombatPrediction} from '/shared/combat-prediction.js';
-import {PREDICTION_GRACE_MS,replayWindow} from '/shared/network-timing.js';
+import {PREDICTION_GRACE_MS,PredictionTimeline,NETWORK_VERSION} from '/shared/network-timing.js';
 import {createScoreMeter} from './score-meter.js';
 import {RoundResults} from './round-results.js';
 import {WeaponHUD} from './weapon-hud.js';
@@ -39,6 +40,9 @@ const corrections=new RenderCorrections();
 const combatPrediction=new CombatPrediction();
 const network=new NetworkDiagnostics(message=>send(message));
 window.bonkedNetwork={export:()=>network.export()};
+const lagRecorder=new LagRecorder();
+const predictionClock=new PredictionTimeline();
+let lagReportUI;
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
 function selectWorld(id){circuitLoader.request(id);}
@@ -48,6 +52,7 @@ const resultsScreen=new RoundResults($('results'));
 const trackPicker=createTrackPicker($('track-picker'),()=>world,chooseCircuit,()=>circuitLoader.loading);
 const optimisticBots=new OptimisticBots();
 try{world=await World.load($('scene'),{progress:stage=>window.bonkedStartup?.progress(({'Caching scenery shadows':'Finishing touches','Preparing race objects':'Getting the race ready'}[stage]||stage)+'…')});}catch(error){window.bonkedStartup?.fail('Could not prepare 3D graphics. Try a recent Safari or Chrome browser with hardware acceleration enabled.');throw error;}
+let snapshotToReconcile=null;
 let ws,state=null,myId=null,predicted=null,predictedOthers=[],sequence=0,pending=[],history=[],clockOffset=0,rtt=0,lastState=0,lastFrame=performance.now(),accumulator=0,uiAt=0,retries=0,intent=null,session=null,rosterKey='',phase=null;
 let resuming=false,entryBusy=false,idleDisconnected=false,lastActivitySent=-Infinity;
 let entryRequest=null,entryRetryTimer=null;
@@ -62,10 +67,10 @@ function retryEntry(delay){
 }
 let requestedTrack=null;
 const circuitLoader=new CircuitLoader({initialId:world?.trackId,build:async(id,options)=>{
-  releaseControls();stopGameAudio();predicted=null;predictedOthers=[];corrections.reset();combatPrediction.reset();network.resetStream();history=[];pending=[];accumulator=0;
+  releaseControls();stopGameAudio();predicted=null;predictedOthers=[];corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();history=[];pending=[];accumulator=0;
   await yieldToLobby();world?.dispose();world=null;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);
   return World.load($('scene'),options);
-},onReady:loaded=>{world=loaded;world.resolution?.setQuality(graphicsQuality);if(state?.trackId===loaded.trackId)reconcileSnapshot(state);},onChange:updateCircuitStatus});
+},onReady:loaded=>{world=loaded;world.resolution?.setQuality(graphicsQuality);if(state?.trackId===loaded.trackId)snapshotToReconcile={state,at:lastState};},onChange:updateCircuitStatus});
 function chooseCircuit(id){
   if(id===(requestedTrack||state?.trackId))return;
   requestedTrack=id;updateUI(performance.now());
@@ -116,14 +121,15 @@ function connect(){
   ws.addEventListener('open',()=>{retries=0;setConnection(true,'SERVER ONLINE');window.bonkedStartup?.connected(true);if(session){resuming=true;send({type:'join',code:session.code,token:session.token,name:$('name').value});}else if(intent){send(intent);intent=null;}send({type:'ping',sent:Date.now()});clientUpdates.check();});
   ws.addEventListener('message',event=>{
     let msg;try{msg=JSON.parse(event.data);}catch{return;}
+    if(msg.type==='lag-report'){lagReportUI?.receive(msg);return;}
     if(msg.type==='server-ping'){send({type:'server-pong',id:msg.id});return;}
-    if(msg.type==='pong'){rtt=Date.now()-msg.sent;const measuredOffset=msg.time+rtt/2-Date.now();clockOffset=network.ping===null?measuredOffset:clockOffset*.9+measuredOffset*.1;network.pong(rtt,msg.diagnostics);network.updatePing(true);return;}
-    if(msg.type==='welcome'){cancelEntryRetry();intent=null;optimisticBots.clear();requestedTrack=null;resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();combatPrediction.reset();network.resetStream();voice.join(session);setBusy(false);return;}
+    if(msg.type==='pong'){rtt=Date.now()-msg.sent;const measuredOffset=msg.time+rtt/2-Date.now();clockOffset=network.ping===null?measuredOffset:clockOffset*.9+measuredOffset*.1;lagRecorder.add('ping',{rttMs:rtt,clockOffsetMs:clockOffset,server:msg.diagnostics});network.pong(rtt,msg.diagnostics);network.updatePing(true);return;}
+    if(msg.type==='welcome'){cancelEntryRetry();intent=null;optimisticBots.clear();requestedTrack=null;resuming=false;myId=msg.id;session={code:msg.code,token:msg.token};saveSession();sequence=msg.seq||0;pending=[];history=[];predicted=null;corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();voice.join(session);setBusy(false);return;}
     if(msg.type==='error'){if(msg.reason==='updating'){toast(msg.message);retryEntry(2000);return;}cancelEntryRetry();if(msg.requestId)optimisticBots.reject(msg.requestId);requestedTrack=null;updateCircuitStatus();toast(msg.message);setBusy(false);if(resuming){resuming=false;clearRoom();}return;}
     if(msg.type==='left'){clearRoom();return;}
     if(msg.type==='state'){
       lastState=performance.now();network.snapshot(lastState);const was=state;state=msg;optimisticBots.reconcile(msg.players);if(msg.phase!=='lobby'||msg.host!==myId)optimisticBots.clear();if(msg.trackId===requestedTrack)requestedTrack=null;selectWorld(msg.trackId||'coast');history.push({time:performance.now(),state:msg});if(history.length>12)history.shift();if(was?.phase!==msg.phase||was?.round!==msg.round)combatPrediction.reset();
-      const me=msg.players.find(p=>p.id===myId);if(!circuitLoader.loading&&!circuitLoader.error)reconcileSnapshot(msg);
+      const me=msg.players.find(p=>p.id===myId);snapshotToReconcile={state:msg,at:lastState};
       if(phase!==msg.phase){const previousPhase=phase;phase=msg.phase;onPhaseChange(previousPhase);}
       if(was&&me?.item&&!was.players.find(p=>p.id===myId)?.item){beep(720,.09,.03);}
       clientUpdates.apply();
@@ -134,16 +140,29 @@ function connect(){
 }
 connect();
 setInterval(()=>send({type:'ping',sent:Date.now()}),2000);
-function reconcileSnapshot(msg){const oldFleet=predicted?[predicted,...predictedOthers]:[];
-      const me=msg.players.find(p=>p.id===myId);
-      if(me){sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));combatPrediction.reconcile(msg,predicted,predictedOthers);if(msg.phase==='racing'){const replay=replayWindow(pending,rtt);network.add('replaySteps',replay.length);for(const frame of replay){predictFleet(predicted,predictedOthers,frame.input,STEP);combatPrediction.step(frame.input,STEP);}const old=oldFleet.find(p=>p.id===myId);if(old)network.add('correctionM',Math.hypot(old.x-predicted.x,old.z-predicted.z));}corrections.reconcile(oldFleet,[predicted,...predictedOthers],msg.phase==='racing'?accumulator:0);}
+function reconcileSnapshot(msg,receivedAt,now){
+  const beforeRemainder=predictionClock.remainder,oldFleet=predicted?[predicted,...predictedOthers]:[],me=msg.players.find(p=>p.id===myId);
+  if(!me)return;
+  const serverTick=msg.simulationTick??Math.round((msg.raceTime||0)/STEP);
+  if(msg.phase==='racing'&&!predictionClock.observe(serverTick,`${msg.code}:${msg.trackId}:${msg.round}:${msg.startAt}`,receivedAt,rtt,now))return;
+  if(msg.phase!=='racing')predictionClock.reset();
+  sequence=Math.max(sequence,me.seq);pending=pending.filter(frame=>frame.seq>me.seq);
+  predicted={...me};predictedOthers=msg.players.filter(p=>p.id!==myId).map(p=>({...p}));
+  combatPrediction.reconcile(msg,predicted,predictedOthers);
+  const replay=msg.phase==='racing'?predictionClock.replay(serverTick,me.seq,me.input||NEUTRAL):[];
+  for(const frame of replay){predictFleet(predicted,predictedOthers,frame.input,STEP);combatPrediction.step(frame.input,STEP);}
+  network.add('replaySteps',replay.length);
+  const old=oldFleet.find(p=>p.id===myId);if(old&&msg.phase==='racing')network.add('correctionM',Math.hypot(old.x-predicted.x,old.z-predicted.z));
+  const fleet=[predicted,...predictedOthers],fleetCorrectionM=Math.max(0,...fleet.map(p=>{const old=oldFleet.find(o=>o.id===p.id);return old?Math.hypot(old.x-p.x,old.z-p.z):0;}));
+  lagRecorder.add('snapshot',{receivedAt,serverTime:msg.time,raceTime:msg.raceTime,phase:msg.phase,track:msg.trackId,round:msg.round,ack:me.seq,pending:pending.length,replaySteps:replay.length,serverTick,predictionTick:predictionClock.tick,clockRate:predictionClock.rate,clockRebases:predictionClock.rebases,predictionLeadMs:((predicted.raceTime||0)-(msg.raceTime||0))*1000,fleetCorrectionM});
+  corrections.reconcile(oldFleet,fleet,msg.phase==='racing'?predictionClock.remainder:0,beforeRemainder);
 }
 function updateEntryButtons(){$('create').disabled=entryBusy;$('join').disabled=entryBusy||!/^[A-Z]{3}$/.test($('code').value);}
 function setBusy(busy){entryBusy=busy;updateEntryButtons();}
 updateEntryButtons();
 function enter(type){const name=$('name').value.trim();if(!name){$('name').focus();return toast('Enter your name first.');}voice.prepare();try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};cancelEntryRetry();entryRequest=msg;setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');updateEntryButtons();});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
-function clearRoom(){$('how-to-play-open').hidden=false;cancelEntryRetry();intent=null;requestedTrack=null;optimisticBots.clear();trackPicker.sync(activeTrack.id,false,false);voice.leave();stopGameAudio();corrections.reset();combatPrediction.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);clientUpdates.apply();}
+function clearRoom(){snapshotToReconcile=null;$('how-to-play-open').hidden=false;cancelEntryRetry();intent=null;requestedTrack=null;optimisticBots.clear();trackPicker.sync(activeTrack.id,false,false);voice.leave();stopGameAudio();corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);clientUpdates.apply();}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 function changeCircuit(){
   $('settings').hidden=true;
@@ -158,7 +177,7 @@ $('copy').onclick=async()=>{const link=await getShareURL();try{await navigator.c
 const itemMeta=WEAPONS;
 function onPhaseChange(previousPhase){
   const playing=state&&state.phase!=='lobby';$('how-to-play-open').hidden=playing;document.body.classList.toggle('playing',playing);$('race-ui').hidden=!playing;$('entry-panel').hidden=!!state;$('room-panel').hidden=!state;$('results').hidden=state?.phase!=='finished';if(!(previousPhase==='countdown'&&state?.phase==='racing'))releaseControls();pending=[];
-  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();combatPrediction.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
+  if(state?.phase==='countdown'){history=[];world?.resetRound();corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();accumulator=0;$('settings').hidden=true;$('dialog').hidden=true;beep(420,.2,.04);predicted={...state.players.find(p=>p.id===myId)};}
   if(state?.phase==='finished')renderResults();
 }
 function node(tag,className,text){const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;}
@@ -258,7 +277,7 @@ function nudge(direction){triggerNudge(direction);flushControls();}
 holdButton('nudge-left',held=>{if(held)nudge(-1);});holdButton('nudge-right',held=>{if(held)nudge(1);});
 window.addEventListener('keydown',e=>{const enter=e.code==='Enter'||e.code==='NumpadEnter';if(enter&&state?.phase==='finished'&&!state.tournamentComplete&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen()&&!e.target.closest?.('input,textarea,select,button:not(#ready),a,[contenteditable=true]')){e.preventDefault();if(!e.repeat&&!$('ready').disabled)$('ready').click();return;}if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement||e.target.isContentEditable||((e.code==='Enter'||e.code==='NumpadEnter')&&e.target.closest?.('button,a'))||!state||state.phase==='lobby'||rotationBlocked()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()||howToPlay?.isOpen())return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','NumpadEnter','KeyW','KeyS','KeyA','KeyD','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if((e.code==='Enter'||e.code==='NumpadEnter')&&!e.repeat)fire();if((e.code==='ArrowLeft'||e.code==='KeyQ')&&!e.repeat)nudge(-1);if((e.code==='ArrowRight'||e.code==='KeyR')&&!e.repeat)nudge(1);unlockAudio();}});
 window.addEventListener('keyup',e=>{keys.delete(e.code);flushControls();});window.addEventListener('blur',releaseControls);
-document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){accumulator=0;stopGameAudio();lastState=-Infinity;}else{if(idleDisconnected)markActivity();clientUpdates.check();}});
+document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){predictionClock.reset();accumulator=0;stopGameAudio();lastState=-Infinity;}else{if(idleDisconnected)markActivity();clientUpdates.check();}});
 portrait.addEventListener('change',()=>{releaseControls();world?.resize();});
 // iOS needs the callout, selection and touch-default behaviours handled separately.
 // Keep native editing in the two lobby inputs; game surfaces never select or zoom.
@@ -275,9 +294,10 @@ $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target=
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
 let audio=null,engineAudio=null,weaponAudio=null,roadAudio=null,audioBank=null,audioMixer=null,musicAudio=null;
 let audioStorage;try{audioStorage=localStorage;}catch{}
+lagReportUI=createLagReportUI({recorder:lagRecorder,send,button:$('report-lag'),download:$('download-lag'),status:$('lag-report-status'),storage:audioStorage,context:()=>({revision:document.querySelector('meta[name="bonked-revision"]')?.content,networkVersion:NETWORK_VERSION,phase:state?.phase||'menu',track:activeTrack.id,round:state?.round,viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},graphicsQuality,render:renderDiagnostics.latest})});
 let devLogs=readDevLogs(audioStorage);
 const renderDiagnostics=new RenderDiagnostics();
-function applyDevLogs(){document.body.classList.toggle('dev-logs',devLogs);$('dev-logs').checked=devLogs;network.devLogs=devLogs;$('render-debug').hidden=!devLogs;if(!devLogs)renderDiagnostics.reset();}
+function applyDevLogs(){document.body.classList.toggle('dev-logs',devLogs);$('dev-logs').checked=devLogs;network.devLogs=devLogs;$('render-debug').hidden=!devLogs;$('lag-report-controls').hidden=!devLogs;if(!devLogs)renderDiagnostics.reset();}
 $('dev-logs').onchange=()=>{devLogs=$('dev-logs').checked;saveDevLogs(audioStorage,devLogs);applyDevLogs();};applyDevLogs();
 let graphicsQuality=readGraphicsQuality(audioStorage);
 $('graphics-quality').value=graphicsQuality;
@@ -332,23 +352,35 @@ for(const event of ['pointerdown','keydown'])document.addEventListener(event,unl
 
 function renderedState(now,dt){
   if(!state||!predicted)return state;
-  const fresh=now-lastState<PREDICTION_GRACE_MS&&state.phase==='racing';
-  const players=renderFleet(state,predicted,predictedOthers,corrections,dt,fresh?accumulator:0);
+  const remainder=state.phase==='racing'?predictionClock.remainder:0;
+  const players=renderFleet(state,predicted,predictedOthers,corrections,dt,remainder);
   // Lamps respond to local braking immediately, while remote cars use replicated input.
   const local=players.find(p=>p.id===myId);if(local)local.input={...input};
   const camera=cameraFrame(createChase(players),players);
-  const raceTime=Math.max(state.raceTime||0,...[predicted,...predictedOthers].map(car=>car.raceTime||0))+(fresh?accumulator:0);
+  const raceTime=Math.max(state.raceTime||0,...[predicted,...predictedOthers].map(car=>car.raceTime||0))+(remainder);
   return {...state,...(state.phase==='racing'?combatPrediction.view():{}),combatTime:combatPrediction.time,players,camera,raceTime,chase:renderedChase(state.chase,players)};
 }
 function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
-  while(accumulator>=STEP){accumulator-=STEP;if(state&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&!circuitLoader.loading&&!circuitLoader.error){const active=['racing','countdown'].includes(state.phase)&&now-lastState<PREDICTION_GRACE_MS&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen();const command={...(active?input:NEUTRAL)},seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'&&predicted&&now-lastState<PREDICTION_GRACE_MS){predictFleet(predicted,predictedOthers,command,STEP);combatPrediction.step(command,STEP);pending.push({seq,input:command});if(pending.length>120)pending.shift();}}}
+  const ready=state&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&!circuitLoader.loading&&!circuitLoader.error;
+  const fresh=ready&&now-lastState<PREDICTION_GRACE_MS;
+  const active=fresh&&['racing','countdown'].includes(state.phase)&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen();
+  const command={...(active?input:NEUTRAL)};
+  while(accumulator>=STEP){accumulator-=STEP;if(ready){const seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'){pending.push({seq});if(pending.length>120)pending.shift();}}}
+  if(state?.phase==='racing'&&predicted){
+    const steps=predictionClock.advance(now,!!fresh);
+    for(let tick=predictionClock.tick-steps+1;tick<=predictionClock.tick&&steps>0;tick++){
+      predictionClock.remember(tick,sequence,command);predictFleet(predicted,predictedOthers,command,STEP);combatPrediction.step(command,STEP);
+    }
+  }
+  if(snapshotToReconcile&&ready){const packet=snapshotToReconcile;snapshotToReconcile=null;reconcileSnapshot(packet.state,packet.at,now);}
   world?.resolution?.sample(frameMs,{active:!document.hidden&&!rotationBlocked()&&!circuitLoader.loading&&!circuitLoader.error&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen(),mode:state&&state.phase!=='lobby'?'race':'menu'});
-  const rendered=circuitLoader.loading||circuitLoader.error?null:renderedState(now,dt);if(!circuitLoader.loading&&!circuitLoader.error){if(!howToPlay?.isOpen())world?.update(rendered,myId,null,dt,now);howToPlay?.update(now);carNames.update(now);trackPicker.tick(now);
+  const rendered=circuitLoader.loading||circuitLoader.error?null:renderedState(now,Math.min(.25,Math.max(0,frameMs/1000)));if(!circuitLoader.loading&&!circuitLoader.error){if(!howToPlay?.isOpen())world?.update(rendered,myId,null,dt,now);howToPlay?.update(now);carNames.update(now);trackPicker.tick(now);
 
   }
+  lagRecorder.frame({frameMs,age:now-lastState,hidden:document.hidden,phase:state?.phase||'menu',track:activeTrack.id,round:state?.round,overlay:!$('settings').hidden||!$('dialog').hidden||circuitLoader.loading||!!displayGuide?.isOpen()||!!howToPlay?.isOpen(),players:rendered?.players,camera:world?.follow,cameraTarget:rendered?.camera,cameraPosition:world?.camera.position,skyTargets:world?.skyView.targets,predicted:predicted?[predicted,...predictedOthers]:[],queuedBytes:ws?.bufferedAmount||0});
   if(state&&world&&!circuitLoader.loading){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
-  if(now-uiAt>100){uiAt=now;if(!$('settings').hidden)updateGraphicsStatus();updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);if(idleDisconnected)$('connection-label').textContent='IDLE';network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,render:devLogs?renderDiagnostics.latest:undefined,presentation:'predicted-fleet',bufferMs:0,underruns:0,server:network.server});}
+  if(now-uiAt>100){uiAt=now;if(!$('settings').hidden)updateGraphicsStatus();updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);if(idleDisconnected)$('connection-label').textContent='IDLE';network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,render:devLogs?renderDiagnostics.latest:undefined,presentation:'predicted-fleet-clock',bufferMs:0,underruns:0,server:network.server});}
   const listening=raceListener(rendered,world?.follow),audible=!circuitLoader.loading&&!circuitLoader.error&&soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible,myId);engineAudio?.update(rendered,listening,audible,myId);roadAudio?.update(rendered,listening,audible,myId);
   const musicEnabled=!document.hidden&&!audioSettings.muted&&audioSettings.music>0;

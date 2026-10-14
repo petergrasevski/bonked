@@ -111,3 +111,42 @@ test('uneven 20 Hz target updates move continuously at 30/60/120 Hz without pack
     assert.ok(Math.abs(pose.x-stopped.x)<1e-6,'stale targets settle, never extrapolate away');
   }
 });
+
+test('remote targets advance on the race clock without 20Hz speed pulses',()=>{
+ for(const hz of [30,60,120]){
+  const dt=1/hz;let pose,last,sample=0,nextPacket=0,previous;
+  const speeds=[];
+  for(let frame=0;frame<hz*5;frame++){
+   const now=frame*dt*1000;
+   while(nextPacket+15+[0,9,2,13][Math.round(nextPacket/50)%4]<=now){sample=nextPacket;nextPacket+=50;}
+   pose=smoothSkyTarget(pose,{x:sample*.03,z:sample*-.015},dt,{sampleTime:sample,renderTime:now+25});
+   if(previous&&now>1000)speeds.push((pose.x-previous.x)/dt);
+   previous={...pose};
+  }
+  const rms=Math.sqrt(speeds.reduce((n,v)=>n+(v-30)**2,0)/speeds.length);
+  assert.ok(rms<.1,`${hz}Hz speed error ${rms}`);
+  assert.ok(Math.min(...speeds)>29&&Math.max(...speeds)<31);
+ }
+});
+test('timed remote target extrapolation is bounded during loss and resets on teleports',()=>{
+ let pose=smoothSkyTarget(null,{x:0,z:0},0,{sampleTime:0,renderTime:0});
+ pose=smoothSkyTarget(pose,{x:1.5,z:0},1/60,{sampleTime:50,renderTime:60});
+ for(let frame=0;frame<180;frame++)pose=smoothSkyTarget(pose,{x:1.5,z:0},1/60,{sampleTime:50,renderTime:60+frame*1000/60});
+ assert.ok(pose.x<=6.001&&pose.x>=1.5,'extrapolation never runs beyond 150ms');
+ const reset=smoothSkyTarget(pose,{x:200,z:0},1/60,{sampleTime:10000,renderTime:10000});
+ assert.equal(reset.x,200);assert.equal(reset.vx,0);assert.equal(reset.targetVelocity,undefined);
+});
+
+test('remote marker view uses authoritative sample ticks and the rendered race clock',()=>{
+ selectTrack('ice');const road=trackAt(.12),view=new SkyBeamView(new THREE.Scene());
+ const camera=new THREE.PerspectiveCamera(58,1,.2,1000),frame={x:road.x,z:road.z,spread:10};
+ const remote={id:'remote',color:'#ff5555',eliminated:true,bot:false,skyTarget:{x:road.x,z:road.z},skyCooldownUntil:0};
+ const state={phase:'racing',code:'ABC',round:1,trackId:'ice',players:[remote],simulationTick:60,raceTime:1.03,time:5000,combatTime:5030,skyBeams:[]};
+ view.update(state,'local',camera,frame,{x:0,y:0},1/60);
+ state.simulationTick=63;state.raceTime=1.08;remote.skyTarget={x:road.x+1.5,z:road.z};
+ view.update(state,'local',camera,frame,{x:0,y:0},1/60);
+ const motion=view.targets.get('remote').userData.motion;
+ assert.equal(motion.sample.time,1050);assert.ok(Math.abs(motion.targetVelocity.x-30)<1e-8);
+ assert.deepEqual(remote.skyTarget,{x:road.x+1.5,z:road.z},'presentation never changes the server target');
+ view.update(null,'local',camera,frame,{x:0,y:0},1/60);assert.equal(view.targets.size,0);
+});
