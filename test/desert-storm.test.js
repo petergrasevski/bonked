@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
 import {desertStormAt,stormCoverage,stormGustAt,applyDesertWind,STORM_DELAY} from '../shared/desert-storm.js';
 import {createDustCloud,stormHaze} from '../public/desert-storm.js';
 import {selectTrack,spawnCar,stepCar,trackAt,STEP,NEUTRAL} from '../shared/game.js';
@@ -28,7 +29,7 @@ test('desert wind agrees exactly between authoritative ticks and client predicti
   for(const id of ['coast','ice']){selectTrack(id);const a=spawnCar(),b={...a,raceTime:24.5};for(let i=0;i<30;i++){stepCar(a,NEUTRAL);stepCar(b,NEUTRAL);assert.equal(a.x,b.x);assert.equal(a.z,b.z);}}
 });
 test('dust uses two fixed GPU draws and keeps near-track visibility readable at all camera heights',()=>{
-  const dust=createDustCloud({mobile:true}),copy=createDustCloud({mobile:true});assert.equal(dust.group.children.length,2);assert.equal(dust.clouds.count,48);assert.equal(dust.grains.geometry.attributes.position.count,550);assert.deepEqual(dust.clouds.instanceMatrix.array,copy.clouds.instanceMatrix.array);
+  const dust=createDustCloud({mobile:true}),copy=createDustCloud({mobile:true});assert.equal(dust.group.children.length,2);assert.equal(dust.clouds.count,24);assert.equal(dust.grains.geometry.attributes.position.count,300);assert.deepEqual(dust.clouds.instanceMatrix.array,copy.clouds.instanceMatrix.array);
   const buffer=dust.clouds.instanceMatrix.array,storm=dust.update(25);assert.equal(dust.group.visible,true);assert.equal(dust.group.scale.x,1.25);assert.equal(dust.group.scale.z,1.25);assert.ok(Math.abs(desertStormAt(26).x-desertStormAt(25).x)<17);assert.equal(dust.clouds.instanceMatrix.array,buffer);
   for(const height of [20,50,100,200,400]){const {density}=stormHaze(storm,storm,height);assert.ok(1-Math.exp(-((density*height*1.5)**2))<.65,'cars stay readable through the haze');}
   dust.update(58);assert.equal(dust.group.visible,false);
@@ -50,4 +51,34 @@ test('gust trails match the force direction, fade with coverage and reuse bounde
   for(const t of [0,25.1,70]){trails.update(t,[car]);assert.equal(mesh.visible,false);}
   trails.update(seconds,[{...car,x:car.x+600}]);assert.equal(mesh.visible,false);
   mesh.geometry.dispose();mesh.material.dispose();
+});
+
+
+test('dust bounds transparent pixel coverage, reuses baked noise and releases it on scene disposal',()=>{
+  for(const mobile of [false,true]){
+    const dust=createDustCloud({mobile}),{clouds,grains}=dust,material=clouds.material,texture=material.uniforms.dustNoise.value;
+    assert.equal(clouds.count,mobile?24:36);assert.equal(grains.geometry.attributes.position.count,mobile?300:550);
+    assert.equal(material.side,THREE.FrontSide,'billboards avoid the two-pass transparent double-side path');
+    const positions=clouds.geometry.attributes.position,index=clouds.geometry.index;let area=0;
+    for(let i=0;i<index.count;i+=3){
+      const a=index.getX(i),b=index.getX(i+1),c=index.getX(i+2);
+      area+=Math.abs((positions.getX(b)-positions.getX(a))*(positions.getY(c)-positions.getY(a))-(positions.getY(b)-positions.getY(a))*(positions.getX(c)-positions.getX(a)))/2;
+    }
+    // The previous scene always used 72 square billboards, including on phones.
+    assert.ok(area*clouds.count/72<=(mobile?.26:.39),'at most 26%/39% of the old unit billboard area');
+    assert.equal(texture.image.width,128);assert.equal(texture.image.height,128);assert.equal(texture.image.data.byteLength,16384);
+    assert.equal(texture.wrapS,THREE.RepeatWrapping);assert.equal(texture.wrapT,THREE.RepeatWrapping);assert.equal(texture.generateMipmaps,true);
+    const pixels=texture.image.data,version=texture.version,matrices=clouds.instanceMatrix.array,grit=grains.geometry.attributes.position.array;
+    assert.ok(Math.max(...pixels)-Math.min(...pixels)>150,'noise has cloud detail');
+    for(let i=0;i<128;i++){
+      assert.ok(Math.abs(pixels[i*128]-pixels[i*128+127])<5,'horizontal wrap is smooth');
+      assert.ok(Math.abs(pixels[i]-pixels[127*128+i])<5,'vertical wrap is smooth');
+    }
+    for(let t=0;t<104;t+=.25)dust.update(t,720);
+    assert.equal(texture.image.data,pixels);assert.equal(texture.version,version,'animation never uploads the texture again');
+    assert.equal(clouds.instanceMatrix.array,matrices);assert.equal(grains.geometry.attributes.position.array,grit);
+    assert.equal(grains.material.uniforms.pointScale.value,720);
+    let disposed=0;texture.addEventListener('dispose',()=>disposed++);
+    dust.group.traverse(mesh=>{mesh.geometry?.dispose();mesh.material?.dispose();});assert.equal(disposed,1,'world material disposal also releases the noise');
+  }
 });

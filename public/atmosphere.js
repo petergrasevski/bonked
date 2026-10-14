@@ -1,4 +1,5 @@
 import {createDustCloud,stormHaze} from './desert-storm.js';
+import {detectDevice} from './display.js';
 import * as THREE from 'three';
 // Lighting, fog, reflections and ocean share the same palette and sun direction.
 export const ATMOSPHERES={
@@ -54,7 +55,7 @@ export function weatherFogDensity(profile,cameraHeight){
   // A spread-out pack raises the camera: keep the cars below it readable.
   return profile.density/Math.max(1,cameraHeight/50);
 }
-export function createAtmosphere(renderer,scene,trackId,{mobile=false}={}){
+export function createAtmosphere(renderer,scene,trackId,{mobile=detectDevice(globalThis.navigator).mobile}={}){
   const profile=ATMOSPHERES[trackId]||ATMOSPHERES.coast;
   scene.background=new THREE.Color(profile.fog);scene.fog=new THREE.FogExp2(profile.fog,profile.density);renderer.toneMappingExposure=profile.exposure;
   const sky=new THREE.Mesh(new THREE.SphereGeometry(1,32,16),skyMaterial(profile,true));sky.frustumCulled=false;sky.renderOrder=-1000;scene.add(sky);
