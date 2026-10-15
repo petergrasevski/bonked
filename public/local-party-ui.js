@@ -3,12 +3,12 @@ import {STANDARD_MAPPING,gamepadButton} from './controller.js';
 
 const node=(tag,text,cls)=>{const element=document.createElement(tag);if(text!==undefined)element.textContent=text;if(cls)element.className=cls;return element;};
 const action=(text,callback)=>{const button=node('button',text,'text-button');button.type='button';button.onclick=callback;return button;};
-export function createLocalPartyUI({root,dialog,claim,manager,getState,onRelease}){
+export function createLocalPartyUI({root,dialog,claim,manager,getState,onRelease,onConfigure=()=>{},onConfigured=()=>{}}){
   const devices=root.querySelector('[data-devices]'),summary=root.querySelector('[data-summary]');
   const form=dialog.querySelector('form'),fields=dialog.querySelector('[data-fields]'),preview=dialog.querySelector('[data-preview]'),error=dialog.querySelector('[data-error]');
   const diagrams=new Map();let mappingDiagram=null;
   let key='',claimKey='',mappingIndex=null,mappingId=null,previousFocus=null;
-  function closeMapping(){dialog.hidden=true;mappingIndex=null;mappingId=null;onRelease();if(previousFocus?.checkVisibility?.())previousFocus.focus();}
+  function closeMapping(){const wasOpen=!dialog.hidden;dialog.hidden=true;mappingIndex=null;mappingId=null;onRelease();if(wasOpen)onConfigured();if(previousFocus?.checkVisibility?.())previousFocus.focus();}
   function configure(device){
     if(getState()?.phase!=='lobby')return;
     previousFocus=document.activeElement;onRelease();mappingIndex=device.index;mappingId=device.rawId;fields.replaceChildren();error.textContent='';
@@ -25,7 +25,7 @@ export function createLocalPartyUI({root,dialog,claim,manager,getState,onRelease
     select('steerAxis','Steering axis',device.pad.axes.length,mapping.steerAxis);checkbox('invertSteer','Reverse steering axis',mapping.invertSteer);
     select('aimAxis','Sky beam up / down axis',device.pad.axes.length,mapping.aimAxis);checkbox('invertAim','Reverse sky beam axis',mapping.invertAim);
     for(const [name,label]of Object.entries({throttle:'Accelerate',reverse:'Reverse',fire:'Fire weapon',left:'Nudge left',right:'Nudge right',ready:'Ready for next round',steerLeft:'Steer left button (optional)',steerRight:'Steer right button (optional)'}))select(name,label,device.pad.buttons.length,mapping.buttons[name]);
-    dialog.hidden=false;form.querySelector('select')?.focus();
+    onConfigure();dialog.hidden=false;form.querySelector('select')?.focus();
   }
   const readMapping=()=>{const data=new FormData(form),value=name=>data.get(name)===''?null:Number(data.get(name));const mapping={steerAxis:value('steerAxis'),aimAxis:value('aimAxis'),invertSteer:data.has('invertSteer'),invertAim:data.has('invertAim'),buttons:{}};
     for(const name of Object.keys(STANDARD_MAPPING.buttons))mapping.buttons[name]=value(name);
@@ -40,7 +40,7 @@ export function createLocalPartyUI({root,dialog,claim,manager,getState,onRelease
   dialog.addEventListener('keydown',event=>{if(event.key==='Tab'){const focusable=[...dialog.querySelectorAll('button,input,select')].filter(e=>!e.disabled),first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}if(event.key==='Escape'){event.stopPropagation();closeMapping();}});
   function update(now){
     const state=getState(),lobby=state?.phase==='lobby';
-    summary.textContent=`Laptop controllers · ${[...manager.slots.values()].filter(s=>s.device!==null).length} joined · ${manager.devices.size} detected`;
+    summary.textContent=`Controllers · ${[...manager.slots.values()].filter(s=>s.device!==null).length} joined · ${manager.devices.size} detected`;
     const nextKey=JSON.stringify([lobby,[...manager.devices.values()].map(d=>[d.index,d.label,d.slotId,d.mapping,d.canSplit,d.joyConSide,d.railButtonsAvailable]),[...manager.slots.values()].map(s=>[s.id,s.name,s.device,s.accepted])]);
     if(nextKey!==key){const expanded=new Set([...devices.querySelectorAll('.local-device[data-device]')].filter(row=>row.querySelector('details')?.open).map(row=>Number(row.dataset.device)));key=nextKey;devices.replaceChildren();diagrams.clear();
       for(const device of manager.devices.values()){

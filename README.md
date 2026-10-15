@@ -450,10 +450,14 @@ then press a face button on each half to join as two players. Hold each sideways
 bottom face accelerates, left face reverses, right face fires, SL nudges left,
 SR nudges right, and minus/plus readies. Configure can adjust either half, including
 using the outer shoulders/triggers instead. Some combined browser profiles omit
-SL/SR; Bonked indicates this rather than substituting other buttons. The lobby and
-Configure share a live diagram of the current mapping for each controller. Splitting
+SL/SR; Bonked indicates this rather than substituting other buttons. Open Settings → Connect controllers → Configure Controllers to see detected
+devices, split a pair, view control diagrams or change mappings. Splitting
 or combining removes that pair's existing lobby players so they can rejoin.
 The browser still sees one physical pair; Bonked routes each half independently.
+Detected, unjoined controllers appear in open player rows. When there are more
+controllers than open slots, extra icons overlap in the last available row; no
+player slot is reserved until a button is pressed. The QR invitation is beside
+the room code; LAN connection details and help are in Settings.
 The diagrams and small player icons use the same controller artwork. Numbered
 callouts connect the diagram to its legend without crossing leader lines.
 Controller sampling runs every 8 ms independently of render frames; steering
