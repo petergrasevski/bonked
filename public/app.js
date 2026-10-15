@@ -1,3 +1,4 @@
+import {createControllerConnectionGuide} from './controller-connection-guide.js';
 import {LocalControllers} from './local-controllers.js';
 import {createLocalPartyUI} from './local-party-ui.js';
 import {LanHostSocket} from './lan-host.js';
@@ -49,7 +50,7 @@ let lagReportUI;
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
 function selectWorld(id){circuitLoader.request(id);}
-let world,displayGuide=null,howToPlay=null;
+let world,displayGuide=null,howToPlay=null,controllerGuide=null;
 const weaponHud=new WeaponHUD($('desktop-weapon'),()=>world);
 const resultsScreen=new RoundResults($('results'));
 const trackPicker=createTrackPicker($('track-picker'),()=>world,chooseCircuit,()=>circuitLoader.loading);
@@ -98,7 +99,7 @@ const input={...NEUTRAL},keys=new Set();let leftHeld=false,rightHeld=false,gasHe
 const holdResets=[];
 const portrait=matchMedia('(orientation: portrait)');
 const rotationBlocked=()=>device.mobile&&portrait.matches;
-const carNames=new CarNameTooltip($('scene'),$('opponent-name'),{world:()=>world,state:()=>state,localId:()=>myId,enabled:()=>['racing','countdown'].includes(state?.phase)&&!document.hidden&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen()});
+const carNames=new CarNameTooltip($('scene'),$('opponent-name'),{world:()=>world,state:()=>state,localId:()=>myId,enabled:()=>['racing','countdown'].includes(state?.phase)&&!document.hidden&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen())});
 let toastTimer;function toast(message){$('toast').textContent=message;$('toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),3500);}
 function saveSession(){try{if(session&&session.mode!=='lan')sessionStorage.setItem('drift-room',JSON.stringify(session));else sessionStorage.removeItem('drift-room');}catch{}}
 function send(message){if(ws?.readyState===WebSocket.OPEN){ws.send(JSON.stringify(message));return true;}return false;}
@@ -270,7 +271,7 @@ function controls(){
   updateControlLegend($('controller-status'),pad.connected,skyMode());
   document.body.classList.toggle('controller-connected',pad.connected);
   if(!pad.throttle&&!pad.reverse&&!pad.fire&&!pad.left&&!pad.right&&Math.abs(pad.steer)<.1&&Math.abs(pad.aimY)<.1)controllerBlocked=false;
-  if(rotationBlocked()||document.hidden||!document.hasFocus()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()||howToPlay?.isOpen()){Object.assign(input,NEUTRAL);delete input.skyAim;if(world)world.skyMove={x:0,y:0};controllerBlocked=true;return;}
+  if(rotationBlocked()||document.hidden||!document.hasFocus()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()||(howToPlay?.isOpen()||controllerGuide?.isOpen())){Object.assign(input,NEUTRAL);delete input.skyAim;if(world)world.skyMove={x:0,y:0};controllerBlocked=true;return;}
   const gamepad=controllerBlocked?readController([]):pad;
   if(keys.size||leftHeld||rightHeld||gasHeld||brakeHeld||fireHeld)markActivity();
   const keyboardSteer=(rightHeld||keys.has('KeyD')?1:0)-(leftHeld||keys.has('KeyA')?1:0);
@@ -305,20 +306,20 @@ function flushControls(){controls();if(state?.phase==='countdown'||state?.phase=
 holdButton('gas',v=>{gasHeld=v;flushControls();});holdButton('brake',v=>{brakeHeld=v;flushControls();});
 if(device.mobile){
   holdResets.push(bindTouchSteering(document.querySelector('.left-controls'),{
-    enabled:()=>['countdown','racing'].includes(state?.phase)&&!rotationBlocked()&&!document.hidden&&document.hasFocus()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen()&&!predicted?.eliminated&&!predicted?.finished,
+    enabled:()=>['countdown','racing'].includes(state?.phase)&&!rotationBlocked()&&!document.hidden&&document.hasFocus()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen())&&!predicted?.eliminated&&!predicted?.finished,
     steer:direction=>{leftHeld=direction<0;rightHeld=direction>0;flushControls();},
     nudge,activate:unlockAudio,
   }));
 }else{
   holdButton('steer-left',v=>{leftHeld=v;flushControls();});holdButton('steer-right',v=>{rightHeld=v;flushControls();});
 }
-holdResets.push(bindSkyJoystick($('sky-joystick'),{enabled:()=>skyMode()&&!rotationBlocked()&&document.hasFocus()&&!document.hidden&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen(),move:v=>{skyStick=v;flushControls();},activate:unlockAudio}));
+holdResets.push(bindSkyJoystick($('sky-joystick'),{enabled:()=>skyMode()&&!rotationBlocked()&&document.hasFocus()&&!document.hidden&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen()),move:v=>{skyStick=v;flushControls();},activate:unlockAudio}));
 function fire(){if(state?.phase==='racing'&&!rotationBlocked()){firePulseUntil=performance.now()+70;send({type:'input',seq:++sequence,...input,fire:true});}}
 holdButton('item',held=>{fireHeld=held;if(held)fire();});
 function triggerNudge(direction){if(state?.phase!=='racing'||rotationBlocked()||predicted?.eliminated||predicted?.nudgeCooldown>0)return;nudgeDirection=direction;nudgeUntil=performance.now()+120;}
 function nudge(direction){triggerNudge(direction);flushControls();}
 holdButton('nudge-left',held=>{if(held)nudge(-1);});holdButton('nudge-right',held=>{if(held)nudge(1);});
-window.addEventListener('keydown',e=>{const enter=e.code==='Enter'||e.code==='NumpadEnter';if(enter&&state?.phase==='finished'&&!state.tournamentComplete&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen()&&!e.target.closest?.('input,textarea,select,button:not(#ready),a,[contenteditable=true]')){e.preventDefault();if(!e.repeat&&!$('ready').disabled)$('ready').click();return;}if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement||e.target.isContentEditable||((e.code==='Enter'||e.code==='NumpadEnter')&&e.target.closest?.('button,a'))||!state||state.phase==='lobby'||rotationBlocked()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()||howToPlay?.isOpen())return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','NumpadEnter','KeyW','KeyS','KeyA','KeyD','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if((e.code==='Enter'||e.code==='NumpadEnter')&&!e.repeat)fire();if((e.code==='ArrowLeft'||e.code==='KeyQ')&&!e.repeat)nudge(-1);if((e.code==='ArrowRight'||e.code==='KeyR')&&!e.repeat)nudge(1);unlockAudio();}});
+window.addEventListener('keydown',e=>{const enter=e.code==='Enter'||e.code==='NumpadEnter';if(enter&&state?.phase==='finished'&&!state.tournamentComplete&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen())&&!e.target.closest?.('input,textarea,select,button:not(#ready),a,[contenteditable=true]')){e.preventDefault();if(!e.repeat&&!$('ready').disabled)$('ready').click();return;}if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement||e.target.isContentEditable||((e.code==='Enter'||e.code==='NumpadEnter')&&e.target.closest?.('button,a'))||!state||state.phase==='lobby'||rotationBlocked()||!$('settings').hidden||!$('dialog').hidden||displayGuide?.isOpen()||(howToPlay?.isOpen()||controllerGuide?.isOpen()))return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','NumpadEnter','KeyW','KeyS','KeyA','KeyD','KeyQ','KeyR'].includes(e.code)){e.preventDefault();keys.add(e.code);flushControls();if((e.code==='Enter'||e.code==='NumpadEnter')&&!e.repeat)fire();if((e.code==='ArrowLeft'||e.code==='KeyQ')&&!e.repeat)nudge(-1);if((e.code==='ArrowRight'||e.code==='KeyR')&&!e.repeat)nudge(1);unlockAudio();}});
 window.addEventListener('gamepaddisconnected',event=>partyControllers?.disconnected(event.gamepad.index));
 window.addEventListener('keyup',e=>{keys.delete(e.code);flushControls();});window.addEventListener('blur',releaseControls);
 document.addEventListener('visibilitychange',()=>{releaseControls();if(document.hidden){predictionClock.reset();accumulator=0;stopGameAudio();lastState=-Infinity;}else{if(lanTransport)wakeLanDisplay();if(idleDisconnected)markActivity();clientUpdates.check();}});
@@ -404,10 +405,10 @@ function renderedState(now,dt){
   const raceTime=Math.max(state.raceTime||0,...[predicted,...predictedOthers].map(car=>car.raceTime||0))+(remainder);
   return {...state,...(state.phase==='racing'?combatPrediction.view():{}),combatTime:combatPrediction.time,players,camera,raceTime,chase:renderedChase(state.chase,players)};
 }
-function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;partyControllers?.poll(navigator.getGamepads?.(),{state,active:!document.hidden&&document.hasFocus()&&$('settings').hidden&&$('dialog').hidden&&!partyUI?.isOpen()&&!displayGuide?.isOpen()&&!howToPlay?.isOpen(),now,wallTime:Date.now(),dt});controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
+function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationFrame(frame);const frameMs=now-lastFrame;network.frame(frameMs,now-lastState,state?.phase==='racing'&&!document.hidden);const dt=Math.min(.05,frameMs/1000);lastFrame=now;partyControllers?.poll(navigator.getGamepads?.(),{state,active:!document.hidden&&document.hasFocus()&&$('settings').hidden&&$('dialog').hidden&&!partyUI?.isOpen()&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen()),now,wallTime:Date.now(),dt});controls();if(state?.phase==='countdown')$('countdown').textContent=String(Math.max(1,Math.ceil((state.startAt-Date.now()-clockOffset)/1000)));accumulator+=dt;
   const ready=state&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&!circuitLoader.loading&&!circuitLoader.error;
   const fresh=ready&&now-lastState<PREDICTION_GRACE_MS;
-  const active=fresh&&['racing','countdown'].includes(state.phase)&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen();
+  const active=fresh&&['racing','countdown'].includes(state.phase)&&!rotationBlocked()&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen());
   const command={...(active?input:NEUTRAL)};
   while(accumulator>=STEP){accumulator-=STEP;if(ready&&!lanTransport){const seq=++sequence;send({type:'input',seq,...command,accelPressedAt});if(state.phase==='racing'){pending.push({seq});if(pending.length>120)pending.shift();}}}
   if(!lanTransport&&state?.phase==='racing'&&predicted){
@@ -417,11 +418,11 @@ function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationF
     }
   }
   if(snapshotToReconcile&&ready&&!lanTransport){const packet=snapshotToReconcile;snapshotToReconcile=null;reconcileSnapshot(packet.state,packet.at,now);}
-  world?.resolution?.sample(frameMs,{active:!document.hidden&&!rotationBlocked()&&!circuitLoader.loading&&!circuitLoader.error&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!howToPlay?.isOpen(),mode:state&&state.phase!=='lobby'?'race':'menu'});
-  const rendered=circuitLoader.loading||circuitLoader.error?null:renderedState(now,Math.min(.25,Math.max(0,frameMs/1000)));if(!circuitLoader.loading&&!circuitLoader.error){if(!howToPlay?.isOpen())world?.update(rendered,myId,null,dt,now);howToPlay?.update(now);carNames.update(now);trackPicker.tick(now);
+  world?.resolution?.sample(frameMs,{active:!document.hidden&&!rotationBlocked()&&!circuitLoader.loading&&!circuitLoader.error&&$('settings').hidden&&$('dialog').hidden&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen()),mode:state&&state.phase!=='lobby'?'race':'menu'});
+  const rendered=circuitLoader.loading||circuitLoader.error?null:renderedState(now,Math.min(.25,Math.max(0,frameMs/1000)));if(!circuitLoader.loading&&!circuitLoader.error){if(!(howToPlay?.isOpen()||controllerGuide?.isOpen()))world?.update(rendered,myId,null,dt,now);howToPlay?.update(now);carNames.update(now);trackPicker.tick(now);
 
   }
-  lagRecorder.frame({frameMs,age:now-lastState,hidden:document.hidden,phase:state?.phase||'menu',track:activeTrack.id,round:state?.round,overlay:!$('settings').hidden||!$('dialog').hidden||circuitLoader.loading||!!displayGuide?.isOpen()||!!howToPlay?.isOpen(),players:rendered?.players,camera:world?.follow,cameraTarget:rendered?.camera,cameraPosition:world?.camera.position,skyTargets:world?.skyView.targets,predicted:predicted?[predicted,...predictedOthers]:[],queuedBytes:ws?.bufferedAmount||0});
+  lagRecorder.frame({frameMs,age:now-lastState,hidden:document.hidden,phase:state?.phase||'menu',track:activeTrack.id,round:state?.round,overlay:!$('settings').hidden||!$('dialog').hidden||circuitLoader.loading||!!displayGuide?.isOpen()||!!(howToPlay?.isOpen()||controllerGuide?.isOpen()),players:rendered?.players,camera:world?.follow,cameraTarget:rendered?.camera,cameraPosition:world?.camera.position,skyTargets:world?.skyView.targets,predicted:predicted?[predicted,...predictedOthers]:[],queuedBytes:ws?.bufferedAmount||0});
   if(state&&world&&!circuitLoader.loading){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
   if(now-uiAt>100){uiAt=now;if(!$('settings').hidden)updateGraphicsStatus();updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);if(idleDisconnected)$('connection-label').textContent='IDLE';network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,render:devLogs?renderDiagnostics.latest:undefined,presentation:'predicted-fleet-clock',bufferMs:0,underruns:0,server:network.server});}
@@ -430,10 +431,13 @@ function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationF
   const musicEnabled=!document.hidden&&!audioSettings.muted&&audioSettings.music>0;
   musicAudio?.update(musicEnabled);
   audioMixer?.update(audible&&['countdown','racing','finished'].includes(rendered?.phase),voice.activityLevel(),{musicEnabled});
-  if(devLogs)renderDiagnostics.sample({frameMs,cpuMs:performance.now()-cpuStart,info:world?.renderer.info,pixels:world?world.renderer.domElement.width*world.renderer.domElement.height:0,active:!document.hidden&&!circuitLoader.loading&&!circuitLoader.error&&$('settings').hidden&&$('dialog').hidden&&!rotationBlocked()&&!displayGuide?.isOpen()&&!howToPlay?.isOpen()});
+  if(devLogs)renderDiagnostics.sample({frameMs,cpuMs:performance.now()-cpuStart,info:world?.renderer.info,pixels:world?world.renderer.domElement.width*world.renderer.domElement.height:0,active:!document.hidden&&!circuitLoader.loading&&!circuitLoader.error&&$('settings').hidden&&$('dialog').hidden&&!rotationBlocked()&&!displayGuide?.isOpen()&&!(howToPlay?.isOpen()||controllerGuide?.isOpen())});
 }
 howToPlay=new HowToPlay({root:$('how-to-play'),getWorld:()=>world,controls:()=>({mobile:device.mobile,controller:readController(navigator.getGamepads?.()).connected}),storage:audioStorage,onOpen:()=>{releaseControls();$('settings').hidden=true;},onClose:()=>{accumulator=0;}});
 $('how-to-play-open').onclick=$('how-to-play-settings').onclick=()=>howToPlay.show();
+let guideFromSettings=false;
+controllerGuide=createControllerConnectionGuide({root:$('controller-connect'),onOpen:()=>{guideFromSettings=!$('settings').hidden;releaseControls();$('settings').hidden=true;},onClose:()=>{accumulator=0;if(guideFromSettings){$('settings').hidden=false;$('settings-close').focus();}}});
+$('controller-connect-settings').onclick=$('controller-connect-lobby').onclick=()=>controllerGuide.show();
 window.addEventListener('bonked-ready',()=>howToPlay.maybeShow(),{once:true});
 displayGuide=initDisplayGuide({autoShow:!howToPlay.firstVisit,onOpen:()=>{releaseControls();$('settings').hidden=true;},onClose:()=>{accumulator=0;world?.resize();}});
 requestAnimationFrame(frame);

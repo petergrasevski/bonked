@@ -503,6 +503,16 @@ update before creating a new party. LAN registrations also participate in the
 existing deployment occupancy gate, avoiding a deployment during a party.
 
 
+### Controller connection guide
+
+Open **Settings → Connect controllers**, or **How to connect controllers** in the
+local lobby. The guide detects macOS or Windows, with a manual selector for other
+hosts. It includes separate Bluetooth entries for PS5 DualSense, PS4 DUALSHOCK 4,
+original Switch Pro / Joy-Con, and Switch 2 Pro / Joy-Con 2, plus USB cable and
+browser detection troubleshooting. Switch 2 entries describe desktop bridge
+limitations rather than promising native Bluetooth or USB compatibility. Source
+links are included in the guide. Opening it releases game inputs.
+
 ### Browser controller limits
 
 Bonked polls every controller exposed by the Gamepad API, and supports up to eight
