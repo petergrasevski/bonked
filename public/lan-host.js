@@ -2,8 +2,8 @@ import {LanPeer,LanSignalingClient,LAN_CONNECTION_HELP} from './lan-peer.js';
 
 // WebSocket-shaped adapter lets the existing display/lobby use the same messages.
 export class LanHostSocket extends EventTarget {
-  constructor({revision,onStatus=()=>{}}){
-    super();this.readyState=1;this.bufferedAmount=0;this.peers=new Map();this.revision=revision;this.onStatus=onStatus;this.created=false;
+  constructor({revision,onStatus=()=>{},onLocalMessage=()=>{}}){
+    super();this.readyState=1;this.bufferedAmount=0;this.peers=new Map();this.revision=revision;this.onStatus=onStatus;this.created=false;this.code='LOCAL';this.phoneCode=null;this.localPlayers=new Set();this.onLocalMessage=onLocalMessage;
     this.worker=new Worker(new URL('./lan-worker.js',import.meta.url),{type:'module'});
     this.worker.onerror=()=>this.emit({type:'error',message:'Could not start the local game engine. Reload and try again.'});
     this.worker.onmessage=({data})=>{
@@ -11,18 +11,22 @@ export class LanHostSocket extends EventTarget {
       if(data.type==='snapshot'){
         this.emit(data.state);
         if(data.controllers!==false){const s=data.state;const status={type:'state',code:s.code,trackId:s.trackId,phase:s.phase,time:s.time,startAt:s.startAt,round:s.round,tournamentComplete:s.tournamentComplete,tournamentWinnerId:s.tournamentWinnerId,roundResults:s.roundResults,targetScore:s.targetScore,nextRoundAt:s.nextRoundAt,camera:s.camera,players:s.players.map(p=>({id:p.id,name:p.name,color:p.color,health:p.health,item:p.item,ammo:p.ammo,shield:p.shield,score:p.score,ready:p.ready,eliminated:p.eliminated,finished:p.finished,wrecked:p.wrecked,overturned:p.overturned,nudgeCooldown:p.nudgeCooldown,skyTarget:p.skyTarget,skyCooldownUntil:p.skyCooldownUntil}))};for(const {peer}of this.peers.values())peer.send(status);}
-      }else if(data.type==='deliver'){if(data.id==='lan-display')this.emit(data.message);else this.peers.get(data.id)?.peer.send(data.message);}
+      }else if(data.type==='deliver'){if(data.id==='lan-display')this.emit(data.message);else if(this.localPlayers.has(data.id))this.onLocalMessage(data.id,data.message);else this.peers.get(data.id)?.peer.send(data.message);}
     };
-    this.signaling=new LanSignalingClient({onMessage:msg=>this.receive(msg),onStatus:status=>{onStatus(status==='online'?'Setup server connected':status==='replaced'?'Host opened in another tab':'Setup server reconnecting; connected controllers can keep playing');if(status==='replaced')this.close();}});
-    this.statsTimer=setInterval(()=>{for(const [id,{peer}]of this.peers)if(peer.opened)peer.stats().then(stats=>onStatus('Connected over local Wi-Fi',id,stats?.currentRoundTripTime!=null?Math.round(stats.currentRoundTripTime*1000):null)).catch(()=>{});},2000);
+  }
+  enablePhones(){
+    if(this.signaling)return;
+    this.signaling=new LanSignalingClient({onMessage:msg=>this.receive(msg),onStatus:status=>{this.onStatus(status==='online'?'Setup server connected':status==='replaced'?'Host opened in another tab':'Setup server reconnecting; connected controllers can keep playing');if(status==='replaced')this.onStatus('Phone sharing opened elsewhere; local controllers can keep playing');}});
+    this.signaling.start({type:'lan-create',revision:this.revision});
+    this.statsTimer=setInterval(()=>{for(const [id,{peer}]of this.peers)if(peer.opened)peer.stats().then(stats=>this.onStatus('Connected over local Wi-Fi',id,stats?.currentRoundTripTime!=null?Math.round(stats.currentRoundTripTime*1000):null)).catch(()=>{});},2000);
   }
   emit(message){if(this.readyState===1)this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(message)}));}
   receive(msg){
     if(msg.type==='lan-welcome'){
-      this.code=msg.code;if(!this.created){this.created=true;this.worker.postMessage({type:'create',code:msg.code});}return;
+      this.code=this.phoneCode=msg.code;this.worker.postMessage({type:'set-code',code:msg.code});this.emit({type:'phone-room',code:msg.code});return;
     }
-    if(msg.type==='error'){this.emit(msg);return;}
-    if(msg.type==='lan-ended'){this.emit({type:'error',message:msg.message});this.close();return;}
+    if(msg.type==='error'){if(!this.phoneCode){this.signaling?.close(false);this.signaling=null;clearInterval(this.statsTimer);}this.emit(msg);return;}
+    if(msg.type==='lan-ended'){for(const [id,{peer}]of this.peers){peer.close();this.worker.postMessage({type:'peer-left',id});}this.peers.clear();this.phoneCode=null;this.code='LOCAL';this.signaling?.close(false);this.signaling=null;clearInterval(this.statsTimer);this.worker.postMessage({type:'set-code',code:this.code});this.emit({type:'phone-sharing-ended'});this.onStatus(msg.message+' Local controllers can keep playing.');return;}
     if(msg.type==='lan-peer'){
       const existing=this.peers.get(msg.id);if(existing?.generation===msg.generation)return;
       existing?.peer.close();
@@ -38,6 +42,10 @@ export class LanHostSocket extends EventTarget {
     if(msg.type==='lan-peer-left'){const record=this.peers.get(msg.id);this.peers.delete(msg.id);record?.peer.close();this.worker.postMessage({type:'peer-left',id:msg.id});this.onStatus('Left party',msg.id);return;}
     if(msg.type==='lan-signal'){const record=this.peers.get(msg.from);if(record?.generation===msg.generation)record.peer.receive(msg.signal);}
   }
-  send(encoded){const message=JSON.parse(encoded);if(message.type==='create'){this.signaling.start({type:'lan-create',revision:this.revision});return;}if(message.type==='leave'){this.close();return;}this.worker.postMessage({type:'command',id:'lan-display',message});}
-  close(){if(this.readyState===3)return;this.readyState=3;clearInterval(this.statsTimer);this.signaling.close();for(const {peer}of this.peers.values())peer.close();this.peers.clear();this.worker.terminate();this.dispatchEvent(new Event('close'));}
+  send(encoded){const message=JSON.parse(encoded);if(message.type==='create'){if(!this.created){this.created=true;this.worker.postMessage({type:'create',code:this.code});}return;}if(message.type==='leave'){this.close();return;}this.worker.postMessage({type:'command',id:'lan-display',message});}
+  addLocalPlayer({id,name}){this.localPlayers.add(id);this.worker.postMessage({type:'peer-open',id,name});}
+  sendLocal(id,message){if(this.localPlayers.has(id))this.worker.postMessage({type:'command',id,message});}
+  disconnectLocal(id){if(this.localPlayers.has(id))this.worker.postMessage({type:'peer-close',id});}
+  removeLocal(id){this.localPlayers.delete(id);this.worker.postMessage({type:'peer-left',id});}
+  close(){if(this.readyState===3)return;this.readyState=3;clearInterval(this.statsTimer);this.signaling?.close();for(const {peer}of this.peers.values())peer.close();this.peers.clear();this.localPlayers.clear();this.worker.terminate();this.dispatchEvent(new Event('close'));}
 }

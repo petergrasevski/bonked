@@ -1,3 +1,4 @@
+import {PLAYER_GRACE_MS} from './shared/session-limits.js';
 import {LanSignaling} from './server-lan.js';
 import {createRoomEngine} from './shared/room-engine.js';
 import {TRACKS,selectTrack,getLandscape,MAX_PLAYERS,STEP,NEUTRAL,COLORS} from './shared/game.js';
@@ -22,7 +23,7 @@ const revision=await clientRevision(root);
 const rooms=new Map(),connections=new Map();
 const diagnostics=new ServerDiagnostics();
 const PORT=Number(process.env.PORT)||3210, HOST=process.env.HOST||'0.0.0.0';
-const MAX_ROOMS=100, GRACE_MS=20000;
+const MAX_ROOMS=100, GRACE_MS=PLAYER_GRACE_MS;
 const deployment=new DeploymentGate({rooms:{values:()=>[...rooms.values(),...lan.rooms.values()]},graceMs:GRACE_MS});
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.webmanifest':'application/manifest+json','.json':'application/json','.wav':'audio/wav','.mp3':'audio/mpeg','.ogg':'audio/ogg','.mid':'audio/midi','.ttf':'font/ttf','.woff2':'font/woff2'};
 function lanURLs(){return Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(n=>n.family==='IPv4'&&!n.internal&&!name.startsWith('utun')).map(n=>`http://${n.address}:${PORT}`));}

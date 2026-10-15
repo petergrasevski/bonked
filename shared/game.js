@@ -7,7 +7,7 @@ import {SEA_LEVEL} from './beach-profile.js';
 import {bodyOffset,WHEEL_POINTS,wheelSupports,balanceOnWheels,collideTerrain} from './edge-physics.js';
 import {createLandscape} from './landscape.js';
 import {DESERT_CACTI,DESERT_JUMPS,desertElevation,desertHalfWidth,desertHasBarrier,desertRampLift,desertRampGrade,desertMoles,moleState} from './desert-features.js';
-export const MAX_PLAYERS = 8;
+export {MAX_PLAYERS} from './session-limits.js';
 export const LAPS = 3;
 export const STEP = 1 / 60;
 export const ROAD_WIDTH = 12;

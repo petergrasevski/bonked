@@ -431,14 +431,35 @@ Next-round countdowns discard old fleet corrections and snap every car to the fr
 grid. Desktop round results show a subtle “Press Enter” ready hint. Inactive players
 remain connected for ten minutes, including time spent spectating bots.
 
-## LAN party (browser host)
+## Local party (browser host)
 
-Choose **LAN party → Host LAN party** on a laptop, then scan its QR code with
-phones on the same main Wi-Fi. Phones open the website normally and choose a name;
-no local server installation or private-IP configuration is needed on a deployed
-HTTPS site. The ordinary **Join a room** option also recognizes LAN party codes
-and opens the controller page. The laptop is a display and does not consume one
-of the eight driver slots. Practice bots share those eight slots with phones.
+Choose **Local party → Host local party** on a laptop. Connect USB controllers or
+pair Bluetooth controllers in the laptop's OS settings, then press a button on
+each controller to join. The game assigns names such as **DualSense 1** or
+**Switch Pro 1**, and highlights the player's lobby row when that controller is
+used. Release the join button before driving. The laptop display does not consume
+a player slot; gamepads, phones and practice bots share one eight-player grid.
+
+For phones, choose **Enable phone controllers** in the lobby and scan the QR code.
+Phones use the same main Wi-Fi as the laptop. They open the website normally and
+choose a name; no local server installation is needed on a deployed HTTPS site.
+The ordinary **Join a room** option also recognizes enabled phone room codes.
+
+Local gamepads use the same mapping as ordinary online play: left stick steers,
+bottom face button accelerates, left face button reverses, R1 fires, and the two
+triggers nudge. Start / + marks the player Ready between rounds. Eliminated
+players aim the sky beam with the left stick and fire with R1. **Configure** lets
+the host adjust controls, test button/axis numbers, invert axes, and use steering
+buttons on unfamiliar layouts. Custom mappings are saved per reported device
+model in this browser.
+
+Disconnected controllers immediately release their controls. Their player is
+reserved for 20 seconds: press a button on the reconnected controller, then choose
+**Reclaim [player]** on the laptop. This is explicit because browsers can reuse
+controller indices and do not provide a dependable persistent device identity.
+Reclaim preserves the car and score; after the grace period, join again in the
+lobby. Focus loss releases all local controls, and resuming requires releasing
+held buttons and centering the stick first.
 
 The controller page has large fixed steering and weapon zones, separate reverse,
 GO and nudge buttons, touch auto-acceleration at GO, and short vibration feedback
@@ -450,8 +471,10 @@ Ready and tournament controls remain available between rounds.
 
 `shared/room-engine.js` owns the authoritative room commands, input validation,
 60Hz simulation, bots, combat, countdowns, scoring, track changes and snapshots.
-Both `server.js` and `public/lan-worker.js` call this engine; the LAN worker contains
-only browser lifecycle and connection adapters. Bot decisions live in
+Both `server.js` and `public/lan-worker.js` call this engine. The worker uses
+`shared/party-host.js` for connection lifecycle, while `public/local-controllers.js`
+routes each physical device to its own player. These adapters contain no separate
+physics, combat or tournament rules. Bot decisions live in
 `shared/bots.js`; `bots.js` re-exports them for existing consumers. The host uses
 Bonked's existing lobby, renderer, circuit picker, audio and results interface.
 
@@ -464,8 +487,10 @@ stale input releases automatically using the online engine's existing timeout.
 
 ICE uses host candidates only (`iceServers: []`), without STUN or TURN. Failure to
 connect shows local-network help and an explicit ordinary-online-room option;
-there is no silent cloud gameplay fallback. Setup and reconnection require
-internet. An established local connection can continue through a brief signaling
+there is no silent cloud gameplay fallback. Phone setup and reconnection require
+internet. Gamepad-only hosting starts without room registration; after its code
+has loaded, simulation and local inputs need no network connection. Offline page
+launch is not provided: there is no service-worker asset cache. An established local connection can continue through a brief signaling
 outage, but long outages can expire the room's setup registration. Reloading or
 closing the host ends its game; there is no host migration. Keep the host tab
 visible and the laptop awake. The host and controllers request a screen wake lock
@@ -476,6 +501,18 @@ when rejoining within the existing 20-second player grace period. Browser module
 revisions must match the backend, so reload both host and controllers after an
 update before creating a new party. LAN registrations also participate in the
 existing deployment occupancy gate, avoiding a deployment during a party.
+
+
+### Browser controller limits
+
+Bonked polls every controller exposed by the Gamepad API, and supports up to eight
+players. It cannot guarantee that every OS/browser/adapter exposes eight physical
+gamepads. Bluetooth radio limits and interference can also reduce reliability.
+Test the actual controllers, browser and laptop; USB connections or a mixture of
+USB, Bluetooth and phones can help. The browser may reveal a controller only after
+someone presses a button. Switch Pro and individual Joy-Con layouts are separate
+compatibility targets, so use Configure when the supplied layout is unfamiliar.
+Advanced haptics, motion sensors and adaptive triggers are not required for play.
 
 ### When local Wi-Fi connections fail
 
@@ -497,7 +534,7 @@ existing deployment occupancy gate, avoiding a deployment during a party.
   internet round trip but cannot remove Wi-Fi congestion or a slow host renderer.
 
 The host's **LAN connections & help** panel shows connection state and WebRTC RTT.
-Controllers show their input-path RTT and offer a retry after a failed connection.
+Phone controllers show their input-path RTT and offer a retry after a failed connection.
 Physical iPhone/Android tests on the intended router are still required before
 calling the feature production-ready; headless browser tests exercise protocols
 and UI but do not reproduce a router's isolation or a phone's OS permissions.

@@ -1,9 +1,9 @@
 import {randomBytes,randomUUID} from 'node:crypto';
-import {MAX_PLAYERS} from './shared/game.js';
+import {MAX_PLAYERS,PLAYER_GRACE_MS} from './shared/session-limits.js';
 
 // Signaling only. No controls or authoritative game state cross this service.
 export class LanSignaling {
-  constructor({send,revision,codeAvailable=()=>true,now=Date.now,graceMs=20000,maxRooms=100}){
+  constructor({send,revision,codeAvailable=()=>true,now=Date.now,graceMs=PLAYER_GRACE_MS,maxRooms=100}){
     Object.assign(this,{send,revision,codeAvailable,now,graceMs,maxRooms});this.rooms=new Map();this.clients=new Map();
   }
   fail(ws,message){this.send(ws,{type:'error',message});}
