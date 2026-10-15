@@ -31,7 +31,7 @@ export class LocalControllers {
         continue;
       }
       const slot=this.slots.get(device.slotId);if(!slot?.accepted)continue;
-      if(pressed||Math.abs(device.input.steer)>.2)slot.highlightUntil=now+600;
+      if(down)slot.highlightUntil=now+120;
       const player=state?.players.find(p=>p.id===slot.id);
       if(!active){if(!slot.blocked)this.releaseSlot(slot);continue;}
       if(slot.blocked){if(resting(device.input)&&!down)slot.blocked=false;else continue;}
@@ -51,7 +51,8 @@ export class LocalControllers {
       }else slot.skyAim=null;
       if(input.fire&&!slot.previous.fire){slot.fireUntil=now+70;this.send(slot.id,{type:'item'});}
       const buttonChanged=['throttle','reverse','fire','left','right'].some(key=>input[key]!==slot.previous[key]);
-      if(now>=(slot.nextInputAt||0)||buttonChanged){slot.nextInputAt=now+1000/60;this.send(slot.id,{type:'input',seq:++slot.sequence,...neutral,steer:sky?0:input.steer,throttle:sky?0:throttle,reverse:!sky&&input.reverse,fire:input.fire||now<(slot.fireUntil||0),nudge:!sky&&now<slot.nudgeUntil?slot.nudge:0,accelPressedAt:slot.accelPressedAt,...(skyAim?{skyAim}:{})});}
+      const steeringChanged=Math.abs(input.steer-(slot.sentSteer||0))>.002;
+      if(now>=(slot.nextInputAt||0)||buttonChanged||(steeringChanged&&now>=(slot.nextSteeringAt||0))){slot.nextInputAt=now+1000/60;slot.nextSteeringAt=now+8;slot.sentSteer=input.steer;this.send(slot.id,{type:'input',seq:++slot.sequence,...neutral,steer:sky?0:input.steer,throttle:sky?0:throttle,reverse:!sky&&input.reverse,fire:input.fire||now<(slot.fireUntil||0),nudge:!sky&&now<slot.nudgeUntil?slot.nudge:0,accelPressedAt:slot.accelPressedAt,...(skyAim?{skyAim}:{})});}
       slot.previous={...input};
     }
   }
@@ -85,7 +86,7 @@ export class LocalControllers {
       const used=new Set([...this.slots.values()].map(s=>s.name));let number=1;while(used.has(`${device.label} ${number}`))number++;
       slot={id:'local-'+this.uuid(),name:`${device.label} ${number}`,device:device.index,accepted:false,sequence:0,blocked:true,previous:{},highlightUntil:0};this.slots.set(slot.id,slot);
     }
-    device.slotId=slot.id;slot.device=device.index;slot.disconnectedAt=null;slot.accepted=false;slot.blocked=true;slot.previous={};this.pendingDevice=null;this.join(slot);return true;
+    slot.controllerLabel=device.label;slot.joyConSide=device.joyConSide;device.slotId=slot.id;slot.device=device.index;slot.disconnectedAt=null;slot.accepted=false;slot.blocked=true;slot.previous={};this.pendingDevice=null;this.join(slot);return true;
   }
   reclaim(id){return this.add(this.devices.get(this.pendingDevice),id);}
   joinNew(){return this.add(this.devices.get(this.pendingDevice));}

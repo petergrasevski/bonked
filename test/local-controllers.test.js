@@ -109,3 +109,13 @@ test('only recognized standard combined Joy-Con layouts offer splitting',()=>{
   assert.equal(h.manager.devices.get(0).canSplit,false);assert.equal(h.manager.devices.get(1).canSplit,false);
   assert.equal(h.manager.setJoyConSplit(0),false);
 });
+
+test('steering is forwarded between heartbeat ticks and remains below the host command budget',()=>{
+  const sent=[];const manager=new LocalControllers({uuid:()=>1,join:s=>manager.receive(s.id,{type:'welcome'}),send:(id,msg)=>sent.push(msg),disconnect:()=>{},remove:()=>{}});
+  const a=pad(0),state={phase:'lobby',players:[]};manager.poll([a],{state,now:0});press(a);manager.poll([a],{state,now:1});press(a,0,false);manager.poll([a],{state,now:2});
+  const slot=[...manager.slots.values()][0];state.phase='racing';state.players=[{id:slot.id}];manager.poll([a],{state,now:20});sent.length=0;
+  a.axes[0]=.8;manager.poll([a],{state,now:28});assert.equal(sent.length,1);assert.ok(sent[0].steer>.7,'steering need not wait until the next 60 Hz heartbeat');
+  for(let i=0;i<240;i++){a.axes[0]=Math.sin(i*.1);manager.poll([a],{state,now:40+i*1000/240});}
+  assert.ok(sent.length<130,'continuous axis motion on a 240 Hz display stays below the 150-command host limit');
+  assert.equal(slot.controllerLabel,'DualSense');
+});

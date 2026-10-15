@@ -56,7 +56,7 @@ export function createLocalPartyUI({root,dialog,claim,manager,getState,onRelease
       if(!manager.devices.size)devices.append(node('p','Connect controllers by USB or pair them in the laptop’s Bluetooth settings. Press a button so the browser can detect them.','fine'));
     }
     for(const [index,diagram]of diagrams){const d=manager.devices.get(index);if(d)diagram.update(d.pad);}
-    for(const row of devices.querySelectorAll('[data-device]')){const device=manager.devices.get(Number(row.dataset.device)),slot=manager.slots.get(device?.slotId);row.classList.toggle('controller-active',!!slot&&now<slot.highlightUntil);}
+
     const pending=manager.devices.get(manager.pendingDevice),reserved=[...manager.slots.values()].filter(s=>s.device===null);
     const nextClaim=JSON.stringify([pending?.index,reserved.map(s=>s.id),lobby]);
     if(nextClaim!==claimKey){claimKey=nextClaim;claim.replaceChildren();claim.hidden=!pending;

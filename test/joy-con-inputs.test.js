@@ -26,7 +26,7 @@ test('missing rail buttons stay neutral and the visual guide explains the limita
   for(const half of splitJoyCon(pad)){
     assert.equal(half.railButtonsAvailable,false);assert.equal(decodeController(half).left,false);assert.equal(decodeController(half).right,false);
     const model=controllerDiagramModel({pad:half,label:'Joy-Con',joyConSide:half.joyConSide,railButtonsAvailable:half.railButtonsAvailable,mapping:STANDARD_MAPPING});
-    assert.match(model.notice,/does not expose SL\/SR/);assert.equal(model.bindings.find(b=>b.action==='left').available,false);
+    assert.match(model.notice,/SL\/SR are missing/);assert.equal(model.bindings.find(b=>b.action==='left').available,false);
   }
 });
 test('the same visual guide describes Joy-Con defaults, PS5 buttons and saved/custom remapping',()=>{

@@ -436,8 +436,8 @@ remain connected for ten minutes, including time spent spectating bots.
 Choose **Local party → Host local party** on a laptop. Connect USB controllers or
 pair Bluetooth controllers in the laptop's OS settings, then press a button on
 each controller to join. The game assigns names such as **DualSense 1** or
-**Switch Pro 1**, and highlights the player's lobby row when that controller is
-used. Release the join button before driving. The laptop display does not consume
+**Switch Pro 1**, and shows a matching controller icon beside the driver's name. The icon lights
+when buttons are pressed to identify the player; the lobby row does not flash. Release the join button before driving. The laptop display does not consume
 a player slot; gamepads, phones and practice bots share one eight-player grid.
 
 Phone joining is set up automatically when hosting. Scan the QR code in the lobby.
@@ -454,6 +454,13 @@ SL/SR; Bonked indicates this rather than substituting other buttons. The lobby a
 Configure share a live diagram of the current mapping for each controller. Splitting
 or combining removes that pair's existing lobby players so they can rejoin.
 The browser still sees one physical pair; Bonked routes each half independently.
+The diagrams and small player icons use the same controller artwork. Numbered
+callouts connect the diagram to its legend without crossing leader lines.
+Controller sampling runs every 8 ms independently of render frames; steering
+changes can be sent between heartbeat inputs while staying below the host budget.
+This reduces app-side delay but cannot remove latency before the browser receives
+input. A profile that omits SL/SR needs a different device-access path to expose
+those buttons; ordinary remapping cannot recover them.
 
 LAN car presentation interpolates worker snapshots over a 25 ms buffer, including
 the camera, so render frames do not jump at worker tick boundaries. This adds no
