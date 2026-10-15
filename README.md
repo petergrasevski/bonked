@@ -447,8 +447,11 @@ The ordinary **Join a room** option also recognizes enabled phone room codes.
 
 For a combined original Joy-Con pair, choose **Split Joy-Con pair** in the lobby,
 then press a face button on each half to join as two players. Hold each sideways:
-bottom face accelerates, left face reverses, top face fires, outer shoulder and
-trigger nudge, and minus/plus readies. Configure can adjust either half. Splitting
+bottom face accelerates, left face reverses, right face fires, SL nudges left,
+SR nudges right, and minus/plus readies. Configure can adjust either half, including
+using the outer shoulders/triggers instead. Some combined browser profiles omit
+SL/SR; Bonked indicates this rather than substituting other buttons. The lobby and
+Configure share a live diagram of the current mapping for each controller. Splitting
 or combining removes that pair's existing lobby players so they can rejoin.
 The browser still sees one physical pair; Bonked routes each half independently.
 

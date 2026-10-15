@@ -10,7 +10,7 @@ let resume,wakeLock=null;try{resume=JSON.parse(sessionStorage.getItem('bonked-la
 $('code').value=(query.get('room')||resume?.code||'').toUpperCase().slice(0,3);
 const revision=document.querySelector('meta[name="bonked-revision"]')?.content;
 function setStatus(text){$('connection').textContent=text;}
-function showError(message){release();$('error').textContent=message;$('help').hidden=false;$('entry').hidden=true;$('controller').hidden=true;$('rotate').hidden=true;$('join').disabled=false;setStatus('Not connected locally');}
+function showError(message){document.body.classList.remove('controlling');release();$('error').textContent=message;$('help').hidden=false;$('entry').hidden=true;$('controller').hidden=true;$('rotate').hidden=true;$('join').disabled=false;setStatus('Not connected locally');}
 function save(){try{sessionStorage.setItem('bonked-lan-controller',JSON.stringify({code:identity.code,token:identity.token}));}catch{}}
 function join(){
   const name=$('name').value.trim(),code=$('code').value.trim().toUpperCase();if(!name){$('name').focus();return;}if(!/^[A-Z]{3}$/.test(code)){$('code').focus();return;}
@@ -40,7 +40,7 @@ function receiveSignal(msg){
   if(peer&&msg.generation===generation)peer.receive(msg.signal);
 }
 function receive(msg){
-  if(msg.type==='welcome'){sequence=msg.seq||0;joined=true;clearTimeout(retryTimer);$('entry').hidden=true;$('help').hidden=true;$('controller').hidden=false;$('leave').hidden=false;setStatus('Local Wi-Fi connected');peer?.send({type:'ping',sent:Date.now()});rotate();wake();return;}
+  if(msg.type==='welcome'){document.body.classList.add('controlling');sequence=msg.seq||0;joined=true;clearTimeout(retryTimer);$('entry').hidden=true;$('help').hidden=true;$('controller').hidden=false;$('leave').hidden=false;setStatus('Local Wi-Fi connected');peer?.send({type:'ping',sent:Date.now()});rotate();wake();return;}
   if(msg.type==='error'){showError(msg.message);return;}
   if(msg.type==='left'){leave();return;}
   if(msg.type==='pong'){const rtt=Date.now()-msg.sent;if(rtt>=0&&rtt<2000){clockOffset=msg.time+rtt/2-Date.now();setStatus(`Local Wi-Fi · ${rtt} ms`);}return;}
@@ -83,11 +83,13 @@ function render(){const driver=me();if(!driver)return;document.documentElement.s
 }
 function rotate(){release();$('rotate').hidden=!joined||!portrait.matches||!$('help').hidden;}
 async function wake(){try{if(navigator.wakeLock&&!document.hidden&&(!wakeLock||wakeLock.released))wakeLock=await navigator.wakeLock.request('screen');}catch{}}
-function leave(){wakeLock?.release().catch(()=>{});wakeLock=null;const old=peer;peer=null;old?.close();signalClient?.close();signalClient=null;joined=false;identity=null;resume=null;state=null;clearTimeout(retryTimer);release();try{sessionStorage.removeItem('bonked-lan-controller');}catch{}$('entry').hidden=false;$('help').hidden=true;$('controller').hidden=true;$('rotate').hidden=true;$('leave').hidden=true;$('join').disabled=false;setStatus('Connect to the laptop');}
+function leave(){document.body.classList.remove('controlling');wakeLock?.release().catch(()=>{});wakeLock=null;const old=peer;peer=null;old?.close();signalClient?.close();signalClient=null;joined=false;identity=null;resume=null;state=null;clearTimeout(retryTimer);release();try{sessionStorage.removeItem('bonked-lan-controller');}catch{}$('entry').hidden=false;$('help').hidden=true;$('controller').hidden=true;$('rotate').hidden=true;$('leave').hidden=true;$('join').disabled=false;setStatus('Connect to the laptop');}
 $('join').onclick=join;$('retry').onclick=()=>{joined=false;join();};$('leave').onclick=leave;$('ready').onclick=()=>peer?.send({type:'ready',round:state?.round});
 $('code').oninput=()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');};
 for(const id of ['name','code'])$(id).onkeydown=e=>{if(e.key==='Enter')join();};
 window.addEventListener('blur',release);portrait.addEventListener('change',rotate);document.addEventListener('visibilitychange',()=>{release();if(!document.hidden){wake();peer?.send({type:'ping',sent:Date.now()});}});
-for(const event of ['contextmenu','selectstart','dragstart'])$('controller').addEventListener(event,e=>e.preventDefault());
+for(const event of ['contextmenu','selectstart','dragstart','gesturestart','gesturechange','gestureend','dblclick','touchstart','touchmove','touchend'])document.addEventListener(event,e=>{
+  if(document.body.classList.contains('controlling')&&e.cancelable&&(!event.startsWith('touch')||(e.target instanceof Element&&e.target.closest('#pad'))))e.preventDefault();
+},{passive:false});
 setInterval(()=>{if(joined){if(performance.now()-lastState>1500)release();else flush();}},8);
 setInterval(()=>{if(joined&&!document.hidden)peer?.send({type:'ping',sent:Date.now()});},2000);

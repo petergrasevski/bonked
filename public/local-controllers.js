@@ -19,7 +19,7 @@ export class LocalControllers {
     for(const pad of present.values()){
       let device=this.devices.get(pad.index);
       if(!device){device={index:pad.index,rawId:pad.id,label:controllerName(pad.id),pad,slotId:null,down:false,input:null};this.devices.set(pad.index,device);}
-      device.pad=pad;device.physicalIndex=pad.physicalIndex??pad.index;device.joyConSide=pad.joyConSide;device.canSplit=isJoyConPair(pad);device.mapping=controllerMapping(this.profiles[pad.id],pad)||(pad.mapping==='standard'?STANDARD_MAPPING:null);
+      device.pad=pad;device.physicalIndex=pad.physicalIndex??pad.index;device.joyConSide=pad.joyConSide;device.railButtonsAvailable=pad.railButtonsAvailable;device.canSplit=isJoyConPair(pad);device.mapping=controllerMapping(this.profiles[pad.id],pad)||(pad.mapping==='standard'?STANDARD_MAPPING:null);
       const down=anyButton(pad),pressed=down&&!device.down;device.down=down;device.input=decodeController(pad,device.mapping);
       if(!device.slotId){
         if(pressed&&active){
