@@ -3,7 +3,7 @@ import {botControls} from './bots.js';
 import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './sky-beam.js';
 import {captureMotion,recordMotion} from './prediction.js';
 import {collectBoostPad} from './boost-pads.js';
-import { TRACKS,selectTrack,BOOST_PADS,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad } from './game.js';
+import { TRACKS,selectTrack,BOOST_PADS,MAX_PLAYERS,LAPS,STEP,COLORS,COLOR_NAMES,NEUTRAL,spawnCar,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,sanitizeInput,recordLaunchInput,applyLaunch,START_FRACTION,constrainRoad,updateFactoryMechanics } from './game.js';
 import { createChase, updateChase, chaseSnapshot, cameraFrame } from './chase.js';
 import { initCombat, createPickups, collectPickup, pressWeapon, updateCombat } from './combat.js';
 import { targetScoreForPlayers, scoreRound, nextRoundDue } from './tournament.js';
@@ -71,6 +71,7 @@ export function createRoomEngine({send=()=>{},broadcast=()=>{},onEmpty=()=>{},st
       if(room.phase==='racing'){
         const motionBefore=new Map([...room.players.values()].map(p=>[p.id,captureMotion(p.car)]));
         room.simulationTick=(room.simulationTick||0)+1;room.raceTime=room.simulationTick*STEP;
+        updateFactoryMechanics([...room.players.values()].map(p=>p.car),room.raceTime);
         for(const p of room.players.values()){
           const input=p.bot?botControls(room,p,now):now-p.lastInput>INPUT_TIMEOUT_MS?NEUTRAL:p.input;
           if(!p.bot&&now-p.lastInput>INPUT_TIMEOUT_MS)stats.staleInputs=(stats.staleInputs||0)+1;

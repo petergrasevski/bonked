@@ -2,7 +2,7 @@ import {activeTrack,SEGMENTS,TRACK_LENGTH,iceSplit,getLandscape} from './game.js
 import {TerrainSurface} from './landscape.js';
 import {desertRampLift} from './desert-features.js';
 const cache=new Map();
-export const skyFloor=()=>activeTrack.id==='coast'?-2.05:-4;
+export const skyFloor=()=>activeTrack.id==='coast'?-2.05:activeTrack.id==='factory'?-8:-4;
 // Reuse the terrain's spatial index; index road decks once per circuit too.
 export function skySurfaces(){
   if(!cache.has(activeTrack.id)){

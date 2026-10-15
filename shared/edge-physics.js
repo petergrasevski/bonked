@@ -7,7 +7,7 @@ export function bodyOffset(car,x,y,z){
   return {x:px*ca-pz*sa,y:py+(1-cr*cp)*.5,z:px*sa+pz*ca};
 }
 export function wheelSupports(car,roadAt){
-  return WHEEL_POINTS.map(([x,z])=>{const p=bodyOffset(car,x,0,z),surface=roadAt(car.x+p.x,car.z+p.z);return surface&&Math.abs(car.y+p.y-surface.y)<.48?{x,z,p,surface}:null;}).filter(Boolean);
+  return WHEEL_POINTS.map(([x,z])=>{const p=bodyOffset(car,x,0,z),surface=roadAt(car.x+p.x,car.z+p.z,car.y+p.y+.48);return surface&&Math.abs(car.y+p.y-surface.y)<.48?{x,z,p,surface}:null;}).filter(Boolean);
 }
 export function balanceOnWheels(car,support,dt){
   if(!support.length)return;

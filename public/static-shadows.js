@@ -24,7 +24,7 @@ export class StaticShadows{
   }
   apply(root){root.traverse(object=>{for(const material of object.material?(Array.isArray(object.material)?object.material:[object.material]):[])this.applyMaterial(material);});}
   applyMaterial(material){
-    if(!material.isMeshStandardMaterial||this.materials.has(material))return;
+    if(!material.isMeshStandardMaterial||material.userData.skipBakedShadow||this.materials.has(material))return;
     this.materials.add(material);const previous=material.onBeforeCompile,key=material.customProgramCacheKey();
     material.onBeforeCompile=(shader,renderer)=>{
       previous.call(material,shader,renderer);

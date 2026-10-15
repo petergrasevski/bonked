@@ -1,1 +1,1 @@
-export const TRACK_TITLES={"coast": "/track-titles/coast.12314dc1cd97.webp", "ice": "/track-titles/ice.1ee02b691cea.webp", "desert": "/track-titles/desert.7a8e0665c0e3.webp"};
+export const TRACK_TITLES={"coast": "/track-titles/coast.12314dc1cd97.webp", "ice": "/track-titles/ice.99ecf4e80c2d.png", "desert": "/track-titles/desert.7a8e0665c0e3.webp", "factory": "/track-titles/factory.8bb2a05bbfbd.png", "volcano": "/track-titles/volcano.075ee04124bf.png"};

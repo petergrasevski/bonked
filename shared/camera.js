@@ -33,7 +33,10 @@ export function cameraDistance(frame,cars,aspect){
   return distance;
 }
 
-export function stepCamera(previous,target,cars,aspect,dt){
+export function stepCamera(previous,target,cars,aspect,dt,profile={}){
+  const amount=Math.max(0,Math.min(1,((target.spread||0)-18)/70)),spread=amount*amount*(3-2*amount);
+  const pitch=Number.isFinite(profile.pitch)?profile.pitch+((profile.spreadPitch??profile.pitch)-profile.pitch)*spread:target.pitch+(profile.pitchOffset||0);
+  target={...target,angle:target.angle+(profile.yawOffset||0)+(profile.spreadYawOffset||0)*spread,pitch};
   const frame=previous?{...previous}:{...target};
   const move=1-Math.exp(-dt*7),turn=1-Math.exp(-dt*2.8),tilt=1-Math.exp(-dt*1.8);
   frame.y=(frame.y||0)+((target.y||0)-(frame.y||0))*move;frame.x+=(target.x-frame.x)*move;frame.z+=(target.z-frame.z)*move;
