@@ -1,3 +1,4 @@
+import {buildVolcanoBoundaryBushes} from './volcano-bushes.js';
 import {buildFactoryMachinery} from './factory-machinery.js';
 import {buildFactoryInterior,mergeMovingGroup} from './factory-interior.js';
 import {createSteamVents} from './volcano-effects.js';
@@ -71,6 +72,7 @@ export function circuitRoadMaterial(w,id){
   return new THREE.MeshStandardMaterial({map:texture,bumpMap:texture,bumpScale:.035,roughness:id==='factory'?.62:.88,metalness:id==='factory'?.4:.04,side:THREE.DoubleSide});
 }
 function volcanoScenery(w){
+  buildVolcanoBoundaryBushes(w);
   const bands=getLandscape().volcano;
   for(const [index,vertices]of bands.entries()){
     const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geo.computeVertexNormals();

@@ -23,7 +23,12 @@ export function volcanoTerrain(trackAt){
     return [ux*(r+260),-5,uz*(r+260)];
   };
   const sculpt=(f,ring)=>{
-    const j=Math.floor(ring),u=ring-j,a=point(f,j),b=point(f,Math.min(8,j+1)),q=a.map((v,k)=>v+(b[k]-v)*u);
+    const j=Math.floor(ring),u=ring-j,a=point(f,j),b=point(f,Math.min(8,j+1)),q=a.map((v,k)=>{
+      // A sharper break below the recoverable shelf makes its lip readable.
+      // Keep elevation continuous and preserve the gentle upper driving surface.
+      const blend=j===6&&k!==1?(u<=.25?u*.4:.1+(u-.25)*1.2):u;
+      return v+(b[k]-v)*blend;
+    });
     // Broad fractured ribs, with changing radial phase rather than concentric terraces.
     if(j<3||j>=7){const angle=Math.atan2(q[2],q[0]),fade=Math.sin(Math.PI*u),noise=(Math.sin(angle*37+ring*3.1)*3+Math.sin(angle*17-ring*4.7)*5)*fade;
       q[1]+=noise*(j===3?.35:1);const r=Math.hypot(q[0],q[2]);q[0]+=q[0]/r*noise*.7;q[2]+=q[2]/r*noise*.7;}

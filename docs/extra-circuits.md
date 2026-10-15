@@ -71,3 +71,5 @@ unaffected.
 Run `npm test` for physics, bots, prediction, live socket races and browser-module
 coverage. Browser checks cover rendering, all-player heat overlays, carousel
 interaction and phone layouts.
+
+Krakatoa’s two recoverable shoulders have varied, non-colliding volcanic scrub along their actual recovery boundary. Placement traces the authoritative slope/path predicate, including the tapered ends; the terrain breaks more steeply below the outer lip. Shrubs are static, spatially batched scenery and do not change car collision or other circuits.
