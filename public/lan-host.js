@@ -7,7 +7,7 @@ export class LanHostSocket extends EventTarget {
     this.worker=new Worker(new URL('./lan-worker.js',import.meta.url),{type:'module'});
     this.worker.onerror=()=>this.emit({type:'error',message:'Could not start the local game engine. Reload and try again.'});
     this.worker.onmessage=({data})=>{
-      if(data.type==='ready'){this.emit({type:'welcome',id:'lan-display',code:this.code,mode:'lan',seq:0});return;}
+      if(data.type==='ready'){this.emit({type:'welcome',id:'lan-display',code:this.code,mode:'lan',seq:0});if(globalThis.RTCPeerConnection)this.enablePhones();else this.onStatus('Phone controllers need WebRTC support. Laptop controllers can keep playing.');return;}
       if(data.type==='snapshot'){
         this.emit(data.state);
         if(data.controllers!==false){const s=data.state;const status={type:'state',code:s.code,trackId:s.trackId,phase:s.phase,time:s.time,startAt:s.startAt,round:s.round,tournamentComplete:s.tournamentComplete,tournamentWinnerId:s.tournamentWinnerId,roundResults:s.roundResults,targetScore:s.targetScore,nextRoundAt:s.nextRoundAt,camera:s.camera,players:s.players.map(p=>({id:p.id,name:p.name,color:p.color,health:p.health,item:p.item,ammo:p.ammo,shield:p.shield,score:p.score,ready:p.ready,eliminated:p.eliminated,finished:p.finished,wrecked:p.wrecked,overturned:p.overturned,nudgeCooldown:p.nudgeCooldown,skyTarget:p.skyTarget,skyCooldownUntil:p.skyCooldownUntil}))};for(const {peer}of this.peers.values())peer.send(status);}

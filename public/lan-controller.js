@@ -61,7 +61,10 @@ function input(){
     skyAim.x+=(-steer*Math.sin(yaw)+aimY*Math.cos(yaw))*1.2;skyAim.z+=(steer*Math.cos(yaw)+aimY*Math.sin(yaw))*1.2;aim={...skyAim};}
   return {type:'input',seq:++sequence,steer:active&&!sky?steer:0,throttle,reverse:active&&!sky&&reverseHeld,brake:false,fire:active&&(fireHeld||performance.now()<firePulseUntil),nudge:active&&!sky&&performance.now()<nudgeUntil?nudge:0,accelPressedAt,...(aim?{skyAim:aim}:{})};
 }
-function flush(){peer?.send(input());}
+// Touchmove may arrive much faster than the simulation. Coalesce to the
+// latest held state so gestures cannot exhaust the host's command budget.
+let nextInputAt=0;
+function flush(){const now=performance.now();if(now<nextInputAt)return;nextInputAt=now+1000/60;peer?.send(input());}
 function release(){fireHeld=false;firePulseUntil=0;reverseHeld=false;gasHeld=false;steer=0;nudge=0;nudgeUntil=0;aimY=0;accelPressedAt=null;wasThrottle=false;for(const reset of resets)reset();peer?.send({type:'input',seq:++sequence,steer:0,throttle:0,reverse:false,brake:false,fire:false,nudge:0});}
 function buzz(){navigator.vibrate?.(12);}
 function hold(id,set){const button=$(id);let pointer=null;const reset=()=>{const old=pointer;pointer=null;set(false);button.classList.remove('held');if(old!==null&&button.hasPointerCapture(old))button.releasePointerCapture(old);};resets.push(reset);
@@ -86,5 +89,5 @@ $('code').oninput=()=>{$('code').value=$('code').value.toUpperCase().replace(/[^
 for(const id of ['name','code'])$(id).onkeydown=e=>{if(e.key==='Enter')join();};
 window.addEventListener('blur',release);portrait.addEventListener('change',rotate);document.addEventListener('visibilitychange',()=>{release();if(!document.hidden){wake();peer?.send({type:'ping',sent:Date.now()});}});
 for(const event of ['contextmenu','selectstart','dragstart'])$('controller').addEventListener(event,e=>e.preventDefault());
-setInterval(()=>{if(joined){if(performance.now()-lastState>1500)release();else flush();}},1000/60);
+setInterval(()=>{if(joined){if(performance.now()-lastState>1500)release();else flush();}},8);
 setInterval(()=>{if(joined&&!document.hidden)peer?.send({type:'ping',sent:Date.now()});},2000);

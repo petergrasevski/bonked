@@ -1,3 +1,4 @@
+import {isJoyConPair,splitJoyCon} from './joy-con-inputs.js';
 import {MAX_PLAYERS,PLAYER_GRACE_MS} from '../shared/session-limits.js';
 import {STANDARD_MAPPING,decodeController,controllerMapping,controllerName,gamepadButton} from './controller.js';
 
@@ -8,17 +9,17 @@ const resting=input=>!input.throttle&&!input.reverse&&!input.fire&&!input.left&&
 // Device routing only; all players use the same worker command interface.
 export class LocalControllers {
   constructor({join,send,disconnect,remove,configure=()=>{},notify=()=>{},storage,uuid=()=>crypto.randomUUID(),graceMs=PLAYER_GRACE_MS}){
-    Object.assign(this,{join,send,disconnect,remove,configure,notify,storage,uuid,graceMs});this.devices=new Map();this.slots=new Map();this.profiles={};this.pendingDevice=null;this.state=null;
+    Object.assign(this,{join,send,disconnect,remove,configure,notify,storage,uuid,graceMs});this.joyConPairs=new Map();this.devices=new Map();this.slots=new Map();this.profiles={};this.pendingDevice=null;this.state=null;
     try{const saved=JSON.parse(storage?.getItem('bonked-controller-mappings')||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))this.profiles=saved;}catch{}
   }
   poll(pads,{state,active=true,now=performance.now(),wallTime=Date.now(),dt=1/60}={}){
-    this.state=state;const present=new Map(Array.from(pads||[]).filter(p=>p?.connected).map(p=>[p.index,p]));
+    this.state=state;const expanded=Array.from(pads||[]).filter(p=>p?.connected).flatMap(pad=>this.joyConPairs.get(pad.index)===pad.id&&isJoyConPair(pad)?splitJoyCon(pad):[pad]);const present=new Map(expanded.map(p=>[p.index,p]));
     for(const [index,device]of this.devices){const pad=present.get(index);if(!pad||pad.id!==device.rawId)this.disconnected(index,now);}
     for(const slot of this.slots.values())if(slot.device===null&&now-slot.disconnectedAt>this.graceMs){this.slots.delete(slot.id);this.remove(slot.id);}
     for(const pad of present.values()){
       let device=this.devices.get(pad.index);
       if(!device){device={index:pad.index,rawId:pad.id,label:controllerName(pad.id),pad,slotId:null,down:false,input:null};this.devices.set(pad.index,device);}
-      device.pad=pad;device.mapping=controllerMapping(this.profiles[pad.id],pad)||(pad.mapping==='standard'?STANDARD_MAPPING:null);
+      device.pad=pad;device.physicalIndex=pad.physicalIndex??pad.index;device.joyConSide=pad.joyConSide;device.canSplit=isJoyConPair(pad);device.mapping=controllerMapping(this.profiles[pad.id],pad)||(pad.mapping==='standard'?STANDARD_MAPPING:null);
       const down=anyButton(pad),pressed=down&&!device.down;device.down=down;device.input=decodeController(pad,device.mapping);
       if(!device.slotId){
         if(pressed&&active){
@@ -53,6 +54,20 @@ export class LocalControllers {
       if(now>=(slot.nextInputAt||0)||buttonChanged){slot.nextInputAt=now+1000/60;this.send(slot.id,{type:'input',seq:++slot.sequence,...neutral,steer:sky?0:input.steer,throttle:sky?0:throttle,reverse:!sky&&input.reverse,fire:input.fire||now<(slot.fireUntil||0),nudge:!sky&&now<slot.nudgeUntil?slot.nudge:0,accelPressedAt:slot.accelPressedAt,...(skyAim?{skyAim}:{})});}
       slot.previous={...input};
     }
+  }
+  setJoyConSplit(index,split=true){
+    if(this.state?.phase!=='lobby')return false;
+    const device=this.devices.get(index);if(!device||!(device.canSplit||device.joyConSide))return false;
+    const physical=device.physicalIndex;
+    const rawId=split?device.rawId:this.joyConPairs.get(physical);
+    // Changing player count is a lobby action. Rejoin explicitly so no held
+    // button, mapping or old player identity leaks into the other half.
+    for(const d of [...this.devices.values()])if(d.physicalIndex===physical){if(d.slotId)this.forget(d.slotId);this.disconnected(d.index);}
+    if(split)this.joyConPairs.set(physical,rawId);else this.joyConPairs.delete(physical);
+    this.notify(split?'Joy-Cons split. Press a face button on each half to join.':'Joy-Cons combined. Press a button to join.');return true;
+  }
+  disconnectPhysical(index,now=performance.now()){
+    for(const device of [...this.devices.values()])if(device.physicalIndex===index)this.disconnected(device.index,now);
   }
   disconnected(index,now=performance.now()){
     const device=this.devices.get(index);if(!device)return;

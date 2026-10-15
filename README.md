@@ -440,10 +440,21 @@ each controller to join. The game assigns names such as **DualSense 1** or
 used. Release the join button before driving. The laptop display does not consume
 a player slot; gamepads, phones and practice bots share one eight-player grid.
 
-For phones, choose **Enable phone controllers** in the lobby and scan the QR code.
+Phone joining is set up automatically when hosting. Scan the QR code in the lobby.
 Phones use the same main Wi-Fi as the laptop. They open the website normally and
 choose a name; no local server installation is needed on a deployed HTTPS site.
 The ordinary **Join a room** option also recognizes enabled phone room codes.
+
+For a combined original Joy-Con pair, choose **Split Joy-Con pair** in the lobby,
+then press a face button on each half to join as two players. Hold each sideways:
+bottom face accelerates, left face reverses, top face fires, outer shoulder and
+trigger nudge, and minus/plus readies. Configure can adjust either half. Splitting
+or combining removes that pair's existing lobby players so they can rejoin.
+The browser still sees one physical pair; Bonked routes each half independently.
+
+LAN car presentation interpolates worker snapshots over a 25 ms buffer, including
+the camera, so render frames do not jump at worker tick boundaries. This adds no
+second physics implementation and leaves input delivery and collisions unchanged.
 
 Local gamepads use the same mapping as ordinary online play: left stick steers,
 bottom face button accelerates, left face button reverses, R1 fires, and the two

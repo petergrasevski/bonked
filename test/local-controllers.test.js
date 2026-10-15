@@ -78,3 +78,34 @@ test('a native disconnect event prevents a replacement at the same browser index
   h.manager.disconnected(0,h.now);assert.equal(h.state.players[0].connected,false);
   const replacement=pad(0);press(replacement);h.poll([replacement]);assert.equal(h.manager.pendingDevice,0);assert.equal(h.manager.slots.get(id).device,null);
 });
+
+const pair=index=>({...pad(index,'Joy-Con (L/R)'),axes:[0,0,0,0]});
+test('combined Joy-Cons join as two independently driven sideways controllers',()=>{
+  const h=harness(),joy=pair(0);h.poll([joy]);assert.equal(h.manager.devices.get(0).canSplit,true);
+  press(joy,1);h.poll([joy]);assert.equal(h.state.players.length,1);
+  assert.equal(h.manager.setJoyConSplit(0),true);assert.equal(h.state.players.length,0);
+  press(joy,1,false);h.poll([joy]);assert.equal(h.manager.devices.size,2);
+  press(joy,14);h.poll([joy]);assert.equal(h.state.players.length,1);assert.match(h.state.players[0].name,/Left/);
+  press(joy,1);h.poll([joy]);assert.equal(h.state.players.length,2);assert.match(h.state.players[1].name,/Right/);
+  press(joy,14,false);press(joy,1,false);h.poll([joy]);h.command({type:'start'});h.advance(3400);
+  joy.axes=[0,.7,0,.6];press(joy,14);h.poll([joy]);h.poll([joy]);
+  assert.equal(h.state.players[0].input.throttle,1);assert.equal(h.state.players[1].input.throttle,0);
+  assert.ok(h.state.players[0].input.steer>.6);assert.ok(h.state.players[1].input.steer<-.5);
+  assert.equal(h.manager.setJoyConSplit(0,false),false,'player count cannot change during racing');
+  h.manager.disconnectPhysical(0,h.now);assert.equal(h.manager.devices.size,0);assert.ok(h.state.players.every(p=>!p.connected));
+  h.poll([joy]);assert.equal(h.manager.devices.size,2,'split preference survives reconnect');
+  h.poll([]);h.advance(20001);h.poll([]);assert.equal(h.state.players.length,0);
+});
+test('Joy-Con pairing can be restored in the lobby without ghost players or affecting other gamepads',()=>{
+  const h=harness(),joy=pair(2),other=pad(0);h.poll([joy,other]);h.manager.setJoyConSplit(2);h.poll([joy,other]);
+  press(joy,14);press(joy,1);press(other);h.poll([joy,other]);assert.equal(h.state.players.length,3);
+  assert.equal(h.manager.setJoyConSplit(-3,false),true);h.poll([joy,other]);assert.equal(h.state.players.length,2);
+  // The held right face button joins the recombined pad, once; the other pad retains its car.
+  assert.equal(h.manager.devices.size,2);assert.equal(h.manager.devices.get(0).label,'DualSense');
+  assert.equal(h.manager.devices.get(2).canSplit,true);assert.equal(h.manager.joyConPairs.size,0);
+});
+test('only recognized standard combined Joy-Con layouts offer splitting',()=>{
+  const h=harness(),single=pad(0,'Joy-Con (L)'),unknown={...pair(1),mapping:''};h.poll([single,unknown]);
+  assert.equal(h.manager.devices.get(0).canSplit,false);assert.equal(h.manager.devices.get(1).canSplit,false);
+  assert.equal(h.manager.setJoyConSplit(0),false);
+});

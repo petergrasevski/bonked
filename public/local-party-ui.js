@@ -33,11 +33,13 @@ export function createLocalPartyUI({root,dialog,claim,manager,getState,onRelease
   function update(now){
     const state=getState(),lobby=state?.phase==='lobby';
     summary.textContent=`Laptop controllers · ${[...manager.slots.values()].filter(s=>s.device!==null).length} joined · ${manager.devices.size} detected`;
-    const nextKey=JSON.stringify([lobby,[...manager.devices.values()].map(d=>[d.index,d.label,d.slotId,!!d.mapping]),[...manager.slots.values()].map(s=>[s.id,s.name,s.device,s.accepted])]);
+    const nextKey=JSON.stringify([lobby,[...manager.devices.values()].map(d=>[d.index,d.label,d.slotId,!!d.mapping,d.canSplit,d.joyConSide]),[...manager.slots.values()].map(s=>[s.id,s.name,s.device,s.accepted])]);
     if(nextKey!==key){key=nextKey;devices.replaceChildren();
       for(const device of manager.devices.values()){
         const slot=manager.slots.get(device.slotId),row=node('div',undefined,'local-device');row.dataset.device=String(device.index);
         row.append(node('strong',slot?.name||device.label),node('span',slot?(slot.accepted?'Joined':'Joining…'):device.mapping?'Press a button to join':'Press a button to configure'));
+        if(device.canSplit||device.joyConSide==='L'){const split=action(device.canSplit?'Split Joy-Con pair':'Combine Joy-Con pair',()=>manager.setJoyConSplit(device.index,!!device.canSplit));split.disabled=!lobby;row.append(split);}
+        if(device.joyConSide)row.append(node('span','Hold sideways · bottom face: GO · left face: reverse · top face: fire · − / +: ready','fine'));
         const mapping=action('Configure',()=>configure(device));mapping.disabled=!lobby;row.append(mapping);
         if(slot){const remove=action('Remove',()=>manager.forget(slot.id));remove.disabled=!lobby;row.append(remove);}
         devices.append(row);
