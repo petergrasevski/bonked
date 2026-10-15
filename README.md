@@ -462,6 +462,12 @@ This reduces app-side delay but cannot remove latency before the browser receive
 input. A profile that omits SL/SR needs a different device-access path to expose
 those buttons; ordinary remapping cannot recover them.
 
+LAN sky-beam targets use independent screen-space cursors for every phone and
+gamepad. The host projects those cursors through its actual render camera each
+frame, so idle targets follow camera movement and zoom. The shared room engine
+still bounds the target and resolves strike timing, cooldowns and impacts. A
+fired beam locks its world position; only the aiming cursor follows the camera.
+
 LAN car presentation interpolates worker snapshots over a 25 ms buffer, including
 the camera, so render frames do not jump at worker tick boundaries. This adds no
 second physics implementation and leaves input delivery and collisions unchanged.

@@ -119,3 +119,10 @@ test('steering is forwarded between heartbeat ticks and remains below the host c
   assert.ok(sent.length<130,'continuous axis motion on a 240 Hz display stays below the 150-command host limit');
   assert.equal(slot.controllerLabel,'DualSense');
 });
+
+test('eliminated gamepads send screen movement rather than fixed world aim coordinates',()=>{
+  const sent=[];const manager=new LocalControllers({uuid:()=>1,join:s=>manager.receive(s.id,{type:'welcome'}),send:(id,msg)=>sent.push(msg),disconnect:()=>{},remove:()=>{}}),a=pad(0),state={phase:'lobby',players:[]};
+  manager.poll([a],{state,now:0});press(a);manager.poll([a],{state,now:1});press(a,0,false);manager.poll([a],{state,now:2});
+  const id=[...manager.slots.keys()][0];state.phase='racing';state.players=[{id,eliminated:true,skyTarget:{x:900,z:800}}];state.camera={x:900,z:800,angle:1};a.axes=[.8,-.8];manager.poll([a],{state,now:30});
+  const input=sent.at(-1);assert.ok(input.skyMove.x>.7&&input.skyMove.y>.7);assert.equal(input.skyAim,undefined);assert.equal(input.steer,0);assert.equal(input.throttle,0);
+});

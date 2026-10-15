@@ -56,7 +56,7 @@ export function createSkyStrike(color){
   return bolt;
 }
 export class SkyBeamView{
-  constructor(scene){this.scene=scene;this.targets=new Map();this.beams=new Map();this.cursor=new THREE.Vector2(0,0);this.aimScreen=new THREE.Vector3();this.ray=new THREE.Raycaster();this.aim=null;this.round=null;}
+  constructor(scene){this.scene=scene;this.targets=new Map();this.beams=new Map();this.cursor=new THREE.Vector2(0,0);this.aimScreen=new THREE.Vector3();this.ray=new THREE.Raycaster();this.aim=null;this.round=null;this.externalCursors=new Map();this.externalAims=new Map();this.externalRound=null;}
   marker(color){
     const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(4096*3),3).setUsage(THREE.DynamicDrawUsage));
     const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms:{center:{value:new THREE.Vector2()},color:{value:new THREE.Color(color)},opacity:{value:.5},time:{value:0}},
@@ -66,27 +66,33 @@ export class SkyBeamView{
       }`});
     const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;mesh.renderOrder=6;this.scene.add(mesh);return mesh;
   }
-  update(state,localId,camera,frame,move,dt){
+  projectCursor(cursor,move,camera,frame,dt){
+    advanceSkyCursor(cursor,move,dt);this.ray.setFromCamera(cursor,camera);const hit=skyRayGround(this.ray.ray.origin,this.ray.ray.direction);if(!hit)return null;
+    const aim=boundedSkyAim(hit,frame);
+    if(Math.hypot(aim.x-hit.x,aim.z-hit.z)>1e-6){this.aimScreen.set(aim.x,skyGroundAt(aim.x,aim.z).y,aim.z).project(camera);cursor.set(this.aimScreen.x,this.aimScreen.y);}
+    return aim;
+  }
+  update(state,localId,camera,frame,move,dt,externalControls=new Map()){
     const active=state?.phase==='racing',me=state?.players.find(p=>p.id===localId),key=active&&me?.eliminated&&!me.bot?state.code+':'+state.round:null;
     if(key!==this.round){this.round=key;this.cursor.set(0,0);}
     this.aim=null;
     if(key){
-      advanceSkyCursor(this.cursor,move,dt);this.ray.setFromCamera(this.cursor,camera);const hit=skyRayGround(this.ray.ray.origin,this.ray.ray.direction);
-      if(hit){
-        this.aim=boundedSkyAim(hit,frame);
-        if(Math.hypot(this.aim.x-hit.x,this.aim.z-hit.z)>1e-6){
-          // Stop the screen cursor at the visible boundary too, so reversing
-          // the stick/key never has to traverse an invisible off-track offset.
-          this.aimScreen.set(this.aim.x,skyGroundAt(this.aim.x,this.aim.z).y,this.aim.z).project(camera);
-          this.cursor.set(this.aimScreen.x,this.aimScreen.y);
-        }
-      }
+      this.aim=this.projectCursor(this.cursor,move,camera,frame,dt);
     }
+    const externalRound=active?`${state.trackId}:${state.round}:${state.startAt}`:null;
+    if(this.externalRound!==externalRound){this.externalCursors.clear();this.externalRound=externalRound;}
+    this.externalAims.clear();
+    const controlled=new Set();
+    if(active)for(const p of state.players){const movement=externalControls.get(p.id);if(!movement||!p.eliminated||p.bot||p.connected===false)continue;
+      controlled.add(p.id);let cursor=this.externalCursors.get(p.id);if(!cursor){cursor=new THREE.Vector2(0,0);this.externalCursors.set(p.id,cursor);}
+      const aim=this.projectCursor(cursor,movement,camera,frame,dt);if(aim)this.externalAims.set(p.id,aim);
+    }
+    for(const id of this.externalCursors.keys())if(!controlled.has(id))this.externalCursors.delete(id);
     const present=new Set(),time=state?.combatTime??state?.time??0,roundKey=state?.code+':'+state?.round+':'+state?.trackId;
-    if(active)for(const p of state.players){let target=p.id===localId?this.aim:p.skyTarget;if(p.bot||!p.eliminated||!target)continue;
+    if(active)for(const p of state.players){let target=this.externalAims.get(p.id)||(p.id===localId?this.aim:p.skyTarget);if(p.bot||!p.eliminated||!target)continue;
       present.add(p.id);let mesh=this.targets.get(p.id);if(!mesh){mesh=this.marker(p.color);this.targets.set(p.id,mesh);}
       if(mesh.userData.round!==roundKey){mesh.userData.round=roundKey;mesh.userData.motion=null;mesh.userData.playback=new SkyTargetPlayback();mesh.userData.cell=null;}
-      if(p.id!==localId){
+      if(p.id!==localId&&!this.externalAims.has(p.id)){
         const sampleTime=state.simulationTick!==undefined?state.simulationTick*(1000/60):state.time,renderTime=state.simulationTick!==undefined?state.raceTime*1000:time;
         mesh.userData.playback.push(target,sampleTime);const buffered=mesh.userData.playback.sample(renderTime)||target;
         mesh.userData.motion=smoothSkyTarget(mesh.userData.motion,buffered,dt);target=clampSkyAimToTrack(mesh.userData.motion);

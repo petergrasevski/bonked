@@ -142,3 +142,24 @@ test('remote marker view uses authoritative sample ticks and the rendered race c
  assert.deepEqual(remote.skyTarget,{x:road.x+1.5,z:road.z},'presentation never changes the server target');
  view.update(null,'local',camera,frame,{x:0,y:0},1/60);assert.equal(view.targets.size,0);
 });
+
+test('LAN phone and gamepad cursors keep their screen positions as the host camera moves, turns and zooms',()=>{
+  selectTrack('desert');const at=trackAt(.665),view=new SkyBeamView(new THREE.Scene()),camera=new THREE.PerspectiveCamera(58,1.8,.1,1000);
+  const state={code:'lan',round:1,startAt:1000,trackId:'desert',phase:'racing',time:1000,players:['pad','phone'].map(id=>({id,connected:true,eliminated:true,color:'#ff5555',skyTarget:{x:at.x,z:at.z}}))};
+  const controls=new Map([['pad',{x:0,y:0}],['phone',{x:0,y:0}]]);let previous;
+  for(const angle of [0,.2,.5]){
+    const x=at.x+angle*20,z=at.z+angle*10;camera.position.set(x-Math.cos(angle)*(40+angle*10),40+angle*5,z-Math.sin(angle)*(40+angle*10));camera.lookAt(x,0,z);camera.updateMatrixWorld();
+    view.update(state,'lan-display',camera,{x,z,spread:0},{x:0,y:0},1/60,controls);
+    assert.equal(view.externalAims.size,2);
+    for(const id of controls.keys()){
+      const aim=view.externalAims.get(id),screen=new THREE.Vector3(aim.x,skyGroundAt(aim.x,aim.z).y,aim.z).project(camera);
+      assert.ok(Math.abs(screen.x)<.0001&&Math.abs(screen.y)<.0001,`${id} stays at screen centre while the camera moves`);
+      const marker=view.targets.get(id).material.uniforms.center.value;assert.equal(marker.x,aim.x);assert.equal(marker.y,aim.z,'host targets are not delayed by remote playback');
+    }
+    const aim=view.externalAims.get('pad');if(previous)assert.ok(Math.hypot(aim.x-previous.x,aim.z-previous.z)>1);previous={...aim};
+  }
+  controls.set('pad',{x:.2,y:0});view.update(state,'lan-display',camera,{x:at.x+10,z:at.z+5,spread:0},{x:0,y:0},.1,controls);
+  assert.ok(view.externalCursors.get('pad').x>view.externalCursors.get('phone').x,'each controller has its own cursor');
+  state.round++;controls.set('pad',{x:0,y:0});view.update(state,'lan-display',camera,{x:at.x+10,z:at.z+5,spread:0},{x:0,y:0},1/60,controls);assert.equal(view.externalCursors.get('pad').x,0,'new rounds reset screen cursors');
+  view.update(null,'lan-display',camera,{}, {x:0,y:0},1/60,controls);assert.equal(view.externalCursors.size,0);assert.equal(view.externalAims.size,0);
+});

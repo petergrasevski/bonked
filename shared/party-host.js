@@ -1,3 +1,4 @@
+import {sanitizeSkyAim} from './sky-beam.js';
 import {createRoomEngine} from './room-engine.js';
 import {STEP,NEUTRAL} from './game.js';
 import {MAX_PLAYERS,PLAYER_GRACE_MS} from './session-limits.js';
@@ -15,6 +16,10 @@ export function createPartyHost({post,now=Date.now,graceMs=PLAYER_GRACE_MS}){
       post({type:'ready'});engine.publish(room);return;
     }
     if(!room)return;
+    if(type==='sky-aims'){
+      if(room.phase==='racing'&&Array.isArray(data.aims))for(const {id,aim}of data.aims.slice(0,MAX_PLAYERS)){const player=room.players.get(id);if(player?.car.eliminated&&!player.bot&&player.ws)player.skyAim=sanitizeSkyAim(aim);}
+      return;
+    }
     if(type==='set-code'){room.code=data.code;engine.publish(room);return;}
     if(type==='peer-open'){
       let player=room.players.get(id);

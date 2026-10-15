@@ -4,7 +4,7 @@ import {bindTouchSteering,driveThrottle} from './touch-controls.js';
 const $=id=>document.getElementById(id),query=new URLSearchParams(location.search);
 const portrait=matchMedia('(orientation: portrait)');
 let peer=null,signalClient=null,identity=null,hostId=null,generation=null,state=null,sequence=0,clockOffset=0,lastState=-Infinity,retryTimer=null,joined=false;
-let fireHeld=false,firePulseUntil=0,reverseHeld=false,gasHeld=false,steer=0,nudge=0,nudgeUntil=0,accelPressedAt=null,wasThrottle=false,skyAim=null,aimY=0;
+let fireHeld=false,firePulseUntil=0,reverseHeld=false,gasHeld=false,steer=0,nudge=0,nudgeUntil=0,accelPressedAt=null,wasThrottle=false,aimY=0;
 const resets=[];
 let resume,wakeLock=null;try{resume=JSON.parse(sessionStorage.getItem('bonked-lan-controller')||'null');$('name').value=localStorage.getItem('drift-name')||'';}catch{}
 $('code').value=(query.get('room')||resume?.code||'').toUpperCase().slice(0,3);
@@ -46,8 +46,7 @@ function receive(msg){
   if(msg.type==='pong'){const rtt=Date.now()-msg.sent;if(rtt>=0&&rtt<2000){clockOffset=msg.time+rtt/2-Date.now();setStatus(`Local Wi-Fi · ${rtt} ms`);}return;}
   if(msg.type!=='state'||!identity)return;
   const previous=state;state=msg;lastState=performance.now();
-  if(previous?.round!==state.round||previous?.phase!==state.phase){if(!(previous?.phase==='countdown'&&state.phase==='racing'))release();skyAim=null;}
-  const target=me()?.skyTarget;if(target&&skyAim&&Math.hypot(target.x-skyAim.x,target.z-skyAim.z)>5)skyAim={x:target.x,z:target.z};
+  if(previous?.round!==state.round||previous?.phase!==state.phase){if(!(previous?.phase==='countdown'&&state.phase==='racing'))release();}
   render();
 }
 function me(){return state?.players.find(p=>p.id===identity?.id);}
@@ -56,10 +55,8 @@ function input(){
   const active=enabled(),driver=me(),sky=active&&driver?.eliminated;
   const throttle=active&&!sky?driveThrottle({mobile:true,phase:state?.phase,reverse:reverseHeld,accelerating:gasHeld}):0;
   if(throttle&&!wasThrottle)accelPressedAt=Date.now()+clockOffset;if(!throttle)accelPressedAt=null;wasThrottle=!!throttle;
-  let aim;
-  if(sky){skyAim??={x:driver.skyTarget?.x??state.camera?.x??0,z:driver.skyTarget?.z??state.camera?.z??0};const yaw=state.camera?.angle||0;
-    skyAim.x+=(-steer*Math.sin(yaw)+aimY*Math.cos(yaw))*1.2;skyAim.z+=(steer*Math.cos(yaw)+aimY*Math.sin(yaw))*1.2;aim={...skyAim};}
-  return {type:'input',seq:++sequence,steer:active&&!sky?steer:0,throttle,reverse:active&&!sky&&reverseHeld,brake:false,fire:active&&(fireHeld||performance.now()<firePulseUntil),nudge:active&&!sky&&performance.now()<nudgeUntil?nudge:0,accelPressedAt,...(aim?{skyAim:aim}:{})};
+  const skyMove=sky?{x:steer,y:aimY}:undefined;
+  return {type:'input',seq:++sequence,steer:active&&!sky?steer:0,throttle,reverse:active&&!sky&&reverseHeld,brake:false,fire:active&&(fireHeld||performance.now()<firePulseUntil),nudge:active&&!sky&&performance.now()<nudgeUntil?nudge:0,accelPressedAt,...(skyMove?{skyMove}:{})};
 }
 // Touchmove may arrive much faster than the simulation. Coalesce to the
 // latest held state so gestures cannot exhaust the host's command budget.

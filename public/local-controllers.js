@@ -43,16 +43,11 @@ export class LocalControllers {
       if(input.left&&!slot.previous.left){slot.nudge=-1;slot.nudgeUntil=now+120;}
       if(input.right&&!slot.previous.right){slot.nudge=1;slot.nudgeUntil=now+120;}
       const sky=state.phase==='racing'&&player.eliminated;
-      let skyAim;
-      if(sky){const target=player.skyTarget||state.camera||{x:0,z:0};
-        slot.skyAim??={x:target.x,z:target.z};if(Math.hypot(slot.skyAim.x-target.x,slot.skyAim.z-target.z)>6)slot.skyAim={x:target.x,z:target.z};
-        const angle=state.camera?.angle||0,speed=Math.min(.05,dt)*70;
-        slot.skyAim.x+=(-input.steer*Math.sin(angle)+input.aimY*Math.cos(angle))*speed;slot.skyAim.z+=(input.steer*Math.cos(angle)+input.aimY*Math.sin(angle))*speed;skyAim={...slot.skyAim};
-      }else slot.skyAim=null;
+      const skyMove=sky?{x:input.steer,y:input.aimY}:undefined;
       if(input.fire&&!slot.previous.fire){slot.fireUntil=now+70;this.send(slot.id,{type:'item'});}
       const buttonChanged=['throttle','reverse','fire','left','right'].some(key=>input[key]!==slot.previous[key]);
       const steeringChanged=Math.abs(input.steer-(slot.sentSteer||0))>.002;
-      if(now>=(slot.nextInputAt||0)||buttonChanged||(steeringChanged&&now>=(slot.nextSteeringAt||0))){slot.nextInputAt=now+1000/60;slot.nextSteeringAt=now+8;slot.sentSteer=input.steer;this.send(slot.id,{type:'input',seq:++slot.sequence,...neutral,steer:sky?0:input.steer,throttle:sky?0:throttle,reverse:!sky&&input.reverse,fire:input.fire||now<(slot.fireUntil||0),nudge:!sky&&now<slot.nudgeUntil?slot.nudge:0,accelPressedAt:slot.accelPressedAt,...(skyAim?{skyAim}:{})});}
+      if(now>=(slot.nextInputAt||0)||buttonChanged||(steeringChanged&&now>=(slot.nextSteeringAt||0))){slot.nextInputAt=now+1000/60;slot.nextSteeringAt=now+8;slot.sentSteer=input.steer;this.send(slot.id,{type:'input',seq:++slot.sequence,...neutral,steer:sky?0:input.steer,throttle:sky?0:throttle,reverse:!sky&&input.reverse,fire:input.fire||now<(slot.fireUntil||0),nudge:!sky&&now<slot.nudgeUntil?slot.nudge:0,accelPressedAt:slot.accelPressedAt,...(skyMove?{skyMove}:{})});}
       slot.previous={...input};
     }
   }
