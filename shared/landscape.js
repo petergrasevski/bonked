@@ -1,3 +1,4 @@
+import {volcanoTerrain} from './volcano-terrain.js';
 import {createBeachBands} from './beach-profile.js';
 import {DESERT_MOUNTAIN,DESERT_MOLE_ZONE} from './desert-features.js';
 const tri=(v,a,b,c)=>v.push(...a,...b,...c);
@@ -76,8 +77,9 @@ function molePlateau(ctx){
   return v;
 }
 export function createLandscape(ctx){
-  const surface=new TerrainSurface(),result={surface,lands:[],beaches:[],mountains:[],plateau:[]};
+  const surface=new TerrainSurface(),result={surface,lands:[],beaches:[],mountains:[],plateau:[],volcano:[]};
   if(ctx.id==='coast'){result.lands=COASTAL_LAND.map(l=>connectedLand(ctx,l));result.beaches=beaches(ctx);for(const l of result.lands)for(const band of l.bands)surface.add(band);for(const band of result.beaches)surface.add(band);}
   if(ctx.id==='desert'){result.plateau=molePlateau(ctx);surface.add(result.plateau);const m=DESERT_MOUNTAIN;result.mountains=[mountainTerrain(ctx,m.start,m.ascentEnd,1),mountainTerrain(ctx,m.bridgeEnd,m.end,2)];for(const m of result.mountains){for(const b of m.bands)surface.add(b);for(const o of m.outcrops)for(const b of o)surface.add(b);}}
+  if(ctx.id==='volcano'){result.volcano=volcanoTerrain(ctx.trackAt);for(const band of result.volcano)surface.add(band);}
   return result;
 }

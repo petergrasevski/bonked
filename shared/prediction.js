@@ -1,4 +1,4 @@
-import {angleDelta,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,NEUTRAL} from './game.js';
+import {angleDelta,updateFactoryMechanics,stepCar,collideCoastalCrabs,collideDesertMoles,collideCars,resolveNudges,NEUTRAL} from './game.js';
 // Use the same measured derivatives in snapshots and local prediction. These
 // follow actual drift, nudges, slopes and contacts rather than chassis heading.
 export const captureMotion=car=>({x:car.x,y:car.y,z:car.z,angle:car.angle,pitch:car.pitch||0,roll:car.roll||0,progress:car.progress||0});
@@ -12,6 +12,7 @@ export function recordMotion(car,old,dt){
 // Linear extrapolation loses the turn rate and snaps back at every snapshot.
 export function predictFleet(local,others,input,dt){
   const fleet=[local,...others],before=fleet.map(captureMotion);
+  updateFactoryMechanics(fleet,(local.raceTime||0)+dt);
   for(const car of fleet){stepCar(car,car===local?input:car.input||NEUTRAL,dt);car.raceTime=(car.raceTime||0)+dt;collideDesertMoles(car,car.raceTime,{damage:false});collideCoastalCrabs(car,car.raceTime);}
   resolveNudges(fleet,{damage:false});
   collideCars(fleet,{road:true,damage:false});

@@ -1,3 +1,5 @@
+import {collideFactoryRotors,rotorBotTarget} from './factory-rotors.js';
+import {FACTORY_PRESSES,EXTRA_CIRCUITS,extraCircuitPoints,extraHalfWidth,extraHasBarrier,circuitSurface,applyCircuitForces,advanceCircuitHeat,heatSpeedMultiplier,FACTORY_TIP,factoryTipAngle,circuitDistance} from './extra-circuits.js';
 import {coastalHasBarrier} from './coastal-barriers.js';
 import {coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
@@ -53,8 +55,10 @@ function spline(p0, p1, p2, p3, t) {
 }
 export const TRACKS = Object.freeze({
   coast:{id:'coast',name:'Saltwater Circuit',description:'Coastal causeways · technical turns',grip:1},
-  ice:{id:'ice',name:'Glacier Run',description:'2.03 km of ice · split lanes · exposed straights',grip:.12},
+  ice:{id:'ice',name:'Frost & Furious',description:'2.03 km of ice · split lanes · exposed straights',grip:.12},
   desert:{id:'desert',name:'Redrock Overpass',description:'Mountain bridge · four jumps · mole flats',grip:.85},
+  factory:{id:'factory',name:'Skid Mark Industries',description:'Reversing conveyors · rotating decks · stamping presses',grip:.95},
+  volcano:{id:'volcano',name:'Krakatoa',description:'Hot lanes · erupting vents · exposed crater rim',grip:.9,camera:{yawOffset:.52,spreadYawOffset:.9,pitch:25*Math.PI/180,spreadPitch:20*Math.PI/180}},
 });
 export let BOOST_PADS;
 export let activeTrack=TRACKS.coast,TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS;
@@ -69,7 +73,7 @@ function buildSegmentTree(start=0,end=SEGMENTS.length){
 }
 function segmentAtDistance(d){let lo=0,hi=SEGMENTS.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(SEGMENTS[mid].start+SEGMENTS[mid].len>=d)hi=mid;else lo=mid+1;}return SEGMENTS[lo];}
 export function getLandscape(){if(!landscapeCache.has(activeTrack.id))landscapeCache.set(activeTrack.id,createLandscape({id:activeTrack.id,segments:SEGMENTS,trackLength:TRACK_LENGTH,trackAt,nearestTrack,hasBarrier}));return landscapeCache.get(activeTrack.id);}
-export function terrainAt(x,z,ceiling=Infinity){const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=-4?{y:-4,nx:0,ny:1,nz:0}:null);}
+export function terrainAt(x,z,ceiling=Infinity){const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=(activeTrack.id==='factory'?-8:-4)?{y:activeTrack.id==='factory'?-8:-4,nx:0,ny:1,nz:0}:null);}
 const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
 function icePoints(){
   // Each straight is 914.4m: exactly 60% of the former 1,524m.
@@ -108,6 +112,7 @@ export function hasBarrier(fraction,side=0,inner=false){
     return side<0?p.x>-100&&p.x<-40:p.x>40&&p.x<100;
   }
   if(inner)return false;
+  if(EXTRA_CIRCUITS.includes(activeTrack.id)){const p=trackAt(fraction);return extraHasBarrier(activeTrack.id,fraction,side,TRACK_LENGTH,p.insideSide,p.turn);}
   if(activeTrack.id==='desert')return desertHasBarrier(fraction);
   return coastalHasBarrier(fraction,side);
 }
@@ -124,6 +129,7 @@ TRACK = Array.from({ length: 1500 }, (_, i) => {
 // Preserve the requested 30% length reduction while authoring turns independently.
 if(activeTrack.id==='ice')TRACK=icePoints().map(p=>({...p,y:1}));
 if(activeTrack.id==='desert')TRACK=desertPoints();
+if(EXTRA_CIRCUITS.includes(id))TRACK=extraCircuitPoints(id);
 const rawLength=TRACK.reduce((sum,p,i)=>sum+Math.hypot(p.x-TRACK[(i+1)%TRACK.length].x,p.z-TRACK[(i+1)%TRACK.length].z),0);
 if(activeTrack.id==='coast')for(const p of TRACK){p.x*=TARGET_TRACK_LENGTH/rawLength;p.z*=TARGET_TRACK_LENGTH/rawLength;}
 let length = 0;
@@ -139,25 +145,29 @@ PLAZAS=activeTrack.id==='coast'?[.10,.30,.70]:[];
 
 for(let i=0;i<SEGMENTS.length;i++){
   const s=SEGMENTS[i],before=SEGMENTS[(i+SEGMENTS.length-10)%SEGMENTS.length],after=SEGMENTS[(i+10)%SEGMENTS.length];
-  const bend=Math.abs(angleDelta(Math.atan2(after.dz,after.dx),Math.atan2(before.dz,before.dx)));
+  const signedTurn=angleDelta(Math.atan2(after.dz,after.dx),Math.atan2(before.dz,before.dx)),bend=Math.abs(signedTurn);s.turn=signedTurn;s.insideSide=Math.sign(signedTurn)||1;
   let halfWidth=6+Math.min(3,bend*3.5);
   for(const f of PLAZAS){const d=arcDistance(s.start/TRACK_LENGTH,f);if(d<65)halfWidth=Math.max(halfWidth,6+6*(1+Math.cos(Math.PI*d/65))/2);}
   let clearance=Infinity;
   for(let j=0;j<SEGMENTS.length;j+=3){const q=SEGMENTS[j];if(arcDistance(s.start/TRACK_LENGTH,q.start/TRACK_LENGTH)>45)clearance=Math.min(clearance,Math.hypot(s.x-q.x,s.z-q.z));}
-  s.halfWidth=activeTrack.id==='ice'?(9+Math.max(6*clamp((Math.abs(s.x)-420)/40,0,1),5*clamp((155-Math.abs(s.x))/50,0,1))):activeTrack.id==='desert'?desertHalfWidth(s.start/TRACK_LENGTH,TRACK_LENGTH):Math.max(6,Math.min(halfWidth,(clearance-3)/2));
+  s.halfWidth=EXTRA_CIRCUITS.includes(id)?extraHalfWidth(id,s.start/TRACK_LENGTH,TRACK_LENGTH):activeTrack.id==='ice'?(9+Math.max(6*clamp((Math.abs(s.x)-420)/40,0,1),5*clamp((155-Math.abs(s.x))/50,0,1))):activeTrack.id==='desert'?desertHalfWidth(s.start/TRACK_LENGTH,TRACK_LENGTH):Math.max(6,Math.min(halfWidth,(clearance-3)/2));
 }
 for(let i=0;i<SEGMENTS.length;i++)SEGMENTS[i].nextHalfWidth=SEGMENTS[(i+1)%SEGMENTS.length].halfWidth;
 OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
   const f=fraction+offset/TRACK_LENGTH,p=trackAt(f);
   return {id:`island-${index}-${i}`,fraction:f,x:p.x,z:p.z,radius:1.65,height:1.5};
 }));
+if(activeTrack.id==='volcano')OBSTACLES=Array.from({length:14},(_,i)=>{
+  const fraction=.12+i*.058+Math.sin(i*2.1)*.006,side=i%2?1:-1;
+  return Array.from({length:4},(_,j)=>{const f=fraction+(j-1.5)*1.7/TRACK_LENGTH,p=trackAt(f),radius=j===1?1.5:.65+(j%3)*.23,lateral=side*(p.halfWidth+(j===1?-.8:j===2?.3:-.2)),x=p.x+p.nx*lateral,z=p.z+p.nz*lateral,y=Math.abs(lateral)<=p.halfWidth+.7?p.y-.1:Math.min(p.y-.1,terrainAt(x,z)?.y??p.y);return {id:`basalt-${i}-${j}`,kind:'basalt',fraction:f,x,z,y,radius,height:radius*1.9,angle:i*2.3+j};});
+}).flat();
 if(activeTrack.id==='desert')OBSTACLES=DESERT_CACTI.map(({fraction,side},i)=>{const p=trackAt(fraction),lateral=side*(p.halfWidth-1.5);return {id:`cactus-${i}`,kind:'cactus',fraction,x:p.x+p.nx*lateral,z:p.z+p.nz*lateral,y:p.y,radius:.65,height:7,angle:p.angle};});
 MOLES=activeTrack.id==='desert'?desertMoles(TRACK_LENGTH).map(m=>{const p=trackAt(m.fraction);return {...m,x:p.x+p.nx*m.lateral,y:p.y,z:p.z+p.nz*m.lateral,angle:p.angle};}):[];
 CRABS=activeTrack.id==='coast'?coastalCrabs(trackAt):[];
 // Preserve the original rows, filling three gaps with extra weapon choices.
 const basePickupRows=Math.round(TRACK_LENGTH/(TOP_SPEED*10));
 const extraPickupFractions={coast:[.12,.405,.55],ice:[.14,.473,.806],desert:[.16,.36,.56]};
-const pickupFractions=Array.from({length:basePickupRows},(_,row)=>START_FRACTION+(90+row*TRACK_LENGTH/basePickupRows)/TRACK_LENGTH).concat(extraPickupFractions[id]).sort((a,b)=>a-b);
+const pickupFractions=Array.from({length:basePickupRows},(_,row)=>START_FRACTION+(90+row*TRACK_LENGTH/basePickupRows)/TRACK_LENGTH).concat(extraPickupFractions[id]||[.16,.40,.70]).sort((a,b)=>a-b);
 PICKUP_ROW_COUNT=pickupFractions.length;
 PICKUP_LOCATIONS = pickupFractions.flatMap((initialFraction,row)=>{
   let fraction=initialFraction,p=trackAt(fraction);
@@ -173,7 +183,7 @@ export function trackAt(fraction) {
   const d = ((fraction % 1 + 1) % 1) * TRACK_LENGTH;
   const s = segmentAtDistance(d);
   const t = (d-s.start)/s.len;
-  return { y:s.y+s.dy*t, grade:s.dy/s.len, x:s.x+s.dx*t, z:s.z+s.dz*t, angle:Math.atan2(s.dz,s.dx), nx:s.nx, nz:s.nz, halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t };
+  return { insideSide:s.insideSide,turn:s.turn,y:s.y+s.dy*t, grade:s.dy/s.len, x:s.x+s.dx*t, z:s.z+s.dz*t, angle:Math.atan2(s.dz,s.dx), nx:s.nx, nz:s.nz, halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t };
 }
 export function nearestTrack(x,z,hint=null) {
   let bestScore=Infinity,bestIndex=Infinity;
@@ -188,7 +198,7 @@ export function nearestTrack(x,z,hint=null) {
     const px=s.x+s.dx*t, pz=s.z+s.dz*t, d=Math.hypot(x-px,z-pz);
     const fraction=(s.start+s.len*t)/TRACK_LENGTH;
     const routePenalty=activeTrack.id==='desert'&&hint!==null?Math.max(0,arcDistance(fraction,hint)-50)*2:0;
-    if(d+routePenalty<bestScore||(d+routePenalty===bestScore&&index<bestIndex)){bestIndex=index;const rampLift=activeTrack.id==='desert'?desertRampLift(fraction,TRACK_LENGTH):0,rampGrade=activeTrack.id==='desert'?desertRampGrade(fraction,TRACK_LENGTH):0;bestScore=d+routePenalty;best={y:s.y+s.dy*t+rampLift,grade:s.dy/s.len+rampGrade,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
+    if(d+routePenalty<bestScore||(d+routePenalty===bestScore&&index<bestIndex)){bestIndex=index;const rampLift=activeTrack.id==='desert'?desertRampLift(fraction,TRACK_LENGTH):0,rampGrade=activeTrack.id==='desert'?desertRampGrade(fraction,TRACK_LENGTH):0;bestScore=d+routePenalty;best={insideSide:s.insideSide,turn:s.turn,y:s.y+s.dy*t+rampLift,grade:s.dy/s.len+rampGrade,x:px,z:pz,distance:d,fraction:(s.start+s.len*t)/TRACK_LENGTH,nx:s.nx,nz:s.nz,halfWidth:s.halfWidth+(s.nextHalfWidth-s.halfWidth)*t};}
     }
   };
   visit(segmentTree);
@@ -349,35 +359,72 @@ function verticalStep(car,dt){
   }
 }
 export function wallDamage(speedBefore,speedAfter){return Math.max(0,speedBefore-speedAfter-1.5)*.3;}
+let tipAt=null,tipTime=0;
+export function updateFactoryMechanics(cars,seconds){
+  if(activeTrack.id!=='factory')return;
+  let at=Math.max(-Infinity,...cars.map(c=>Number.isFinite(c.factoryTipAt)?c.factoryTipAt:-Infinity));
+  const p=trackAt(FACTORY_TIP.fraction+FACTORY_TIP.buttonOffset/TRACK_LENGTH);
+  if(seconds-at>=FACTORY_TIP.dropSeconds+FACTORY_TIP.holdSeconds+FACTORY_TIP.riseSeconds+FACTORY_TIP.rearmSeconds&&cars.some(c=>!c.eliminated&&!c.falling&&Math.abs(c.y-p.y)<1&&Math.hypot(c.x-(p.x+p.nx*p.halfWidth*.6),c.z-(p.z+p.nz*p.halfWidth*.6))<2.4))at=seconds;
+  for(const c of cars)c.factoryTipAt=Number.isFinite(at)?at:null;
+}
+function tipSurface(t,x,z){
+  if(activeTrack.id!=='factory'||circuitDistance(t.fraction,FACTORY_TIP.fraction,TRACK_LENGTH)>FACTORY_TIP.length/2)return t;
+  const lateral=(x-t.x)*t.nx+(z-t.z)*t.nz;if(lateral>=0)return t;
+  const angle=factoryTipAngle(tipTime,tipAt);if(lateral<-(t.halfWidth+.6)*Math.cos(angle))return null;
+  const slope=Math.tan(angle),ny=Math.cos(angle);
+  return {...t,y:t.y+lateral*slope,surface:{nx:-t.nx*Math.sin(angle),ny,nz:-t.nz*Math.sin(angle)}};
+}
 export function roadSurfaceAt(x,z,hint){
   const t=nearestTrack(x,z,hint),gap=iceSplit(t.x),lateral=Math.abs((x-t.x)*t.nx+(z-t.z)*t.nz);
-  return t.distance<=t.halfWidth+.6&&(gap<.01||lateral>=gap)?t:null;
+  return t.distance<=t.halfWidth+.6&&(gap<.01||lateral>=gap)?tipSurface(t,x,z):null;
 }
-// Only the coast's visible, dry, reasonably shallow banks extend tyre support.
-// Ice gaps, desert cliffs, submerged sand and empty space remain real edges.
-export function drivingSurfaceAt(x,z,hint){
-  const road=roadSurfaceAt(x,z,hint);if(road)return road;
+// Tyres follow visible land. Height limits distinguish a reachable surface from
+// an overhead deck; slope traction, gravity and impacts govern volcano terrain.
+export function drivingSurfaceAt(x,z,hint,ceiling=Infinity){
+  const road=roadSurfaceAt(x,z,hint);if(road&&road.y<=ceiling)return road;
+  if(activeTrack.id==='volcano'){
+    const surface=getLandscape().surface.sample(x,z,ceiling);
+    if(!surface||surface.ny<.12||surface.y< -3)return null;
+    return {...nearestTrack(x,z,hint),y:surface.y,surface};
+  }
   if(activeTrack.id!=='coast')return null;
   const t=nearestTrack(x,z,hint);if(t.distance>t.halfWidth+12)return null;
   const surface=terrainAt(x,z,t.y+.5);
   return surface&&surface.y>SEA_LEVEL+.15&&surface.ny>.7?{...t,y:surface.y,surface}:null;
 }
-function coastalSupportFloor(car,surface){
+// A surviving shoulder must have an unbroken climbable route back to the deck.
+// Testing only the current normal would incorrectly bless flat ground below a cliff.
+export const VOLCANO_RECOVERY_ANGLE=35*Math.PI/180;
+export function volcanoRecoverableAt(car,road=nearestTrack(car.x,car.z,car.trackFraction)){
+  if(activeTrack.id!=='volcano')return false;
+  if(road.distance<=road.halfWidth+.6&&car.y>=road.y-1.2)return true;
+  const terrain=getLandscape().surface,minNormal=Math.cos(VOLCANO_RECOVERY_ANGLE),surface=terrain.sample(car.x,car.z,car.y+1.2);
+  if(!surface||surface.ny<minNormal||surface.y< -3)return false;
+  const lateral=(car.x-road.x)*road.nx+(car.z-road.z)*road.nz,side=Math.sign(lateral)||1,edge=road.halfWidth+.75,distance=Math.abs(lateral);
+  const steps=Math.max(1,Math.ceil((distance-edge)/3));
+  for(let i=0;i<=steps;i++){
+    const offset=edge+Math.max(0,distance-edge)*i/steps,hit=terrain.sample(road.x+road.nx*offset*side,road.z+road.nz*offset*side);
+    if(!hit||hit.ny<minNormal)return false;
+  }
+  return true;
+}
+function tyreSupportFloor(car,surface){
   let floor=surface.y;
-  for(const [x,z]of WHEEL_POINTS){const p=bodyOffset(car,x,0,z),s=drivingSurfaceAt(car.x+p.x,car.z+p.z,car.trackFraction);if(s)floor=Math.max(floor,s.y-p.y);}
+  for(const [x,z]of WHEEL_POINTS){const p=bodyOffset(car,x,0,z),s=drivingSurfaceAt(car.x+p.x,car.z+p.z,car.trackFraction,activeTrack.id==='volcano'?car.y+p.y+.6:Infinity);if(s)floor=Math.max(floor,s.y-p.y);}
   return floor;
 }
 function supportRoad(car,t){
   if(car.falling)return;
+  const tipped=activeTrack.id==='factory'&&circuitDistance(t.fraction,FACTORY_TIP.fraction,TRACK_LENGTH)<FACTORY_TIP.length/2+CAR_LENGTH;
   // A ramp or weapon launch releases the tyre pivot. Losing contact while
   // rising is flight, not an irreversible fall off the road.
   if(car.vy>0||car.y>car.groundY+.5&&!car.edgeBalance){car.edgeBalance=false;return;}
   // Interior driving retains the existing cheap path. Only edge contacts sample
   // individual tyres against the shared road and coastal terrain surfaces.
   const lateral=Math.abs((car.x-t.x)*t.nx+(car.z-t.z)*t.nz),gap=iceSplit(t.x),extent=CAR_LENGTH/2;
-  if(t.distance+extent<t.halfWidth+.6&&(gap<.01||lateral-extent>gap)){car.supportedWheels=4;car.edgeBalance=false;return;}
+  if(!tipped&&(!['factory','volcano'].includes(activeTrack.id)||car.y>=t.y-.6)&&t.distance+extent<t.halfWidth+.6&&(gap<.01||lateral-extent>gap)){car.supportedWheels=4;car.edgeBalance=false;return;}
   let supportedFootprints=0;
-  const support=wheelSupports(car,(x,z)=>{const surface=drivingSurfaceAt(x,z,car.trackFraction);if(surface)supportedFootprints++;return surface;});
+  const support=wheelSupports(car,(x,z,ceiling)=>{const surface=drivingSurfaceAt(x,z,car.trackFraction,['factory','volcano'].includes(activeTrack.id)?ceiling:Infinity);if(surface)supportedFootprints++;return surface;});
   // A ramp lip can put front and rear tyres at different surface heights.
   // Only a missing driving surface is an edge; a height mismatch alone is not.
   if(supportedFootprints===4){car.supportedWheels=4;car.edgeBalance=false;return;}
@@ -391,16 +438,23 @@ function supportRoad(car,t){
   }
 }
 export function constrainRoad(car){
+  if(activeTrack.id==='factory'){tipTime=car.circuitTime??car.raceTime??0;tipAt=car.factoryTipAt;}
   const t=nearestTrack(car.x,car.z,car.trackFraction);
-  const support=activeTrack.id==='coast'?drivingSurfaceAt(car.x,car.z,car.trackFraction):null;
+  const support=['coast','factory','volcano'].includes(activeTrack.id)?drivingSurfaceAt(car.x,car.z,car.trackFraction,['factory','volcano'].includes(activeTrack.id)?car.y+.6:Infinity):null;
   if(support?.surface)t.surface=support.surface;
-  const floor=support?.surface?coastalSupportFloor(car,support):activeTrack.id==='coast'&&t.distance>t.halfWidth+.6?(car.groundY||0):t.y;
-  // A ballistic fall can be recovered by landing upright on actual dry sand.
-  if(car.falling&&support?.surface&&!car.wrecked&&car.vy<=0&&car.y<=floor+.15&&car.y>floor-1.5&&Math.cos(car.roll)*Math.cos(car.pitch)>.35){
+  const floor=support?.surface?(activeTrack.id==='factory'?support.y:tyreSupportFloor(car,support)):(activeTrack.id==='coast'&&t.distance>t.halfWidth+.6||['factory','volcano'].includes(activeTrack.id)&&!support)?(car.groundY||0):t.y;
+  // Upright landings recover on reachable sand, mountainside or volcano road.
+  if(car.falling&&(support?.surface||activeTrack.id==='volcano'&&support)&&!car.wrecked&&car.vy<=0&&car.y<=floor+.15&&car.y>floor-1.5&&Math.cos(car.roll)*Math.cos(car.pitch)>.35){
     car.falling=false;car.edgeBalance=false;car.offRoadTime=0;car.vy=0;car.y=floor;car.rollVelocity=0;car.pitchVelocity=0;car.mineFlight=false;car.rampFlight=false;
   }
   if(car.falling)return t;
-  const oldFloor=car.groundY||0;car.groundY=floor;
+  const oldFloor=car.groundY||0;
+  // A lower panel cannot lift a car through the adjoining fixed deck. Both
+  // longitudinal ends release it into flight, just like the outside edge.
+  if(['factory','volcano'].includes(activeTrack.id)&&!support&&car.y<t.y-.6){car.falling=true;car.edgeBalance=false;car.offRoadTime=0;car.vy=Math.min(0,car.vy);return t;}
+  // Leaving a sheer cliff is ballistic; gentle terrain follows the tyres.
+  if(activeTrack.id==='volcano'&&support?.surface&&!car.edgeBalance&&car.y<=oldFloor+.01&&floor<oldFloor-.8){car.falling=true;car.edgeBalance=false;car.offRoadTime=0;return t;}
+  car.groundY=floor;
   if(!car.edgeBalance&&car.y<=oldFloor+.001&&car.vy<=0)car.y=floor;
   // Barriers still stop grounded cars; exposed edges use individual tyre support.
   if(activeTrack.id==='ice'){
@@ -430,6 +484,7 @@ export function constrainRoad(car){
       if(car.wallCooldown<=0&&impact>4){damageCar(car,wallDamage(speedBefore,Math.hypot(car.vx,car.vz)));car.wallCooldown=.2;}
     }
   }
+  if(activeTrack.id==='factory')collideFactoryRotors(car,trackAt,car.circuitTime??car.raceTime??0);
   constrainObstacles(car);supportRoad(car,t);
   return t;
 }
@@ -437,7 +492,17 @@ export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
   for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown','contactTime'])car[key]=Math.max(0,(car[key]||0)-dt);
   car.tasePhase=(car.tasePhase||0)+dt;
+  if(activeTrack.id==='factory'){car.circuitTime=(car.raceTime||0)+dt;tipTime=car.circuitTime;tipAt=car.factoryTipAt;}
   const padSpeed=boostSpeed(car,dt,TOP_SPEED);
+  const circuitRoad=EXTRA_CIRCUITS.includes(activeTrack.id)?nearestTrack(car.x,car.z,car.trackFraction):null;
+  const circuitEffect=circuitRoad?circuitSurface(activeTrack.id,circuitRoad.fraction,(car.x-circuitRoad.x)*circuitRoad.nx+(car.z-circuitRoad.z)*circuitRoad.nz,circuitRoad.halfWidth,TRACK_LENGTH,(car.raceTime||0)+dt,circuitRoad.insideSide):null;
+  const onHotLane=circuitEffect?.kind==='heat'&&!car.falling&&!car.overturned&&Math.abs(car.y-circuitRoad.y)<.55;
+  if(activeTrack.id==='volcano')damageCar(car,advanceCircuitHeat(car,onHotLane,dt));
+  const heatBoost=onHotLane?heatSpeedMultiplier(car.circuitHeat):1;
+  const terrainContact=activeTrack.id==='volcano'?drivingSurfaceAt(car.x,car.z,car.trackFraction,car.y+.6):null;
+  const hillside=terrainContact?.surface&&Math.abs(car.y-car.groundY)<.55&&!car.falling?terrainContact.surface:null;
+  const terrainGrip=hillside?clamp((hillside.ny-.25)/.65,.06,1)**2:1;
+  const beltSpeed=circuitEffect?.kind==='belt'?Math.max(0,circuitEffect.flow)*.65:0;
   verticalStep(car,dt);
   stepRollover(car,input,dt);
   if(car.falling&&car.y< -20){car.vx=0;car.vz=0;return;}
@@ -459,7 +524,7 @@ export function stepCar(car, input, dt=STEP) {
   if(uncontrolled){
     const drag=car.y-(car.groundY||0)>.05||car.falling?.15:car.wrecked?2.4:3;
     car.vx*=Math.exp(-drag*dt);car.vz*=Math.exp(-drag*dt);car.angle+=car.yawVelocity*dt;
-    if(activeTrack.id==='desert'&&car.rampFlight&&!car.mineFlight&&!spinStep&&!car.wrecked&&!car.overturned&&!car.falling&&!car.finished&&car.y-(car.groundY||0)>.05){
+    if(['desert','volcano'].includes(activeTrack.id)&&car.rampFlight&&!car.mineFlight&&!spinStep&&!car.wrecked&&!car.overturned&&!car.falling&&!car.finished&&car.y-(car.groundY||0)>.05){
       // Gentle jump correction: about 13 degrees/s of heading and 7 degrees/s
       // of travel at full steering. Rotate momentum without adding speed/lift.
       const turn=car.steering*dt,courseTurn=turn*.125,c=Math.cos(courseTurn),s=Math.sin(courseTurn),vx=car.vx;
@@ -472,15 +537,15 @@ export function stepCar(car, input, dt=STEP) {
     // Reverse is immediate input: while rolling forwards it applies braking
     // and loosens rear grip; through zero it becomes ordinary reverse drive.
     const braking=input.brake||(input.reverse&&forward>0);
-    const speedFactor=healthSpeedFactor(car.health),maxSpeed=Math.max(TOP_SPEED*speedFactor*(car.boost>0?1.1:1),padSpeed??0);
-    const force=car.stun>0?0:input.reverse?-24*speedFactor:forward>=maxSpeed&&car.impactTime>0?0:input.throttle*25.2*speedFactor*(car.boost>0?1.35:1);
+    const speedFactor=healthSpeedFactor(car.health),maxSpeed=Math.max((TOP_SPEED*heatBoost+beltSpeed)*speedFactor*(car.boost>0?1.1:1),padSpeed??0);
+    const force=car.stun>0?0:input.reverse?-24*speedFactor:forward>=maxSpeed&&car.impactTime>0?0:input.throttle*25.2*heatBoost*speedFactor*(car.boost>0?1.35:1);
     const steering=clamp(car.steering+(car.tased>0?(Math.sin(car.tasePhase*19)+.5*Math.sin(car.tasePhase*31))*.3:0),-1,1);
-    forward+=force*dt;forward*=Math.exp(-(braking?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
+    forward+=force*terrainGrip*dt;forward*=Math.exp(-(braking?1.7:Math.abs(force)>0?.64+Math.abs(steering)*.23:1.5)*dt);
     // External impacts may exceed engine top speed; they decay instead of being erased.
     if(car.impactTime<=0)forward=clamp(forward,-14.4*speedFactor,maxSpeed);
     // Boost supplies bounded thrust, so impacts cannot restore the old speed in one tick.
     if(padSpeed!==null&&!input.reverse)forward+=Math.min(Math.max(0,padSpeed-forward),120*(car.padBoostPower??1)*dt);
-    const handling=healthHandlingFactor(car.health)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
+    const handling=healthHandlingFactor(car.health)*(hillside?Math.max(.12,Math.sqrt(terrainGrip)):1)*(car.tased>0?.28:1)*(car.edgeBalance?Math.max(.35,(car.supportedWheels||0)/4):1);
     // At speed, the rear tyres shed grip so the body turns ahead of its
     // momentum: a physical tail-out slide that settles as the rack centres.
     // Dry-road straight-line recovery and low-speed manoeuvres retain their
@@ -497,15 +562,25 @@ export function stepCar(car, input, dt=STEP) {
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }
+  if(hillside&&!car.falling&&car.y<=car.groundY+.1){car.vx+=22*hillside.ny*hillside.nx*dt;car.vz+=22*hillside.ny*hillside.nz*dt;}
+  if(activeTrack.id==='factory'&&circuitRoad&&tipSurface(circuitRoad,car.x,car.z)?.surface&&car.y<=car.groundY+.1&&!car.falling){const slide=40*Math.sin(factoryTipAngle(tipTime,tipAt))*dt;car.vx-=circuitRoad.nx*slide;car.vz-=circuitRoad.nz*slide;}
+  if(circuitRoad)applyCircuitForces(car,activeTrack.id,circuitRoad,TRACK_LENGTH,(car.raceTime||0)+dt,dt);
   if(activeTrack.id==='desert')applyDesertWind(car,(car.raceTime||0)+dt,dt);
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;
   advanceNudge(car,dt);
   const track=constrainRoad(car);
-  if(car.edgeBalance&&!car.falling){balanceOnWheels(car,wheelSupports(car,(x,z)=>drivingSurfaceAt(x,z,car.trackFraction)),dt);supportRoad(car,nearestTrack(car.x,car.z,car.trackFraction));}
+  if(car.edgeBalance&&!car.falling){balanceOnWheels(car,wheelSupports(car,(x,z,ceiling)=>drivingSurfaceAt(x,z,car.trackFraction,['factory','volcano'].includes(activeTrack.id)?ceiling:Infinity)),dt);supportRoad(car,nearestTrack(car.x,car.z,car.trackFraction));}
   if(car.falling){
-    car.offRoadTime=(car.offRoadTime||0)+dt;collideTerrain(car,terrainAt,dt);
-    // Unsupported falls still eliminate; recoverable dry sand is handled above.
-    if(!car.wrecked&&(car.offRoadTime>1.2||activeTrack.id==='coast'&&car.y<SEA_LEVEL)){car.shield=0;damageCar(car,100);}
+    car.offRoadTime=(car.offRoadTime||0)+dt;const groundImpact=collideTerrain(car,terrainAt,dt);
+    if(activeTrack.id==='factory'&&groundImpact.touched&&car.groundY<=-7.5&&!car.wrecked){car.shield=0;damageCar(car,100);}
+    if(activeTrack.id==='volcano'){
+      if(!car.wrecked&&groundImpact.maxImpact>11)damageCar(car,(groundImpact.maxImpact-11)*4);
+      if(!car.wrecked&&car.y< -2.5){car.shield=0;damageCar(car,100);}
+    }else if(!car.wrecked&&(car.offRoadTime>1.2||activeTrack.id==='coast'&&car.y<SEA_LEVEL)){car.shield=0;damageCar(car,100);}
+  }
+  if(activeTrack.id==='volcano'&&!car.finished&&!car.eliminated){
+    car.volcanoFallTime=volcanoRecoverableAt(car,track)?0:(car.volcanoFallTime||0)+dt;
+    if(car.volcanoFallTime>=1.2){car.shield=0;damageCar(car,100);}
   }
   if(!car.edgeBalance&&!car.falling&&!car.overturned&&!car.wrecked&&car.y<=car.groundY+.001&&car.vy<=0){
     // Match the actual road normal in the same YXZ body basis as the renderer.
@@ -516,7 +591,7 @@ export function stepCar(car, input, dt=STEP) {
     car.roll+=(Math.atan(-across)-car.roll)*blend;
   }
   let diff=track.fraction-car.trackFraction;if(diff>.5)diff-=1;if(diff<-.5)diff+=1;
-  if(track.distance<track.halfWidth+5&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
+  if(track.distance<track.halfWidth+(activeTrack.id==='volcano'&&track.surface?40:5)&&!car.falling&&!car.eliminated)car.progress+=clamp(diff,-.01,.01);
   if(activeTrack.id==='desert'&&!uncontrolled&&Math.hypot(car.vx,car.vz)>12){
     for(const ramp of DESERT_JUMPS)if(car.trackFraction<ramp.fraction&&track.fraction>=ramp.fraction&&diff>0&&diff<.01){
       car.y=Math.max(car.y,trackAt(ramp.fraction).y+ramp.height+.08);car.vy=8+Math.hypot(car.vx,car.vz)*.15;car.rampFlight=true;car.edgeBalance=false;
@@ -605,11 +680,18 @@ export function botSteeringTarget(car,{lane=0,side=0,splitLead=175,avoidLane=nul
   if(activeTrack.id==='ice'&&Math.abs(p.x)<splitLead){
     const blend=clamp((splitLead-Math.abs(p.x))/(splitLead-130),0,1);offset=offset*(1-blend)+(side||car.botLane||(car.gridSlot%2?-1:1))*8*blend;
   }
+  if(activeTrack.id==='factory')for(const f of FACTORY_PRESSES){const d=arcDistance(car.trackFraction,f);if(d<38){const blend=clamp((38-d)/18,0,1);offset=offset*(1-blend)-trackAt(f).insideSide*road.halfWidth*.57*blend;}}
+  if(activeTrack.id==='volcano'){
+    // Pick a clear lane before reaching each basalt boulder, with a stable choice
+    // throughout approach and exit rather than steering at its centre.
+    for(const o of OBSTACLES){const d=(((o.fraction-car.trackFraction+.5)%1+1)%1-.5)*TRACK_LENGTH;if(d< -8||d>48)continue;const q=trackAt(o.fraction),rockLane=(o.x-q.x)*q.nx+(o.z-q.z)*q.nz;if(Math.abs(rockLane-offset)<o.radius+2.7){const candidate=rockLane>1?rockLane-o.radius-3.3:rockLane+o.radius+3.3;offset=candidate;}}
+  }
   if(Number.isFinite(avoidLane))offset=avoidLane;
   const bounds=botLaneBounds(fraction,side||Math.sign(offset)||1,splitLead);
   offset=clamp(offset,bounds.min,bounds.max);
   p.x+=p.nx*offset;p.z+=p.nz*offset;
-  return {point:p,lane:offset,speed,bend,iceSpace,icy};
+  const rotor=activeTrack.id==='factory'?rotorBotTarget(car,trackAt,TRACK_LENGTH):null;
+  return {point:rotor?.point??p,lane:offset,speed,bend,iceSpace,icy,rotor:!!rotor};
 }
 // Legal lane centres keep the whole chassis away from road edges and ice gaps.
 export function botLaneBounds(fraction,side=1,splitLead=175){
@@ -622,12 +704,12 @@ export function botLaneBounds(fraction,side=1,splitLead=175){
   return {min,max};
 }
 export function botInput(car,options={}){
-  const {point:p,speed,bend,iceSpace,icy}=botSteeringTarget(car,options);
+  const {point:p,speed,bend,iceSpace,icy,rotor}=botSteeringTarget(car,options);
   const target=Math.atan2(p.z-car.z,p.x-car.x);
   const error=angleDelta(target,car.angle);
   // Correct outward momentum as well as heading; bound collision-induced slip.
   const slip=speed>4?clamp(angleDelta(car.angle,Math.atan2(car.vz,car.vx)),icy?-.9:-.6,icy?.9:.6):0;
-  const desired=clamp(36-bend*(icy?20:12),icy?8+10*iceSpace:16,36);
+  const desired=rotor?9:activeTrack.id==='volcano'?24:clamp(36-bend*(icy?20:12),icy?8+10*iceSpace:16,36);
   return {steer:clamp(error*2.5+slip*(icy?.5:1.5),-1,1),throttle:speed>desired?0:1,reverse:false,brake:Math.abs(error)>1.1,fire:false};
 }
 

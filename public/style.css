@@ -375,3 +375,32 @@ body.playing #menu-fps{display:none}
 @media(max-height:560px) and (orientation:landscape){.how-to-play-card{width:min(850px,96vw);padding:16px 22px}.help-heading{margin-bottom:10px}.how-to-play-card h2{font-size:25px;margin:2px 0 4px}.help-heading .eyebrow{display:none}.help-grid{gap:8px}.help-step{min-height:112px;padding:10px;grid-template-columns:105px 1fr;gap:10px}.help-visual{width:105px}.help-step h3{font-size:15px;margin:3px 0 5px}.help-step p{font-size:11px}.help-heading p{font-size:11px}}
 
 .ready-control{display:flex;flex-direction:column;align-items:center;gap:6px;width:min(320px,100%)}.results-card .ready-control #ready{width:100%}#ready-key-hint{font-size:11px;color:var(--muted);font-weight:400;opacity:.7}.mobile #ready-key-hint{display:none}.ready-control:has(#ready[hidden]){display:none}
+
+/* Circuit palettes also provide a background while previews load. */
+.track-card.factory{background:linear-gradient(145deg,#273a47,#806239)}
+.track-card.volcano{background:linear-gradient(145deg,#3e2731,#a54d26)}
+.track-card.text-card{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;text-align:left;padding:clamp(8px,1.4vw,22px);color:#f2eee0}
+.track-card.text-card canvas{position:absolute;inset:0;opacity:.22}
+.track-card-name{position:relative;z-index:2;font-family:Righteous,sans-serif;font-size:clamp(14px,2vw,27px);line-height:1.08;text-shadow:0 2px 8px #0009}
+.track-card-description{position:relative;z-index:2;margin-top:9px;font-size:clamp(9px,.9vw,12px);line-height:1.4;color:#e0e8e6}
+
+/* Full-sized square cards in one scrollable row. */
+.circuit-carousel{position:relative;min-width:0;width:100%}
+#track-picker{display:flex;flex-wrap:nowrap;gap:10px;width:100%;max-width:100%;padding:3px 2px 8px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-padding:2px;scrollbar-width:thin;scrollbar-color:#a7bbc166 transparent;overscroll-behavior-x:contain;touch-action:pan-x;cursor:grab}
+#track-picker.dragging{scroll-snap-type:none;cursor:grabbing;user-select:none}
+#track-picker .track-card{flex:0 0 calc((100% - 20px)/3);min-width:100px;aspect-ratio:1;height:auto;scroll-snap-align:start}
+#track-picker .track-card-name{font-size:clamp(13px,2vw,27px)}
+.circuit-scroll{position:absolute;z-index:5;top:calc(50% - 23px);width:30px;height:46px;border:1px solid #a8bdc47a;border-radius:4px;background:#142b37ed;color:#edf5ef;font-size:31px;line-height:1;display:grid;place-items:center;padding:0;box-shadow:0 3px 12px #0006}
+.circuit-scroll.previous{left:-12px}.circuit-scroll.next{right:-12px}.circuit-scroll:disabled{opacity:0;pointer-events:none}.circuit-scroll:focus-visible{outline:2px solid white;outline-offset:3px}
+@media(orientation:landscape) and (max-height:560px){#track-picker .track-card{flex-basis:clamp(90px,calc(100dvh - 268px),220px);min-width:90px}.track-card.text-card{padding:9px}.track-card-description{font-size:9px;line-height:1.3}.track-card-name{font-size:15px}.track-title{height:46%;top:5%}}
+@media(orientation:portrait) and (max-width:800px){.track-card-description{font-size:9px;line-height:1.25;margin-top:5px}.circuit-scroll{width:26px;height:38px}}
+.heat-overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.car-thermometer{position:absolute;left:0;top:0;width:17px;height:57px;filter:drop-shadow(0 2px 3px #000a)}
+.car-thermometer[hidden]{display:none}.thermometer-tube{position:absolute;left:4px;top:0;width:10px;height:45px;border:2px solid #f3ead8;border-radius:7px 7px 2px 2px;background:#1b2938e8;overflow:visible}
+.thermometer-fill{position:absolute;bottom:0;left:1px;right:1px;border-radius:4px 4px 0 0;background:linear-gradient(#ffc75b,#f16e2d);max-height:100%}
+.thermometer-limit{position:absolute;bottom:33.3333%;left:-5px;width:17px;height:2px;background:#ff3038;box-shadow:0 0 2px #651a22}
+.thermometer-bulb{position:absolute;bottom:0;left:0;width:17px;height:17px;border:2px solid #f3ead8;border-radius:50%;background:#f19236}
+.car-thermometer.burning .thermometer-fill{background:linear-gradient(#ff5c35,#ec352c)}.car-thermometer.burning .thermometer-bulb{background:#ff4f30;box-shadow:0 0 8px #ff5e4388}
+
+#track-picker .track-card{user-select:none}
+@media(orientation:portrait) and (max-width:800px){#room-panel .track-choice{align-self:stretch;width:100%;min-width:0;max-width:100%}.circuit-carousel{max-width:100%;min-width:0}}

@@ -23,7 +23,7 @@ export function assetHeaders(filename,data){
   return {
     // Weak validators remain valid when Fly compresses the representation.
     ETag:`W/"${createHash('sha256').update(data).digest('hex')}"`,
-    'Cache-Control':/^public\/track-titles\/[a-z]+\.[a-f0-9]{12}\.webp$/.test(filename)?'public, max-age=31536000, immutable':'public, no-cache',
+    'Cache-Control':/^public\/track-titles\/[a-z]+\.[a-f0-9]{12}\.(?:webp|png)$/.test(filename)?'public, max-age=31536000, immutable':'public, no-cache',
   };
 }
 export function matchesETag(header,etag){

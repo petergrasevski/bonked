@@ -4,7 +4,17 @@ export function buildTrackBarrier(w,biome,a,b,index=0){
   const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,length=Math.hypot(dx,dy,dz);
   if(length<.001)return;
   const group=new THREE.Group();group.position.set(a.x,a.y,a.z);group.quaternion.setFromUnitVectors(new THREE.Vector3(1,0,0),new THREE.Vector3(dx,dy,dz).normalize());w.static.add(group);
-  if(biome==='ice'){
+  if(['factory','volcano'].includes(biome)){
+    const factory=biome==='factory',base=factory?0x344a58:0x423b45,accent=factory?0xe0ad49:0xd98d59;
+    if(factory){
+      for(const y of [.45,1.05])w.box(length/2,y,0,length+.04,.18,.18,base,group);
+      w.box(0,.65,0,.2,1.3,.24,base,group);w.box(length/2,1.24,0,length,.13,.24,accent,group);
+      if(index%8===0)w.box(length/2,.7,0,Math.min(length,1.2),.55,.25,accent,group);
+    }else{
+      w.box(length/2,.5,0,length+.04,1,.6,base,group);w.box(length/2,1.05,0,length+.08,.17,.73,accent,group);
+      if(index%6===0){w.box(0,.75,0,.85,1.5,.85,base,group);w.box(0,1.55,0,1,.15,1,accent,group);}
+    }
+  }else if(biome==='ice'){
     if(!w.iceBarrierMaterial)w.iceBarrierMaterial=new THREE.MeshPhysicalMaterial({color:0x9dd4e4,roughness:.28,metalness:0,clearcoat:.65,clearcoatRoughness:.2,envMapIntensity:.8});
     const blocks=Math.max(1,Math.ceil(length/2.4)),span=length/blocks;
     for(let row=0;row<2;row++){

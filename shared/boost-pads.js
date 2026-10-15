@@ -39,6 +39,8 @@ export function boostLayout({id,trackAt,nearestTrack,length,carWidth,obstacles=[
     for(const t of [.25,.5])for(const shift of [0,6,-6,10,-10]){const f=start+(zone.length*t+shift)/length,p=trackAt(f),before=pads.length;add(f,-p.halfWidth+width/2+.6);if(pads.length>before)break;}
     pair(.163,-1);pair(.19,1);pair(.377,-1);
     row((DESERT_NARROW.narrowStart+DESERT_NARROW.narrowEnd)/2);
+  }else if(['factory','volcano'].includes(id)){
+    for(const [i,f]of [.08,.37,.66,.94].entries())pair(f,i%2?1:-1);
   }
   return pads;
 }

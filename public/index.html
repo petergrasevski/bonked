@@ -17,8 +17,10 @@
 <meta name="twitter:image" content="https://bonked.fly.dev/social/bonked-v1.png">
 <meta name="twitter:image:alt" content="Bonked logo">
 <link rel="preload" href="/track-titles/coast.12314dc1cd97.webp" as="image" type="image/webp">
-<link rel="preload" href="/track-titles/ice.1ee02b691cea.webp" as="image" type="image/webp">
+<link rel="preload" href="/track-titles/ice.99ecf4e80c2d.png" as="image" type="image/png">
 <link rel="preload" href="/track-titles/desert.7a8e0665c0e3.webp" as="image" type="image/webp">
+<link rel="preload" href="/track-titles/factory.8bb2a05bbfbd.png" as="image" type="image/png">
+<link rel="preload" href="/track-titles/volcano.075ee04124bf.png" as="image" type="image/png">
 <meta name="apple-mobile-web-app-title" content="Bonked"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/bonked-game-180.png">
 <link rel="preload" href="/fonts/Righteous-Regular.ttf" as="font" type="font/ttf" crossorigin>
@@ -73,7 +75,7 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
 <div class="controls"><div id="sky-joystick" role="group" aria-label="Move sky beam target"><span></span><small>AIM</small></div><div class="left-controls"><button id="steer-left" class="action steering" aria-label="Steer left"><span>‹</span><small>LEFT</small><small class="touch-steering-hint">Hold to turn<br>Swipe ← to nudge</small></button><button id="steer-right" class="action steering" aria-label="Steer right"><span>›</span><small>RIGHT</small><small class="touch-steering-hint">Hold to turn<br>Swipe → to nudge</small></button></div><div id="health-ui" data-level="0"><div id="health-bars"><i></i><i></i><i></i><i></i><i></i></div><strong><span id="health-number">100</span> <small>HP</small></strong><span id="health-status"></span><span id="shield-time"></span></div><div class="right-controls"><button id="item" class="action item" aria-label="Use weapon"><span id="item-icon">✦</span><small class="weapon-title">WEAPON</small><small id="item-label">—</small><small id="item-count"></small></button><button id="brake" class="action brake" aria-label="Reverse"><span>↓</span><small id="brake-label">REVERSE</small></button><button id="gas" class="action gas" aria-label="Accelerate"><span>↑</span><small>GO</small></button></div></div>
 
 </div>
-<div id="results" class="modal-backdrop" hidden><section class="modal results-card" role="dialog" aria-modal="true" aria-labelledby="results-title"><div class="results-heading"><div><h2 id="results-title">Round results</h2><p id="results-target"></p></div><button id="results-lobby" class="text-button">Change circuit</button></div><div id="standings" aria-label="Current leaderboard"></div><div class="round-actions"><div class="ready-control"><button id="ready" class="primary">Ready</button><span id="ready-key-hint">Press Enter</span></div><button id="rematch" class="primary" hidden>New tournament ↻</button></div><p id="rematch-hint" class="fine"></p></section></div>
+<div id="results" class="modal-backdrop" hidden><section class="modal results-card" role="dialog" aria-modal="true" aria-labelledby="results-title"><div class="results-heading"><div><h2 id="results-title">Round results</h2><p id="results-target"></p></div><button id="results-lobby" class="text-button">Back to lobby</button></div><div id="standings" aria-label="Current leaderboard"></div><div class="round-actions"><div class="ready-control"><button id="ready" class="primary">Ready</button><span id="ready-key-hint">Press Enter</span></div><button id="rematch" class="primary" hidden>New tournament ↻</button></div><p id="rematch-hint" class="fine"></p></section></div>
 <div id="settings" class="modal-backdrop" hidden>
   <section class="modal settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <button id="settings-close" class="close" aria-label="Close settings"></button>
@@ -83,7 +85,7 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
         <div class="audio-volume"><label for="effects-volume">Sound effects</label><output id="effects-volume-value" for="effects-volume">40%</output><input id="effects-volume" type="range" min="0" max="100" step="1" value="40"></div>
         <div class="audio-volume"><label for="music-volume">Music</label><output id="music-volume-value" for="music-volume">100%</output><input id="music-volume" type="range" min="0" max="100" step="1" value="100"></div>
         <button id="how-to-play-settings" class="setting-row">How to play <span>?</span></button>
-        <button id="change-circuit" class="setting-row" hidden>Change circuit</button>
+        <button id="change-circuit" class="setting-row" hidden>Back to lobby</button>
         <button id="exit-race" class="setting-row">Leave race <span>↗</span></button>
       </div>
       <div class="settings-column settings-graphics">

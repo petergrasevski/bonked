@@ -18,6 +18,8 @@ test('content validators reuse unchanged files and invalidate only changed conte
   assert.equal(matchesETag(undefined,first.ETag),false);
   assert.equal(matchesETag('W/"different"',first.ETag),false);
   assert.match(assetHeaders('public/track-titles/coast.12314dc1cd97.webp',Buffer.from('image'))['Cache-Control'],/immutable/);
+  assert.match(assetHeaders('public/track-titles/factory.8bb2a05bbfbd.png',Buffer.from('image'))['Cache-Control'],/max-age=31536000, immutable/);
+  assert.equal(assetHeaders('public/track-titles/factory.png',Buffer.from('image'))['Cache-Control'],'public, no-cache');
 });
 
 test('release fingerprint is stable across restarts and changes with client, shared or vendor content',async t=>{

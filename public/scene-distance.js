@@ -1,4 +1,4 @@
-export const SCENERY_RANGE={coast:260,ice:240,desert:300};
+export const SCENERY_RANGE={coast:260,ice:240,desert:300,factory:650,volcano:850};
 export function sceneRange(trackId,frame){return Math.max(SCENERY_RANGE[trackId]||260,frame?.far||0);}
 // Fog and its distant grey fade run in the scene materials, with no image pass.
 export class DistanceFade{
