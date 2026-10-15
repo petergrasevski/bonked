@@ -451,3 +451,6 @@ body.lan-host #room-panel #start,body.lan-host #room-panel #host-hint{grid-row:4
 
 #track-picker .track-card{user-select:none}
 @media(orientation:portrait) and (max-width:800px){#room-panel .track-choice{align-self:stretch;width:100%;min-width:0;max-width:100%}.circuit-carousel{max-width:100%;min-width:0}}
+
+/* Keep carousel navigation within the local lobby on narrow screens. */
+@media(max-width:800px){body.lan-host .circuit-scroll.previous{left:0}body.lan-host .circuit-scroll.next{right:0}}
