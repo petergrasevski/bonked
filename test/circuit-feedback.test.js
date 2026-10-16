@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {selectTrack,trackAt,TRACK_LENGTH,spawnCar,stepCar,STEP,NEUTRAL,updateFactoryMechanics,hasBarrier,TRACKS,OBSTACLES,nearestTrack} from '../shared/game.js';
-import {FACTORY_TIP,FACTORY_TABLES,factoryTipAngle,pressState,applyCircuitForces,VOLCANO_VENTS,volcanoVentSpec,FACTORY_PRESSES,volcanoLavaBounds,VOLCANO_HOT,circuitSurface} from '../shared/extra-circuits.js';
+import {FACTORY_TIPS,FACTORY_TIP,FACTORY_TABLES,factoryTipAngle,pressState,applyCircuitForces,VOLCANO_VENTS,volcanoVentSpec,FACTORY_PRESSES,volcanoLavaBounds,VOLCANO_HOT,circuitSurface} from '../shared/extra-circuits.js';
 import {cameraFrame,createChase} from '../shared/chase.js';
 import {stepCamera,cameraPose,CAMERA_FOV} from '../shared/camera.js';
 import {predictFleet} from '../shared/prediction.js';
@@ -72,4 +72,16 @@ test('road rocks form edge clusters and keep the middle racing line clear',()=>{
 test('spreading racers move the volcano camera sideways instead of overhead',()=>{
   selectTrack('volcano');const profile=TRACKS.volcano.camera,frames=[];for(const metres of [0,40,100]){const cars=[placed(.3),placed(.3-metres/TRACK_LENGTH)],target=cameraFrame(createChase(cars),cars),frame=stepCamera(null,target,cars,2,STEP,profile);frames.push({frame,target});assert.ok(frame.pitch<=25*Math.PI/180);assert.ok(frame.pitch>=19.9*Math.PI/180);}
   assert.ok(frames[2].frame.pitch<frames[0].frame.pitch);assert.ok(frames[2].frame.angle-frames[2].target.angle>1.4);
+});
+
+test('the second panel has an approach button and independent replicated state',()=>{
+  selectTrack('factory');const tip=FACTORY_TIPS[1];assert.ok(tip.buttonOffset < -tip.length/2);
+  const f=tip.fraction+tip.buttonOffset/TRACK_LENGTH,p=trackAt(f),button=placed(f,p.halfWidth*.6),rider=placed(tip.fraction,-2.5),original=placed(FACTORY_TIP.fraction,-2.5);
+  updateFactoryMechanics([button,rider,original],10);
+  for(const c of [button,rider,original]){assert.equal(c[tip.stateKey],10);assert.equal(c.factoryTipAt,null);c.raceTime=10.24;}
+  stepCar(rider,NEUTRAL);stepCar(original,NEUTRAL);
+  assert.ok(rider.y<4);assert.equal(original.y,5);assert.equal(hasBarrier(tip.fraction,-1),false);
+  const expected=[{...button},{...rider}],predicted=expected.map(c=>({...c}));
+  for(let i=0;i<20;i++){updateFactoryMechanics(expected,expected[0].raceTime+STEP);for(const c of expected){stepCar(c,NEUTRAL);c.raceTime+=STEP;}predictFleet(predicted[0],[predicted[1]],NEUTRAL,STEP);}
+  for(let i=0;i<2;i++){assert.equal(predicted[i][tip.stateKey],expected[i][tip.stateKey]);assert.ok(Math.hypot(predicted[i].x-expected[i].x,predicted[i].z-expected[i].z)<1e-8);assert.equal(predicted[i].y,expected[i].y);}
 });

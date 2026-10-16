@@ -9,9 +9,9 @@ test('controller guide detects Mac and Windows using modern hints or legacy plat
   assert.equal(controllerGuideOS({userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}),'windows');
 });
 test('controller guide does not confuse desktop-mode iPads or phones with the host laptop',()=>{
-  assert.equal(controllerGuideOS({platform:'MacIntel',maxTouchPoints:5}),'other');
-  assert.equal(controllerGuideOS({userAgent:'iPhone; CPU iPhone OS like Mac OS X'}),'other');
-  assert.equal(controllerGuideOS({userAgentData:{platform:'Android'},userAgent:'Android'}),'other');
+  assert.equal(controllerGuideOS({platform:'MacIntel',maxTouchPoints:5}),'ios');
+  assert.equal(controllerGuideOS({userAgent:'iPhone; CPU iPhone OS like Mac OS X'}),'ios');
+  assert.equal(controllerGuideOS({userAgentData:{platform:'Android'},userAgent:'Android'}),'android');
   assert.equal(controllerGuideOS({platform:'Linux x86_64'}),'other');
 });
 test('OS-specific paths and Switch 2 compatibility guidance stay separate',()=>{

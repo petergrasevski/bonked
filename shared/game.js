@@ -1,5 +1,5 @@
 import {collideFactoryRotors,rotorBotTarget} from './factory-rotors.js';
-import {FACTORY_PRESSES,EXTRA_CIRCUITS,extraCircuitPoints,extraHalfWidth,extraHasBarrier,circuitSurface,applyCircuitForces,advanceCircuitHeat,heatSpeedMultiplier,FACTORY_TIP,factoryTipAngle,circuitDistance} from './extra-circuits.js';
+import {FACTORY_PRESSES,EXTRA_CIRCUITS,extraCircuitPoints,extraHalfWidth,extraHasBarrier,circuitSurface,applyCircuitForces,advanceCircuitHeat,heatSpeedMultiplier,FACTORY_TIPS,factoryTipAt,factoryTipAngle} from './extra-circuits.js';
 import {coastalHasBarrier} from './coastal-barriers.js';
 import {coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
@@ -359,18 +359,20 @@ function verticalStep(car,dt){
   }
 }
 export function wallDamage(speedBefore,speedAfter){return Math.max(0,speedBefore-speedAfter-1.5)*.3;}
-let tipAt=null,tipTime=0;
+let tipState={},tipTime=0;
 export function updateFactoryMechanics(cars,seconds){
   if(activeTrack.id!=='factory')return;
-  let at=Math.max(-Infinity,...cars.map(c=>Number.isFinite(c.factoryTipAt)?c.factoryTipAt:-Infinity));
-  const p=trackAt(FACTORY_TIP.fraction+FACTORY_TIP.buttonOffset/TRACK_LENGTH);
-  if(seconds-at>=FACTORY_TIP.dropSeconds+FACTORY_TIP.holdSeconds+FACTORY_TIP.riseSeconds+FACTORY_TIP.rearmSeconds&&cars.some(c=>!c.eliminated&&!c.falling&&Math.abs(c.y-p.y)<1&&Math.hypot(c.x-(p.x+p.nx*p.halfWidth*.6),c.z-(p.z+p.nz*p.halfWidth*.6))<2.4))at=seconds;
-  for(const c of cars)c.factoryTipAt=Number.isFinite(at)?at:null;
+  for(const tip of FACTORY_TIPS){
+    let at=Math.max(-Infinity,...cars.map(c=>Number.isFinite(c[tip.stateKey])?c[tip.stateKey]:-Infinity));
+    const p=trackAt(tip.fraction+tip.buttonOffset/TRACK_LENGTH);
+    if(seconds-at>=tip.dropSeconds+tip.holdSeconds+tip.riseSeconds+tip.rearmSeconds&&cars.some(c=>!c.eliminated&&!c.falling&&Math.abs(c.y-p.y)<1&&Math.hypot(c.x-(p.x+p.nx*p.halfWidth*.6),c.z-(p.z+p.nz*p.halfWidth*.6))<2.4))at=seconds;
+    for(const c of cars)c[tip.stateKey]=Number.isFinite(at)?at:null;
+  }
 }
 function tipSurface(t,x,z){
-  if(activeTrack.id!=='factory'||circuitDistance(t.fraction,FACTORY_TIP.fraction,TRACK_LENGTH)>FACTORY_TIP.length/2)return t;
+  const tip=activeTrack.id==='factory'&&factoryTipAt(t.fraction,TRACK_LENGTH);if(!tip)return t;
   const lateral=(x-t.x)*t.nx+(z-t.z)*t.nz;if(lateral>=0)return t;
-  const angle=factoryTipAngle(tipTime,tipAt);if(lateral<-(t.halfWidth+.6)*Math.cos(angle))return null;
+  const angle=factoryTipAngle(tipTime,tipState[tip.stateKey]);if(lateral<-(t.halfWidth+.6)*Math.cos(angle))return null;
   const slope=Math.tan(angle),ny=Math.cos(angle);
   return {...t,y:t.y+lateral*slope,surface:{nx:-t.nx*Math.sin(angle),ny,nz:-t.nz*Math.sin(angle)}};
 }
@@ -415,7 +417,7 @@ function tyreSupportFloor(car,surface){
 }
 function supportRoad(car,t){
   if(car.falling)return;
-  const tipped=activeTrack.id==='factory'&&circuitDistance(t.fraction,FACTORY_TIP.fraction,TRACK_LENGTH)<FACTORY_TIP.length/2+CAR_LENGTH;
+  const tipped=activeTrack.id==='factory'&&factoryTipAt(t.fraction,TRACK_LENGTH,CAR_LENGTH);
   // A ramp or weapon launch releases the tyre pivot. Losing contact while
   // rising is flight, not an irreversible fall off the road.
   if(car.vy>0||car.y>car.groundY+.5&&!car.edgeBalance){car.edgeBalance=false;return;}
@@ -438,7 +440,7 @@ function supportRoad(car,t){
   }
 }
 export function constrainRoad(car){
-  if(activeTrack.id==='factory'){tipTime=car.circuitTime??car.raceTime??0;tipAt=car.factoryTipAt;}
+  if(activeTrack.id==='factory'){tipTime=car.circuitTime??car.raceTime??0;tipState=car;}
   const t=nearestTrack(car.x,car.z,car.trackFraction);
   const support=['coast','factory','volcano'].includes(activeTrack.id)?drivingSurfaceAt(car.x,car.z,car.trackFraction,['factory','volcano'].includes(activeTrack.id)?car.y+.6:Infinity):null;
   if(support?.surface)t.surface=support.surface;
@@ -492,7 +494,7 @@ export function stepCar(car, input, dt=STEP) {
   if(car.eliminated&&!car.wrecked){car.vx=0;car.vz=0;return;}
   for(const key of ['moleCooldown','tased','boost','stun','shield','impactTime','wallCooldown','contactCooldown','nudgeCooldown','contactTime'])car[key]=Math.max(0,(car[key]||0)-dt);
   car.tasePhase=(car.tasePhase||0)+dt;
-  if(activeTrack.id==='factory'){car.circuitTime=(car.raceTime||0)+dt;tipTime=car.circuitTime;tipAt=car.factoryTipAt;}
+  if(activeTrack.id==='factory'){car.circuitTime=(car.raceTime||0)+dt;tipTime=car.circuitTime;tipState=car;}
   const padSpeed=boostSpeed(car,dt,TOP_SPEED);
   const circuitRoad=EXTRA_CIRCUITS.includes(activeTrack.id)?nearestTrack(car.x,car.z,car.trackFraction):null;
   const circuitEffect=circuitRoad?circuitSurface(activeTrack.id,circuitRoad.fraction,(car.x-circuitRoad.x)*circuitRoad.nx+(car.z-circuitRoad.z)*circuitRoad.nz,circuitRoad.halfWidth,TRACK_LENGTH,(car.raceTime||0)+dt,circuitRoad.insideSide):null;
@@ -563,7 +565,7 @@ export function stepCar(car, input, dt=STEP) {
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }
   if(hillside&&!car.falling&&car.y<=car.groundY+.1){car.vx+=22*hillside.ny*hillside.nx*dt;car.vz+=22*hillside.ny*hillside.nz*dt;}
-  if(activeTrack.id==='factory'&&circuitRoad&&tipSurface(circuitRoad,car.x,car.z)?.surface&&car.y<=car.groundY+.1&&!car.falling){const slide=40*Math.sin(factoryTipAngle(tipTime,tipAt))*dt;car.vx-=circuitRoad.nx*slide;car.vz-=circuitRoad.nz*slide;}
+  if(activeTrack.id==='factory'&&circuitRoad&&tipSurface(circuitRoad,car.x,car.z)?.surface&&car.y<=car.groundY+.1&&!car.falling){const slide=40*Math.sin(factoryTipAngle(tipTime,car[factoryTipAt(circuitRoad.fraction,TRACK_LENGTH)?.stateKey]))*dt;car.vx-=circuitRoad.nx*slide;car.vz-=circuitRoad.nz*slide;}
   if(circuitRoad)applyCircuitForces(car,activeTrack.id,circuitRoad,TRACK_LENGTH,(car.raceTime||0)+dt,dt);
   if(activeTrack.id==='desert')applyDesertWind(car,(car.raceTime||0)+dt,dt);
   car.yawVelocity*=Math.exp(-3*dt);car.x+=car.vx*dt;car.z+=car.vz*dt;

@@ -26,7 +26,8 @@ export const CONTROLLER_GUIDES=[
   ],device:null,usb:'A charging grip or USB charging connection does not establish browser controller support. Use a compatible desktop bridge only if it exposes a standard gamepad to the browser.',source:['Switch 2 desktop bridge documentation (third-party)','https://github.com/TheFrano/joycon2cpp']},
 ];
 export function controllerGuideOS({userAgentData,platform='',userAgent='',maxTouchPoints=0}={}){
-  if(/iPhone|iPad|iPod|Android/i.test(userAgent)||(platform==='MacIntel'&&maxTouchPoints>1))return 'other';
+  if(/Android/i.test(userAgentData?.platform||userAgent))return 'android';
+  if(/iPhone|iPad|iPod/i.test(userAgent)||(platform==='MacIntel'&&maxTouchPoints>1))return 'ios';
   const hint=userAgentData?.platform||platform||userAgent;
   if(/mac/i.test(hint))return 'mac';
   if(/win/i.test(hint))return 'windows';
@@ -47,8 +48,22 @@ const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)
 export function createControllerConnectionGuide({root,environment=navigator,onOpen=()=>{},onClose=()=>{}}){
   const os=root.querySelector('[data-guide-os]'),controller=root.querySelector('[data-guide-controller]'),body=root.querySelector('[data-guide-body]'),close=root.querySelector('[data-guide-close]');
   let previousFocus=null;
-  os.value=controllerGuideOS(environment);for(const guide of CONTROLLER_GUIDES)controller.add(new Option(guide.name,guide.id));
+  const detectedOS=controllerGuideOS(environment),mobile=['ios','android'].includes(detectedOS);
+  os.value=detectedOS;
+  root.querySelector('.controller-guide-selectors').hidden=mobile;
+  root.querySelector('#controller-configure-open').hidden=mobile;
+  root.querySelector('[data-guide-intro]').textContent=mobile?'Connect a PS5 DualSense controller to your phone over Bluetooth.':'Pair in your laptop’s settings first, then join Bonked.';
+  for(const guide of CONTROLLER_GUIDES)controller.add(new Option(guide.name,guide.id));
   function render(){
+    if(mobile){
+      const guide=CONTROLLER_GUIDES[0];body.replaceChildren();
+      body.append(node('h3','Pair your PS5 controller'));
+      const steps=node('ol');for(const step of guide.steps)steps.append(node('li',step));
+      steps.append(node('li',detectedOS==='ios'?'On your iPhone or iPad, open Settings → Bluetooth and turn Bluetooth on.':'On your phone, open Settings → Connected devices → Pair new device (or Settings → Bluetooth).'));
+      steps.append(node('li','Select DualSense Wireless Controller (or Wireless Controller) in the Bluetooth device list. Wait for it to show as connected.'));
+      body.append(steps,node('h3','Play Bonked'),node('p','Return to Bonked, then press a controller button so the browser can detect it. Create or join a room as usual. Keep this browser tab active while playing.'),node('h3','Having trouble?'),node('p','Make sure the controller is connected to this phone. If needed, forget it in Bluetooth settings and pair again, then return to Bonked and press a button.'));
+      const source=node('a','Sony: DualSense pairing');source.href=guide.source[1];source.target='_blank';source.rel='noopener noreferrer';const sources=node('p');sources.className='controller-guide-sources';sources.append(source);body.append(sources);return;
+    }
     const {controller:guide,path,compatibility,osNote}=connectionInstructions(os.value,controller.value);body.replaceChildren();
     body.append(node('h3',guide.switch2?'Check compatibility first':'Connect over Bluetooth'),node('p',compatibility));
     if(!guide.switch2){

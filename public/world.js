@@ -47,7 +47,7 @@ import {createSportsCar,disposeCarInstance} from './car-model.js';
 import { mergeGeometries } from '/vendor/BufferGeometryUtils.js';
 import { iceSplit,activeTrack, TRACK, SEGMENTS, ROAD_WIDTH, trackAt, angleDelta, COLORS, TRACK_LENGTH, START_FRACTION, PICKUP_LOCATIONS, spawnCar, MAX_PLAYERS, hasBarrier, damageLevel, damageSeverity, CAR_LENGTH, CAR_WIDTH, SURFACE_HALF_WIDTH, nearestTrack, collideCars, OBSTACLES } from '/shared/game.js';
 import { cameraFrame, createChase } from '/shared/chase.js';
-import {FACTORY_TIP,circuitDistance} from '/shared/extra-circuits.js';
+import {factoryTipAt} from '/shared/extra-circuits.js';
 import { CAMERA_FOV, stepCamera, cameraPose } from '/shared/camera.js';
 const C={asphalt:0x394951,sand:0x938d7c,cliff:0x777568,cream:0xc8c6b7,coral:0xae6654,navy:0x263941,teal:0x497475,lime:0xcbd3db};
 export class World{
@@ -148,7 +148,7 @@ export class World{
         const al=side===1?Math.max(ao-aw/2,ag):ao-aw/2,ar=side===-1?Math.min(ao+aw/2,-ag):ao+aw/2;
         const bl=side===1?Math.max(bo-bw/2,bg):bo-bw/2,br=side===-1?Math.min(bo+bw/2,-bg):bo+bw/2;
         if(ar<=al&&br<=bl)continue;
-        const tip=activeTrack.id==='factory'&&circuitDistance((a.start+a.len*.5)/TRACK_LENGTH,FACTORY_TIP.fraction,TRACK_LENGTH)<FACTORY_TIP.length/2;
+        const tip=activeTrack.id==='factory'&&factoryTipAt((a.start+a.len*.5)/TRACK_LENGTH,TRACK_LENGTH);
         if(tip&&ar<=0&&br<=0)continue;
         const l0=tip?Math.max(0,al):al,r0=Math.max(l0,ar),l1=tip?Math.max(0,bl):bl,r1=Math.max(l1,br);
         const p=[[a.x+a.nx*l0,y+a.y,a.z+a.nz*l0],[a.x+a.nx*r0,y+a.y,a.z+a.nz*r0],[b.x+b.nx*l1,y+b.y,b.z+b.nz*l1],[b.x+b.nx*r1,y+b.y,b.z+b.nz*r1]];
@@ -164,12 +164,12 @@ export class World{
     if(activeTrack.id==='ice')buildIceShelf(this);
     else for(const side of [-1,1]){
       const vertices=[];for(let i=0;i<SEGMENTS.length;i++){const p=SEGMENTS[i],q=SEGMENTS[(i+1)%SEGMENTS.length],off=side*(p.halfWidth+.6),offQ=side*(q.halfWidth+.6);
-        if(activeTrack.id==='factory'&&side<0&&circuitDistance((p.start+p.len*.5)/TRACK_LENGTH,FACTORY_TIP.fraction,TRACK_LENGTH)<FACTORY_TIP.length/2)continue;
+        if(activeTrack.id==='factory'&&side<0&&factoryTipAt((p.start+p.len*.5)/TRACK_LENGTH,TRACK_LENGTH))continue;
         if(activeTrack.id==='coast'&&isCoastalBeach((p.start+p.len*.5)/TRACK_LENGTH))continue;
         const points=[[p.x+p.nx*off,p.y-.18,p.z+p.nz*off],[q.x+q.nx*offQ,q.y-.18,q.z+q.nz*offQ],[p.x+p.nx*off,p.y-2,p.z+p.nz*off],[q.x+q.nx*offQ,q.y-2,q.z+q.nz*offQ]];for(const j of [0,1,2,1,3,2])vertices.push(...points[j]);}
       const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geo.computeVertexNormals();const mat=this.mat(CIRCUIT_PALETTES[activeTrack.id]?.wall??C.cliff);mat.side=THREE.DoubleSide;this.mesh(geo,mat);
     }
-    this.ribbon(0,p=>p.halfWidth*2+.8,-.05,activeTrack.id==='ice'?0xb8e2ec:0x797d6c);
+    this.ribbon(0,p=>p.halfWidth*2+.8,-.05,activeTrack.id==='ice'?0xb8e2ec:activeTrack.id==='volcano'?0x653629:0x797d6c);
     this.ribbon(0,p=>p.halfWidth*2,.01,this.roadMaterial(activeTrack.id==='ice'?'ice':activeTrack.id==='desert'?'sand':'asphalt'),0,true);
     this.ribbon(0,p=>(p.halfWidth+.6)*2,.01,this.roadMaterial(activeTrack.id==='ice'?'ice':'sand'),0,'exposed');
     if(activeTrack.id==='ice')this.buildSplitEdges();
@@ -201,7 +201,7 @@ export class World{
       for(const offset of [-.6,.6]){const stripe=this.box(o.x+Math.cos(trackAt(o.fraction).angle)*offset,1.51,o.z+Math.sin(trackAt(o.fraction).angle)*offset,.35,.025,2.25,0x18252d);stripe.rotation.y=-trackAt(o.fraction).angle;}
       this.cylinder(o.x,1.68,o.z,.13,.13,.48,0xf18e23,8);
     }
-    this.ribbon(0,.12,.06,0xb6b89d,5,true);
+    if(activeTrack.id!=='volcano')this.ribbon(0,.12,.06,0xb6b89d,5,true);
     const start=trackAt(START_FRACTION);
     const line=new THREE.Group();line.position.set(start.x,start.y+.075,start.z);line.rotation.y=-start.angle;this.static.add(line);
     for(let r=0;r<2;r++)for(let c=0;c<12;c++)this.box((r-.5)*.7,0,(c-5.5)*.9,.7,.02,.9,(r+c)%2?0xf4efd4:0x1c2d34,line);

@@ -41,7 +41,7 @@ export function extraHasBarrier(id,fraction,side,length,insideSide=1,turn=0){
   if(!side)return extraHasBarrier(id,fraction,-1,length,insideSide,turn)||extraHasBarrier(id,fraction,1,length,insideSide,turn);
   if(id==='volcano')return side>0;
   if(FACTORY_TABLES.some(f=>circuitDistance(fraction,f,length)<43))return false;
-  if(circuitDistance(fraction,FACTORY_TIP.fraction,length)<FACTORY_TIP.length/2+3&&side<0)return false;
+  if(factoryTipAt(fraction,length,3)&&side<0)return false;
   if(side===-insideSide&&Math.abs(turn)>.065)return false;
   return ![{fraction:.095,length:65,side:-1},{fraction:.40,length:75,side:1},{fraction:.72,length:70,side:-1},{fraction:.94,length:60,side:1}].some(z=>z.side===side&&circuitDistance(fraction,z.fraction,length)<z.length/2);
 }
@@ -124,6 +124,11 @@ export function volcanoLavaBounds(fraction,length){
   return [[Math.max(.22,center-width+wave),Math.min(.99,center+width+wave*.3)]];
 }
 export const FACTORY_TIP={fraction:.88,length:30,buttonOffset:26,maxAngle:35*Math.PI/180,dropSeconds:.25,holdSeconds:1.5,riseSeconds:1.55,rearmSeconds:.5};
+export const FACTORY_TIPS=[
+  {...FACTORY_TIP,stateKey:'factoryTipAt'},
+  {...FACTORY_TIP,fraction:.70,buttonOffset:-36,stateKey:'factoryTip2At'},
+];
+export function factoryTipAt(fraction,length,margin=0){return FACTORY_TIPS.find(tip=>circuitDistance(fraction,tip.fraction,length)<tip.length/2+margin);}
 export function factoryTipAngle(seconds,at){
   if(!Number.isFinite(at))return 0;const age=seconds-at;
   const {dropSeconds:drop,holdSeconds:hold,riseSeconds:rise,maxAngle}=FACTORY_TIP;

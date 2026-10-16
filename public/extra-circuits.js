@@ -1,3 +1,4 @@
+import {buildVolcanoStreams} from './volcano-streams.js';
 import {buildVolcanoBoundaryBushes} from './volcano-bushes.js';
 import {buildFactoryMachinery} from './factory-machinery.js';
 import {buildFactoryInterior,mergeMovingGroup} from './factory-interior.js';
@@ -5,11 +6,11 @@ import {createSteamVents} from './volcano-effects.js';
 import {rotorAngle,rotorWallSegments} from '../shared/factory-rotors.js';
 import * as THREE from 'three';
 import {activeTrack,trackAt,SEGMENTS,TRACK_LENGTH,getLandscape,OBSTACLES} from '../shared/game.js';
-import {FACTORY_BELTS,FACTORY_TABLES,FACTORY_PRESSES,VOLCANO_HOT,beltDirection,beltTravel,volcanoLavaBounds,FACTORY_TIP,circuitDistance} from '../shared/extra-circuits.js';
+import {FACTORY_BELTS,FACTORY_TABLES,FACTORY_PRESSES,VOLCANO_HOT,beltDirection,beltTravel,volcanoLavaBounds,factoryTipAt,circuitDistance} from '../shared/extra-circuits.js';
 
 export const CIRCUIT_PALETTES={
   factory:{road:0x53616a,edge:0xd9a546,ground:0x313b3c,wall:0x304654,light:0xffc66c},
-  volcano:{road:0x4a4448,edge:0xe59c62,ground:0x29272e,wall:0x39323b,light:0xff742c},
+  volcano:{road:0x894332,edge:0xe59c62,ground:0x29272e,wall:0x39323b,light:0xff742c},
 };
 const TAU=Math.PI*2;
 function group(w,x,y,z,angle=0){const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=-angle;w.static.add(g);return g;}
@@ -66,10 +67,21 @@ export function circuitRoadMaterial(w,id){
   // Deterministic fine grain, steel seams, basalt fractures, or limestone slabs.
   for(let i=0;i<1700;i++){const x=(Math.sin(i*127.1)*43758.54)%1*256,y=(Math.sin(i*311.7)*17371.13)%1*256;ctx.fillStyle=i%2?'#ffffff09':'#00000012';ctx.fillRect(Math.abs(x),Math.abs(y),1+i%3,1);}
   ctx.strokeStyle=id==='factory'?'#182a3380':id==='volcano'?'#1d192380':'#344f4690';ctx.lineWidth=2;
-  for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(0,i*64);ctx.lineTo(256,i*64);ctx.stroke();if(id!=='volcano')for(let j=0;j<2;j++){ctx.beginPath();ctx.moveTo(j*128+(i%2)*64,i*64);ctx.lineTo(j*128+(i%2)*64,(i+1)*64);ctx.stroke();}}
+  for(let i=0;i<(id==='volcano'?0:4);i++){ctx.beginPath();ctx.moveTo(0,i*64);ctx.lineTo(256,i*64);ctx.stroke();if(id!=='volcano')for(let j=0;j<2;j++){ctx.beginPath();ctx.moveTo(j*128+(i%2)*64,i*64);ctx.lineTo(j*128+(i%2)*64,(i+1)*64);ctx.stroke();}}
+  if(id==='volcano'){
+    // Seamless, seeded cinder gravel: warm dust, angular basalt and shallow ruts.
+    let seed=719;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+    ctx.fillStyle='#854330';ctx.fillRect(0,0,256,256);
+    for(let i=0;i<5200;i++){
+      const x=random()*256,y=random()*256,r=.35+random()**3*6,tone=random();
+      const colors=['#542d25','#643326','#a85b3e','#b66b48','#763c2c','#3d2926'];ctx.fillStyle=colors[Math.floor(tone*colors.length)];
+      const points=Array.from({length:5},(_,k)=>{const a=k*Math.PI*2/5;return [Math.cos(a)*r*(.6+random()*.5),Math.sin(a)*r*(.5+random()*.5)];});
+      for(const dx of [-256,0,256])for(const dy of [-256,0,256]){ctx.beginPath();points.forEach(([px,py],k)=>k?ctx.lineTo(x+px+dx,y+py+dy):ctx.moveTo(x+px+dx,y+py+dy));ctx.closePath();ctx.fill();}
+    }
+  }
   if(id==='factory'){ctx.fillStyle='#afbac1';for(const x of [6,250])for(const y of [6,70,134,198])ctx.fillRect(x-1,y-1,3,3);}
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=4;w.textures.set(`${id}-road`,texture);
-  return new THREE.MeshStandardMaterial({map:texture,bumpMap:texture,bumpScale:.035,roughness:id==='factory'?.62:.88,metalness:id==='factory'?.4:.04,side:THREE.DoubleSide});
+  return new THREE.MeshStandardMaterial({map:texture,bumpMap:texture,bumpScale:id==='volcano'?.16:.035,roughness:id==='factory'?.62:.88,metalness:id==='factory'?.4:.04,side:THREE.DoubleSide});
 }
 function volcanoScenery(w){
   buildVolcanoBoundaryBushes(w);
@@ -103,15 +115,7 @@ function volcanoScenery(w){
     rock.scale.set(size*(1+(i%3)*.3),size*(.7+(i%4)*.2),size*.85);rock.rotation.set(i*.7,a,i*.4);
   }
   rockGeo.dispose();
-  const streams=animatedSurface(0xff561c,'lava');
-  streams.material=new THREE.ShaderMaterial({side:THREE.DoubleSide,uniforms:{time:streams.time},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`uniform float time;varying vec2 vUv;void main(){float center=1.-smoothstep(.04,.32,abs(vUv.y));float pulse=.8+.2*sin(vUv.x*1.7-time*3.+sin(vUv.y*31.));vec3 c=mix(vec3(.5,.035,.002),vec3(1.,.45,.015),center*pulse);gl_FragColor=vec4(c,1.);}`});
-  for(const f of [.09,.19,.37,.49,.68,.79,.91]){
-    const p=trackAt(f),radius=Math.hypot(p.x,p.z),base=Math.atan2(p.z,p.x),positions=[],uv=[];
-    const point=(j,side)=>{const u=j/85,r=59+(radius-59)*u,a=base+Math.sin(u*13+f*29)*.025*Math.sin(Math.PI*u),width=1.6+u*1.8,angle=a+side*width/r,x=Math.cos(angle)*r,z=Math.sin(angle)*r,s=getLandscape().surface.sample(x,z);return [x,(s?.y??307)+.7,z];};
-    // Stop above the deck: the lane's organic pool continues the flow on the road.
-    for(let j=0;j<78;j++)for(const [k,side]of [[j,-1],[j,1],[j+1,-1],[j,1],[j+1,1],[j+1,-1]]){positions.push(...point(k,side));uv.push(k*2,side*.3);}
-    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.computeVertexNormals();w.mesh(geo,streams.material);
-  }
+  const streams=buildVolcanoStreams(w,getLandscape().surface,trackAt);
   for(const o of OBSTACLES){if(o.kind!=='basalt')continue;const rock=w.mesh(new THREE.DodecahedronGeometry(o.radius,0),0x783f34,o.x,o.y+o.radius*.7,o.z);rock.scale.set(1,1.2,.9);rock.rotation.set(.25,o.angle,.18);}
   const crater=animatedSurface(0xff561c,'lava');w.cylinder(0,307.1,0,42,42,.3,crater.material,64);
   const rim=w.mesh(new THREE.TorusGeometry(51,5,6,64),0x392e35,0,326,0);rim.rotation.x=Math.PI/2;
@@ -140,7 +144,7 @@ export function buildExtraCircuit(w){
   const interior=id==='factory'?buildFactoryInterior(w):null,machinery=id==='factory'?buildFactoryMachinery(w):null;
   if(id==='volcano')animated.push(volcanoScenery(w));
   const steam=id==='volcano'?createSteamVents(w):null;
-  for(const side of [-1,1])w.ribbon(p=>side*(p.halfWidth-.25),.18,.07,palette.edge);
+  if(id==='factory')for(const side of [-1,1])w.ribbon(p=>side*(p.halfWidth-.25),.18,.07,palette.edge);
   if(id==='factory'){
     FACTORY_BELTS.forEach((zone,index)=>{
       for(const side of [-1,1]){const surface=animatedSurface(side>0?0x596a72:0x425b63,'belt');roadPatch(w,zone.fraction,zone.length,side>0?.18:-.88,side>0?.88:-.18,surface.material);animated.push({...surface,index,side});}
@@ -164,7 +168,7 @@ export function buildExtraCircuit(w){
     VOLCANO_HOT.forEach(zone=>{const surface=animatedSurface(0x8c4532,'lava');surface.material.userData.lavaZone=true;roadPatch(w,zone.fraction,zone.length,.28,.98,surface.material);animated.push(surface);});
   }
   // Sparse ground cover and foundation piers keep the elevated roads grounded.
-  if(id==='factory')for(let i=0;i<SEGMENTS.length;i+=36){const p=SEGMENTS[i];if(circuitDistance(p.start/TRACK_LENGTH,FACTORY_TIP.fraction,TRACK_LENGTH)<FACTORY_TIP.length/2+3)continue;for(const side of [-1,1]){const off=(p.halfWidth-1)*side;w.box(p.x+p.nx*off,(p.y-8)/2,p.z+p.nz*off,1.2,p.y+8,1.2,palette.wall);}}
+  if(id==='factory')for(let i=0;i<SEGMENTS.length;i+=36){const p=SEGMENTS[i];if(factoryTipAt(p.start/TRACK_LENGTH,TRACK_LENGTH,3))continue;for(const side of [-1,1]){const off=(p.halfWidth-1)*side;w.box(p.x+p.nx*off,(p.y-8)/2,p.z+p.nz*off,1.2,p.y+8,1.2,palette.wall);}}
   return {update(seconds,cars=[]){
     machinery?.update(seconds,cars);
     interior?.update(seconds,w.camera);steam?.update(seconds);
