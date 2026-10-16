@@ -1,17 +1,18 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {trackAt,nearestTrack} from '../shared/game.js';
+import {factoryFinish,buildFactoryDressing} from './factory-dressing.js';
 export function mergeMovingGroup(group){
   group.updateMatrixWorld(true);const chunks=new Map();
   for(const child of [...group.children]){if(!child.isMesh)continue;child.updateMatrix();let geo=child.geometry.clone().applyMatrix4(child.matrix);if(geo.index){const flat=geo.toNonIndexed();geo.dispose();geo=flat;}const list=chunks.get(child.material)||[];list.push(geo);chunks.set(child.material,list);group.remove(child);child.geometry.dispose();}
   for(const [material,geos]of chunks){const m=new THREE.Mesh(mergeGeometries(geos),material);m.castShadow=m.receiveShadow=true;group.add(m);for(const geo of geos)geo.dispose();}
 }
 export function buildFactoryInterior(w){
-  const steel=0x344651,dark=0x1a2b34,cream=0xa8b4ad,amber=0xeab653,blue=0x4384a2,animations=[];
+  const steel=factoryFinish(w,0x344651),dark=factoryFinish(w,0x1a2b34),cream=factoryFinish(w,0xa8b4ad,{panels:true}),amber=factoryFinish(w,0xeab653),blue=factoryFinish(w,0x4384a2,{panels:true}),animations=[],reservations=[{x:0,z:40,radius:49}];
   const lit=w.mat(0xe9e5ca).clone();lit.emissive=new THREE.Color(0xe9e5ca);lit.emissiveIntensity=1.5;
   // The race runs along catwalks inside one continuous assembly hall. Ceiling
   // panels are visible from below and let the elevated game camera see in.
-  const walls=w.mat(0x40525c),ceiling=walls.clone();ceiling.side=THREE.BackSide;
+  const walls=factoryFinish(w,0x40525c,{panels:true}),ceiling=walls.clone();ceiling.onBeforeCompile=walls.onBeforeCompile;ceiling.customProgramCacheKey=walls.customProgramCacheKey;ceiling.side=THREE.BackSide;
   for(const z of [-285,305]){w.box(0,50,z,790,116,2,walls);for(let x=-360;x<=360;x+=45){w.box(x,50,z- Math.sign(z)*1.2,1.2,116,1.2,dark);w.box(x,83,z-Math.sign(z)*1.3,29,8,.1,blue);w.box(x,83,z-Math.sign(z)*1.4,1,8,.12,cream);}}
   for(const x of [-395,395]){w.box(x,50,10,2,116,590,walls);for(let z=-250;z<300;z+=45)w.box(x-Math.sign(x)*1.2,50,z,1.2,116,1.2,dark);}
   const roof=w.mesh(new THREE.PlaneGeometry(790,590),ceiling,0,108,10);roof.rotation.x=-Math.PI/2;roof.castShadow=false;
@@ -36,7 +37,7 @@ export function buildFactoryInterior(w){
   for(let line=0;line<16;line++){
     const p=trackAt((line+.2)/16),side=line%2?1:-1;let spot;
     for(let d=p.halfWidth+38;d<130;d+=12){const x=p.x+p.nx*d*side,z=p.z+p.nz*d*side;if(nearestTrack(x,z).distance>32){spot={x,z};break;}}
-    if(!spot)continue;const g=new THREE.Group();g.position.set(spot.x,-8,spot.z);g.rotation.y=-p.angle;w.static.add(g);
+    if(!spot)continue;reservations.push({...spot,radius:25});const g=new THREE.Group();g.position.set(spot.x,-8,spot.z);g.rotation.y=-p.angle;w.static.add(g);
     w.box(0,2.1,0,40,1,7,dark,g);for(const z of [-3.8,3.8])w.box(0,2.8,z,41,.35,.35,amber,g);
     for(let x=-18;x<=18;x+=2)w.box(x,2.65,0,.16,.12,6.7,cream,g);
     for(let station=0;station<3;station++){
@@ -65,5 +66,6 @@ export function buildFactoryInterior(w){
     }
   }
   for(const x of [-34,34]){w.cylinder(x,13,0,3,3,26,cream,16,core);for(const y of [2,9,16,23])w.cylinder(x,y,0,3.1,3.1,.3,steel,16,core);}
+  buildFactoryDressing(w,reservations);
   return {update(seconds,camera){for(const a of animations){a.g.visible=Math.hypot(a.g.position.x-camera.position.x,a.g.position.z-camera.position.z)<290;if(a.kind==='robot')a.g.rotation.y=a.base+Math.sin(seconds*1.5+a.phase)*.65;else{const distance=((seconds*2.3+a.slot*10)%40)-20;a.g.position.set(a.x+a.fx*distance,-4.8,a.z+a.fz*distance);}}}};
 }

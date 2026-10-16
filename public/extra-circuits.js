@@ -1,11 +1,10 @@
-import {buildVolcanoStreams} from './volcano-streams.js';
-import {buildVolcanoBoundaryBushes} from './volcano-bushes.js';
+import {buildVolcanoScenery} from './volcano-scenery.js';
 import {buildFactoryMachinery} from './factory-machinery.js';
 import {buildFactoryInterior,mergeMovingGroup} from './factory-interior.js';
 import {createSteamVents} from './volcano-effects.js';
 import {rotorAngle,rotorWallSegments} from '../shared/factory-rotors.js';
 import * as THREE from 'three';
-import {activeTrack,trackAt,SEGMENTS,TRACK_LENGTH,getLandscape,OBSTACLES} from '../shared/game.js';
+import {activeTrack,trackAt,SEGMENTS,TRACK_LENGTH} from '../shared/game.js';
 import {FACTORY_BELTS,FACTORY_TABLES,FACTORY_PRESSES,VOLCANO_HOT,beltDirection,beltTravel,volcanoLavaBounds,factoryTipAt,circuitDistance} from '../shared/extra-circuits.js';
 
 export const CIRCUIT_PALETTES={
@@ -79,48 +78,31 @@ export function circuitRoadMaterial(w,id){
       for(const dx of [-256,0,256])for(const dy of [-256,0,256]){ctx.beginPath();points.forEach(([px,py],k)=>k?ctx.lineTo(x+px+dx,y+py+dy):ctx.moveTo(x+px+dx,y+py+dy));ctx.closePath();ctx.fill();}
     }
   }
-  if(id==='factory'){ctx.fillStyle='#afbac1';for(const x of [6,250])for(const y of [6,70,134,198])ctx.fillRect(x-1,y-1,3,3);}
+  if(id==='factory'){
+    // Raised, staggered diamond tread with rubbed highlights and inset rivets.
+    // One repeatable texture is shared by every deck and tipping segment.
+    for(let y=10;y<256;y+=16)for(let x=-8;x<264;x+=16){
+      const dx=x+((y-10)/16%2)*8;
+      ctx.save();ctx.translate(dx,y);ctx.rotate(Math.PI/4);
+      ctx.fillStyle='#1c2e3899';ctx.fillRect(-4,-1,9,3);
+      ctx.fillStyle='#b5c0c155';ctx.fillRect(-4,-2,8,1.5);ctx.restore();
+    }
+    for(const y of [0,64,128,192]){
+      ctx.fillStyle='#172831';ctx.fillRect(0,y,256,1.5);
+      ctx.fillStyle='#93a5ac66';ctx.fillRect(0,y+2,256,.7);
+      for(const x of [5,123,133,251]){
+        ctx.fillStyle='#18262d';ctx.beginPath();ctx.arc(x,y+7,2.7,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#aebec1';ctx.beginPath();ctx.arc(x-.5,y+6.5,1.5,0,Math.PI*2);ctx.fill();
+      }
+    }
+    // Broad polished wheel paths break up the regular metal without hiding tread.
+    for(const x of [74,182]){const rub=ctx.createLinearGradient(x-18,0,x+18,0);rub.addColorStop(0,'#101c2500');rub.addColorStop(.5,'#101c2528');rub.addColorStop(1,'#101c2500');ctx.fillStyle=rub;ctx.fillRect(x-18,0,36,256);}
+    for(let i=0;i<90;i++){const x=(Math.sin(i*53.1)*.5+.5)*256,y=(Math.cos(i*17.3)*.5+.5)*256;ctx.fillStyle=i%2?'#e0e7df33':'#0e1e2b44';ctx.fillRect(x,y,.6,2+i%9);}
+  }
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=4;w.textures.set(`${id}-road`,texture);
   return new THREE.MeshStandardMaterial({map:texture,bumpMap:texture,bumpScale:id==='volcano'?.16:.035,roughness:id==='factory'?.62:.88,metalness:id==='factory'?.4:.04,side:THREE.DoubleSide});
 }
-function volcanoScenery(w){
-  buildVolcanoBoundaryBushes(w);
-  const bands=getLandscape().volcano;
-  for(const [index,vertices]of bands.entries()){
-    const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geo.computeVertexNormals();
-    const material=new THREE.MeshBasicMaterial({color:0x9e503d,side:THREE.DoubleSide});
-    // Broad, stable rock shading avoids tiny self-shadow patterns on a mountain
-    // hundreds of metres across. Its geometry still casts onto the road.
-    material.onBeforeCompile=shader=>{
-      shader.vertexShader='varying vec3 mountainPoint;\n'+shader.vertexShader;
-      shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nmountainPoint=position;');
-      shader.fragmentShader='varying vec3 mountainPoint;\n'+shader.fragmentShader;
-      shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
-        vec3 slope=normalize(vec3(mountainPoint.x*.7,150.,mountainPoint.z*.7));
-        float daylight=.68+.32*max(0.,dot(slope,normalize(vec3(-.5,1.,-.4))));
-        float strata=.95+.05*sin(mountainPoint.y*.07+sin(mountainPoint.x*.04+mountainPoint.z*.03)*2.);
-        vec3 n=normalize(cross(dFdx(mountainPoint),dFdy(mountainPoint)));
-        float facet=.65+.35*abs(dot(n,normalize(vec3(-.6,1.,.3))));
-        float grain=fract(sin(dot(floor(mountainPoint.xz*.12),vec2(127.1,311.7)))*43758.54);
-        float fracture=abs(sin(mountainPoint.x*.13+mountainPoint.z*.19+sin(mountainPoint.y*.08)*3.));
-        diffuseColor.rgb*=daylight*strata*facet*(.87+.2*grain)*(.78+.22*smoothstep(.02,.12,fracture));
-      `);
-    };material.customProgramCacheKey=()=> 'volcano-rock-v1';material.userData.skipBakedShadow=true;w.mesh(geo,material);
-  }
-  // Broken red basalt outcrops add real silhouettes and depth to the hillside.
-  const rockGeo=new THREE.DodecahedronGeometry(1,0);
-  for(let i=0;i<190;i++){
-    const a=i*2.39996323,radius=70+((i*73)%131),x=Math.cos(a)*radius,z=Math.sin(a)*radius,surface=getLandscape().surface.sample(x,z);if(!surface||surface.y<185)continue;
-    const size=2+(i*17%47)/10,rock=w.mesh(rockGeo.clone(),[0x773a2c,0x9d513a,0x85412e][i%3],x,surface.y+size*.3,z);
-    rock.scale.set(size*(1+(i%3)*.3),size*(.7+(i%4)*.2),size*.85);rock.rotation.set(i*.7,a,i*.4);
-  }
-  rockGeo.dispose();
-  const streams=buildVolcanoStreams(w,getLandscape().surface,trackAt);
-  for(const o of OBSTACLES){if(o.kind!=='basalt')continue;const rock=w.mesh(new THREE.DodecahedronGeometry(o.radius,0),0x783f34,o.x,o.y+o.radius*.7,o.z);rock.scale.set(1,1.2,.9);rock.rotation.set(.25,o.angle,.18);}
-  const crater=animatedSurface(0xff561c,'lava');w.cylinder(0,307.1,0,42,42,.3,crater.material,64);
-  const rim=w.mesh(new THREE.TorusGeometry(51,5,6,64),0x392e35,0,326,0);rim.rotation.x=Math.PI/2;
-  return {...crater,streams};
-}
+function volcanoScenery(w){return buildVolcanoScenery(w,animatedSurface);}
 export function circuitGroundMaterial(w,id){
   const material=new THREE.MeshStandardMaterial({color:id==='factory'?0x536166:CIRCUIT_PALETTES[id].ground,roughness:.94,metalness:.03});
   if(id==='factory'){
@@ -130,11 +112,21 @@ export function circuitGroundMaterial(w,id){
       shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#include <map_fragment>
         vec2 tile=abs(fract(factoryFloor/18.)-.5);float seam=step(.491,max(tile.x,tile.y));
         float grain=fract(sin(dot(floor(factoryFloor*8.),vec2(127.1,311.7)))*43758.54);
-        diffuseColor.rgb*=mix(.85,1.08,grain)*(1.-seam*.3);
-        vec2 aisle=abs(fract(factoryFloor/90.)-.5);float paint=step(.489,max(aisle.x,aisle.y));
-        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.55,.43,.16),paint*.55);
+        float mottling=sin(factoryFloor.x*.17+sin(factoryFloor.y*.11))*sin(factoryFloor.y*.21)*.055;
+        diffuseColor.rgb*=mix(.89,1.05,grain)*(1.-seam*.3)+mottling;
+        vec2 aisle=abs(fract(factoryFloor/90.)-.5);float paint=step(.487,max(aisle.x,aisle.y));
+        float faded=.72+sin(factoryFloor.x*3.7+factoryFloor.y*7.1)*.12;
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.73,.53,.17),paint*faded);
+        // Drainage channels, inset grates and expansion joints across the hall.
+        float drain=1.-smoothstep(.3,.45,abs(mod(factoryFloor.x+31.,90.)-45.));
+        float grate=step(.52,fract(factoryFloor.y*1.6));
+        diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.12,.17,.19),drain*(.55+grate*.35));
+        vec2 cell=floor(factoryFloor/18.),local=fract(factoryFloor/18.)-.5;
+        float stainSeed=fract(sin(dot(cell,vec2(73.13,17.71)))*43758.54);
+        float stain=(1.-smoothstep(.05,.4,length(local*vec2(1.1,1.6))))*step(.72,stainSeed);
+        diffuseColor.rgb*=1.-stain*.24;
       `);
-    };material.customProgramCacheKey=()=> 'factory-floor-v1';
+    };material.customProgramCacheKey=()=> 'factory-floor-v2';
   }
   return material;
 }

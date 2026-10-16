@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import {trackAt,TRACK_LENGTH,SEGMENTS} from '../shared/game.js';
 import {FACTORY_PRESSES,FACTORY_TIPS,pressState,factoryTipAngle,circuitDistance} from '../shared/extra-circuits.js';
 import {mergeMovingGroup} from './factory-interior.js';
+import {factoryFinish} from './factory-dressing.js';
 export function buildFactoryMachinery(w){
-  const presses=[],steel=0x334a59,chrome=0xc4d1d2,amber=0xe2a837;
+  const presses=[],steel=factoryFinish(w,0x334a59),chrome=factoryFinish(w,0xc4d1d2,{roughness:.31,metalness:.8}),amber=factoryFinish(w,0xe2a837);
   FACTORY_PRESSES.forEach((f,index)=>{
     const p=trackAt(f),z=p.insideSide*p.halfWidth*.335,g=new THREE.Group();g.position.set(p.x,p.y,p.z);g.rotation.y=-p.angle;w.static.add(g);
     for(const side of [-1,1]){

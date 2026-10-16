@@ -180,7 +180,7 @@ export function botControls(room,p,now,random=Math.random){
   // The first ice split's boost-fed branch has no barriers and carries a bot
   // over the edge at boosted speed. Use the guarded branch on that straight.
   const side=botRouteSide(c,activeTrack.id==='ice'&&trackAt(c.trackFraction).z<0?-1:state.side);
-  const driving={lane:state.lane,side,splitLead:215};
+  const driving={lane:state.lane,side,splitLead:215,difficulty:p.botDifficulty};
   if(time>=state.nextAvoid){state.avoidance=botAvoidance(room,p,driving,state.avoidance);state.nextAvoid=time+.1;}
   const avoidance=state.avoidance;
   if(avoidance?.active&&state.avoidLane===null)state.avoidLane=avoidance.from;

@@ -1,5 +1,6 @@
 import {safeGridStartFraction,randomGridSlots} from './starting-grid.js';
 import {botControls} from './bots.js';
+import {BOT_DIFFICULTY_MODES,assignBotDifficulty} from './bot-difficulty.js';
 import {updateSkyBeams,sanitizeSkyAim,resetSkyBeams} from './sky-beam.js';
 import {captureMotion,recordMotion} from './prediction.js';
 import {collectBoostPad} from './boost-pads.js';
@@ -13,7 +14,7 @@ import {INPUT_TIMEOUT_MS} from './network-timing.js';
 // Transports provide connections, identity generation, delivery and room cleanup.
 export function createRoomEngine({send=()=>{},broadcast=()=>{},onEmpty=()=>{},stats={},randomUUID=()=>crypto.randomUUID(),randomBytes=n=>crypto.getRandomValues(new Uint8Array(n)),now=Date.now}={}){
   const fail=(ws,message,requestId)=>send(ws,{type:'error',message,...(typeof requestId==='string'?{requestId:requestId.slice(0,80)}:{})});
-  function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',host:room.host,phase:room.phase,simulationTick:room.simulationTick||0,raceTime:room.raceTime||0,time:now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:(room.phase==='countdown'?p.input:p.simInput)||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
+  function snapshot(room){return {skyBeams:room.skyBeams||[],type:'state',code:room.code,trackId:room.trackId||'coast',botDifficulty:room.botDifficulty||'medium',host:room.host,phase:room.phase,simulationTick:room.simulationTick||0,raceTime:room.raceTime||0,time:now(),startAt:room.startAt,endedAt:room.endedAt,finishedAt:room.finishedAt,winnerId:room.winnerId,round:room.round,roundStartFraction:room.roundStartFraction,targetScore:room.targetScore,roundResults:room.roundResults,nextRoundAt:room.nextRoundAt,tournamentComplete:room.tournamentComplete,tournamentWinnerId:room.tournamentWinnerId,chase:chaseSnapshot(room.chase),camera:cameraFrame(room.chase,[...room.players.values()].map(p=>p.car)),players:[...room.players.values()].map(p=>({id:p.id,name:p.name,color:p.color,colorName:p.colorName,connected:!!p.ws,bot:p.bot,botDifficulty:p.bot?p.botDifficulty:undefined,botRequestId:p.botRequestId,score:p.score||0,ready:!!p.ready,seq:p.appliedSeq??0,input:(room.phase==='countdown'?p.input:p.simInput)||NEUTRAL,fireLatch:!!p.fireLatch,skyTarget:p.skyTarget||null,skyCooldownUntil:p.skyCooldownUntil||0,...p.car})),boostPads:room.boostPads.map(({id,readyAt})=>({id,readyAt})),pickups:room.pickups,projectiles:room.projectiles,effects:room.effects,mines:room.mines,chains:room.chains,arcs:room.arcs,sounds:room.sounds,pulses:room.pulses};}
   function publish(room){selectTrack(room.trackId);if(room.phase==='lobby')room.targetScore=targetScoreForPlayers(room.players.size);if(room.phase==='lobby')room.chase=createChase([...room.players.values()].map(p=>p.car));broadcast(room,snapshot(room));}
   function resetRoom(room,{newTournament=false,advanceRound=false,startFraction=START_FRACTION,randomizeGrid=false}={}){
     selectTrack(room.trackId);startFraction=safeGridStartFraction(startFraction,room.players.size);room.phase='lobby';room.simulationTick=0;room.raceTime=0;room.startAt=null;room.endedAt=null;room.finishedAt=null;initCombat(room);room.survivorEndAt=null;room.pickups=createPickups();room.boostPads=BOOST_PADS.map(p=>({...p}));
@@ -31,7 +32,7 @@ export function createRoomEngine({send=()=>{},broadcast=()=>{},onEmpty=()=>{},st
   function addPlayer(room,ws,name,bot=false){
     selectTrack(room.trackId);const used=new Set([...room.players.values()].map(p=>p.color));
     const options=COLORS.filter(c=>!used.has(c)),color=options[Math.floor(Math.random()*options.length)];
-    const p={id:randomUUID(),token:Array.from(randomBytes(24),b=>b.toString(16).padStart(2,'0')).join(''),name:String(name||'Driver').trim().slice(0,18)||'Driver',color,colorName:COLOR_NAMES[COLORS.indexOf(color)],car:spawnCar(Array.from({length:MAX_PLAYERS},(_,i)=>i).find(slot=>![...room.players.values()].some(p=>p.car.gridSlot===slot))),ws,bot,score:0,ready:false,input:{...NEUTRAL},seq:0,lastInput:now(),disconnectedAt:null};
+    const p={id:randomUUID(),token:Array.from(randomBytes(24),b=>b.toString(16).padStart(2,'0')).join(''),name:String(name||'Driver').trim().slice(0,18)||'Driver',color,colorName:COLOR_NAMES[COLORS.indexOf(color)],car:spawnCar(Array.from({length:MAX_PLAYERS},(_,i)=>i).find(slot=>![...room.players.values()].some(p=>p.car.gridSlot===slot))),ws,bot,botDifficulty:bot?assignBotDifficulty(room.botDifficulty):undefined,score:0,ready:false,input:{...NEUTRAL},seq:0,lastInput:now(),disconnectedAt:null};
     room.players.set(p.id,p);if(!room.host&&!bot)room.host=p.id;return p;
   }
   function removePlayer(room,p){p.voice?.close(1000,'Left lobby');room.players.delete(p.id);if(room.host===p.id)room.host=[...room.players.values()].find(p=>!p.bot&&p.ws)?.id||[...room.players.values()].find(p=>!p.bot)?.id;if(![...room.players.values()].some(p=>!p.bot)){onEmpty(room);return;}publish(room);}
@@ -51,6 +52,14 @@ export function createRoomEngine({send=()=>{},broadcast=()=>{},onEmpty=()=>{},st
     if(msg.type==='lobby'){if(room.phase!=='lobby')resetRoom(room,{newTournament:!!room.tournamentComplete,advanceRound:room.phase==='finished'&&!room.tournamentComplete});publish(room);return;}
     if(msg.type==='reset-scores'&&room.phase==='lobby'){resetRoom(room,{newTournament:true});publish(room);return;}
     if(msg.type==='track'&&room.phase==='lobby'){if(!Object.hasOwn(TRACKS,msg.trackId))return fail(ws,'Unknown track.');if(room.trackId===msg.trackId)return;room.trackId=msg.trackId;resetRoom(room);publish(room);return;}
+    if(msg.type==='bot-difficulty'){
+      if(room.phase!=='lobby')return fail(ws,'Return to the lobby to change bot difficulty.');
+      if(!BOT_DIFFICULTY_MODES.includes(msg.difficulty))return fail(ws,'Unknown bot difficulty.');
+      if(room.botDifficulty===msg.difficulty)return;
+      room.botDifficulty=msg.difficulty;
+      for(const bot of room.players.values())if(bot.bot){bot.botDifficulty=assignBotDifficulty(room.botDifficulty);bot.botState=null;}
+      publish(room);return;
+    }
     if(msg.type==='bot'){
       const requestId=typeof msg.requestId==='string'?msg.requestId.slice(0,80):undefined;
       if(room.phase!=='lobby')return fail(ws,'Return to the lobby to add bots.',requestId);

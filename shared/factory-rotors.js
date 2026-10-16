@@ -36,11 +36,36 @@ export function collideFactoryRotors(car,trackAt,seconds){
 }
 // Navigation is advisory bot state, held out of replicated car snapshots.
 const routes=new WeakMap();
-export function rotorBotTarget(car,trackAt,length){
+// A tangent approach and outer arc clear every phase of the rotating walls.
+// Hard bots use 23 fixed waypoints instead of repeatedly searching the maze.
+const outsideRoutes=new WeakMap();
+function outerRotorTarget(car,p,index){
+  const fx=Math.cos(p.angle),fz=Math.sin(p.angle),nx=-fz,nz=fx;
+  const x=(car.x-p.x)*fx+(car.z-p.z)*fz,z=(car.x-p.x)*nx+(car.z-p.z)*nz;
+  let route=outsideRoutes.get(car);
+  if(!route||route.index!==index){
+    const side=Math.abs(z)>1?Math.sign(z):(car.gridSlot%2?-1:1),r=21.1,start=45,theta=Math.acos(-r/start),points=[{x:-start,z:0}];
+    for(let i=0;i<=20;i++){const a=theta+(Math.PI-theta*2)*i/20;points.push({x:r*Math.cos(a),z:side*r*Math.sin(a)});}
+    points.push({x:start,z:0});route={index,points};outsideRoutes.set(car,route);
+  }
+  let nearest=0,best=Infinity,projection=0;
+  for(let i=0;i<route.points.length-1;i++){
+    const a=route.points[i],b=route.points[i+1],dx=b.x-a.x,dz=b.z-a.z,t=Math.max(0,Math.min(1,((x-a.x)*dx+(z-a.z)*dz)/(dx*dx+dz*dz))),d=(x-a.x-dx*t)**2+(z-a.z-dz*t)**2;
+    if(d<best){best=d;nearest=i;projection=t;}
+  }
+  let remaining=Math.max(4,Math.hypot(car.vx,car.vz)*.32),target=route.points.at(-1);
+  for(let i=nearest;i<route.points.length-1;i++){
+    const a=route.points[i],b=route.points[i+1],t=i===nearest?projection:0,segment=Math.hypot(b.x-a.x,b.z-a.z),distance=segment*(1-t);
+    if(distance>=remaining){const u=t+remaining/segment;target={x:a.x+(b.x-a.x)*u,z:a.z+(b.z-a.z)*u};break;}remaining-=distance;
+  }
+  return {point:{x:p.x+target.x*fx+target.z*nx,z:p.z+target.x*fz+target.z*nz}};
+}
+export function rotorBotTarget(car,trackAt,length,difficulty='medium'){
   const index=FACTORY_TABLES.findIndex(f=>circuitDistance(car.trackFraction,f,length)<48);if(index<0)return null;
   const p=trackAt(FACTORY_TABLES[index]),fx=Math.cos(p.angle),fz=Math.sin(p.angle),nx=-fz,nz=fx;
   const x=(car.x-p.x)*fx+(car.z-p.z)*fz,z=(car.x-p.x)*nx+(car.z-p.z)*nz;
   if(x>28)return null;
+  if(difficulty==='hard')return outerRotorTarget(car,p,index);
   const time=car.raceTime||0;let cached=routes.get(car);
   if(!cached||cached.index!==index||time-cached.at>.18||Math.hypot(car.x-cached.x,car.z-cached.z)>6){
     const walls=rotorWallSegments(p,time+.3,index),step=2,N=31;

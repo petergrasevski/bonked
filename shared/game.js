@@ -1,5 +1,6 @@
+import {volcanoLavaGrip} from './volcano-lava.js';
 import {collideFactoryRotors,rotorBotTarget} from './factory-rotors.js';
-import {FACTORY_PRESSES,EXTRA_CIRCUITS,extraCircuitPoints,extraHalfWidth,extraHasBarrier,circuitSurface,applyCircuitForces,advanceCircuitHeat,heatSpeedMultiplier,FACTORY_TIPS,factoryTipAt,factoryTipAngle} from './extra-circuits.js';
+import {VOLCANO_HOT,circuitDistance,FACTORY_PRESSES,EXTRA_CIRCUITS,extraCircuitPoints,extraHalfWidth,extraHasBarrier,circuitSurface,applyCircuitForces,advanceCircuitHeat,heatSpeedMultiplier,FACTORY_TIPS,factoryTipAt,factoryTipAngle} from './extra-circuits.js';
 import {coastalHasBarrier} from './coastal-barriers.js';
 import {coastalCrabs,collideCrabs} from './coastal-crabs.js';
 import {applyDesertWind} from './desert-storm.js';
@@ -159,6 +160,9 @@ OBSTACLES=PLAZAS.flatMap((fraction,index)=>[-8,8].map((offset,i)=>{
 }));
 if(activeTrack.id==='volcano')OBSTACLES=Array.from({length:14},(_,i)=>{
   const fraction=.12+i*.058+Math.sin(i*2.1)*.006,side=i%2?1:-1;
+  // Keep the entire inner rock cluster clear of fast lava lanes, including
+  // its end boulders and a small approach/exit buffer. Rendering shares this list.
+  if(side>0&&VOLCANO_HOT.some(zone=>circuitDistance(fraction,zone.fraction,TRACK_LENGTH)<zone.length/2+6))return [];
   return Array.from({length:4},(_,j)=>{const f=fraction+(j-1.5)*1.7/TRACK_LENGTH,p=trackAt(f),radius=j===1?1.5:.65+(j%3)*.23,lateral=side*(p.halfWidth+(j===1?-.8:j===2?.3:-.2)),x=p.x+p.nx*lateral,z=p.z+p.nz*lateral,y=Math.abs(lateral)<=p.halfWidth+.7?p.y-.1:Math.min(p.y-.1,terrainAt(x,z)?.y??p.y);return {id:`basalt-${i}-${j}`,kind:'basalt',fraction:f,x,z,y,radius,height:radius*1.9,angle:i*2.3+j};});
 }).flat();
 if(activeTrack.id==='desert')OBSTACLES=DESERT_CACTI.map(({fraction,side},i)=>{const p=trackAt(fraction),lateral=side*(p.halfWidth-1.5);return {id:`cactus-${i}`,kind:'cactus',fraction,x:p.x+p.nx*lateral,z:p.z+p.nz*lateral,y:p.y,radius:.65,height:7,angle:p.angle};});
@@ -498,6 +502,7 @@ export function stepCar(car, input, dt=STEP) {
   const padSpeed=boostSpeed(car,dt,TOP_SPEED);
   const circuitRoad=EXTRA_CIRCUITS.includes(activeTrack.id)?nearestTrack(car.x,car.z,car.trackFraction):null;
   const circuitEffect=circuitRoad?circuitSurface(activeTrack.id,circuitRoad.fraction,(car.x-circuitRoad.x)*circuitRoad.nx+(car.z-circuitRoad.z)*circuitRoad.nz,circuitRoad.halfWidth,TRACK_LENGTH,(car.raceTime||0)+dt,circuitRoad.insideSide):null;
+  const lavaGrip=activeTrack.id==='volcano'&&!car.falling&&!car.overturned&&Math.abs(car.y-circuitRoad.y)<.55?volcanoLavaGrip(circuitRoad.fraction,(car.x-circuitRoad.x)*circuitRoad.nx+(car.z-circuitRoad.z)*circuitRoad.nz,circuitRoad.halfWidth,TRACK_LENGTH):1;
   const onHotLane=circuitEffect?.kind==='heat'&&!car.falling&&!car.overturned&&Math.abs(car.y-circuitRoad.y)<.55;
   if(activeTrack.id==='volcano')damageCar(car,advanceCircuitHeat(car,onHotLane,dt));
   const heatBoost=onHotLane?heatSpeedMultiplier(car.circuitHeat):1;
@@ -557,10 +562,10 @@ export function stepCar(car, input, dt=STEP) {
     // Ice keeps more momentum under steering load, strongest in tight, fast
     // U-turns. Straight-line grip and low-speed positioning stay familiar.
     const iceDrift=icy&&!braking?clamp((Math.abs(forward)-6)/18,0,1)*Math.min(1,Math.abs(steering)/.6):0;
-    lateral*=Math.exp(-(car.impactTime>0?.65:braking?1.5*activeTrack.grip:(icy?9.5*(1-.4*iceDrift):8.2)*(1-.72*speedDrift)*handling*activeTrack.grip)*dt);
+    lateral*=Math.exp(-(car.impactTime>0?.65:braking?1.5*activeTrack.grip:(icy?9.5*(1-.4*iceDrift):8.2)*(1-.72*speedDrift)*handling*activeTrack.grip)*lavaGrip*dt);
     const turn=steering*(braking?2.9:2.05)*(.8+.2*handling)*clamp(Math.abs(forward)/7,0,1)*Math.sign(forward);
     car.angle+=(turn+car.yawVelocity)*dt;
-    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(braking?.2:icy?.65*(1-.25*iceDrift):.58*(1-.58*speedDrift))*handling*activeTrack.grip;
+    const nc=Math.cos(car.angle),ns=Math.sin(car.angle),grip=(braking?.2:icy?.65*(1-.25*iceDrift):.58*(1-.58*speedDrift))*handling*activeTrack.grip*lavaGrip;
     c=c*(1-grip)+nc*grip;s=s*(1-grip)+ns*grip;
     car.vx=c*forward-s*lateral;car.vz=s*forward+c*lateral;
   }
@@ -668,16 +673,28 @@ export function botRouteSide(car,preferred=1){
   }
   return preferred;
 }
-export function botSteeringTarget(car,{lane=0,side=0,splitLead=175,avoidLane=null}={}){
+// All profiles use the normal car physics. Difficulty changes planning, never engine power.
+export const BOT_DRIVING_PROFILES=Object.freeze({
+  easy:Object.freeze({speed:28,corner:17,line:0,look:.6,rotorSpeed:8}),
+  medium:Object.freeze({speed:36,corner:12,line:.9,look:.55,rotorSpeed:9}),
+  hard:Object.freeze({speed:39,corner:10,line:1.65,look:.6,rotorSpeed:19}),
+});
+export function botSteeringTarget(car,{lane=0,side=0,splitLead=175,avoidLane=null,difficulty='medium'}={}){
+  const profile=BOT_DRIVING_PROFILES[difficulty]??BOT_DRIVING_PROFILES.medium;
   side=botRouteSide(car,side);
   const speed=Math.hypot(car.vx,car.vz),road=trackAt(car.trackFraction),icy=activeTrack.id==='ice';
-  const fraction=car.trackFraction+Math.max(7,speed*(icy?.65:.55))/TRACK_LENGTH,p=trackAt(fraction);
+  const fraction=car.trackFraction+Math.max(7,speed*(icy?.65:profile.look))/TRACK_LENGTH,p=trackAt(fraction);
   // Corner speed follows road curvature, not the sideways chassis angle during a drift.
   const ahead=trackAt(car.trackFraction+24/TRACK_LENGTH),turn=angleDelta(ahead.angle,road.angle),bend=Math.abs(turn);
   const iceSpace=icy?clamp((Math.min(road.halfWidth,p.halfWidth)-9)/6,0,1):0;
   let offset=clamp(lane,-p.halfWidth+CAR_WIDTH/2+.8,p.halfWidth-CAR_WIDTH/2-.8)*clamp(1-bend/.3,0,1);
   // Wide ice turns leave room to aim inside and let momentum drift outward.
   offset+=Math.sign(turn)*4*iceSpace*clamp(bend/.3,0,1);
+  // Sample the bend at the steering horizon, aiming inside its apex. This
+  // bounded analytic racing line costs two road samples, with no per-tick search.
+  if(!icy){const before=trackAt(fraction-12/TRACK_LENGTH),after=trackAt(fraction+12/TRACK_LENGTH),curve=angleDelta(after.angle,before.angle);
+    offset+=Math.sign(curve)*Math.min(profile.line,p.halfWidth*.18)*clamp(Math.abs(curve)/.22,0,1);
+  }
   for(const f of PLAZAS){const d=arcDistance(car.trackFraction,f);if(d<65){const blend=clamp((65-d)/17,0,1);offset=offset*(1-blend)+(side||car.botLane||1)*5*clamp((48-d)/18,0,1);}}
   if(activeTrack.id==='ice'&&Math.abs(p.x)<splitLead){
     const blend=clamp((splitLead-Math.abs(p.x))/(splitLead-130),0,1);offset=offset*(1-blend)+(side||car.botLane||(car.gridSlot%2?-1:1))*8*blend;
@@ -692,8 +709,8 @@ export function botSteeringTarget(car,{lane=0,side=0,splitLead=175,avoidLane=nul
   const bounds=botLaneBounds(fraction,side||Math.sign(offset)||1,splitLead);
   offset=clamp(offset,bounds.min,bounds.max);
   p.x+=p.nx*offset;p.z+=p.nz*offset;
-  const rotor=activeTrack.id==='factory'?rotorBotTarget(car,trackAt,TRACK_LENGTH):null;
-  return {point:rotor?.point??p,lane:offset,speed,bend,iceSpace,icy,rotor:!!rotor};
+  const rotor=activeTrack.id==='factory'?rotorBotTarget(car,trackAt,TRACK_LENGTH,difficulty):null;
+  return {point:rotor?.point??p,lane:offset,speed,bend,iceSpace,icy,rotor:!!rotor,profile};
 }
 // Legal lane centres keep the whole chassis away from road edges and ice gaps.
 export function botLaneBounds(fraction,side=1,splitLead=175){
@@ -706,12 +723,12 @@ export function botLaneBounds(fraction,side=1,splitLead=175){
   return {min,max};
 }
 export function botInput(car,options={}){
-  const {point:p,speed,bend,iceSpace,icy,rotor}=botSteeringTarget(car,options);
+  const {point:p,speed,bend,iceSpace,icy,rotor,profile}=botSteeringTarget(car,options);
   const target=Math.atan2(p.z-car.z,p.x-car.x);
   const error=angleDelta(target,car.angle);
   // Correct outward momentum as well as heading; bound collision-induced slip.
   const slip=speed>4?clamp(angleDelta(car.angle,Math.atan2(car.vz,car.vx)),icy?-.9:-.6,icy?.9:.6):0;
-  const desired=rotor?9:activeTrack.id==='volcano'?24:clamp(36-bend*(icy?20:12),icy?8+10*iceSpace:16,36);
+  const desired=rotor?profile.rotorSpeed:clamp(profile.speed-bend*(icy?20:profile.corner),icy?8+10*iceSpace:16,profile.speed);
   return {steer:clamp(error*2.5+slip*(icy?.5:1.5),-1,1),throttle:speed>desired?0:1,reverse:false,brake:Math.abs(error)>1.1,fire:false};
 }
 

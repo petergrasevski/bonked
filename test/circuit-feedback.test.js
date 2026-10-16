@@ -67,7 +67,7 @@ test('steam claw placement spans different lanes, sizes and road angles',()=>{
   selectTrack('volcano');for(const [i,v]of specs.entries()){const p=trackAt(v.fraction);assert.equal(circuitSurface('volcano',v.fraction,v.lane*p.halfWidth,p.halfWidth,TRACK_LENGTH,2.55-i*.37).kind,'vent');}
 });
 test('road rocks form edge clusters and keep the middle racing line clear',()=>{
-  selectTrack('volcano');assert.equal(OBSTACLES.length,56);for(const o of OBSTACLES){const p=nearestTrack(o.x,o.z,o.fraction);assert.ok(p.distance>p.halfWidth-1);assert.ok(p.distance-o.radius>4.5);assert.ok(OBSTACLES.some(q=>q!==o&&Math.hypot(q.x-o.x,q.z-o.z)<6));}
+  selectTrack('volcano');assert.ok(OBSTACLES.length>0&&OBSTACLES.length<56);for(const o of OBSTACLES){const p=nearestTrack(o.x,o.z,o.fraction);assert.ok(p.distance>p.halfWidth-1);assert.ok(p.distance-o.radius>4.5);assert.ok(OBSTACLES.some(q=>q!==o&&Math.hypot(q.x-o.x,q.z-o.z)<6));}
 });
 test('spreading racers move the volcano camera sideways instead of overhead',()=>{
   selectTrack('volcano');const profile=TRACKS.volcano.camera,frames=[];for(const metres of [0,40,100]){const cars=[placed(.3),placed(.3-metres/TRACK_LENGTH)],target=cameraFrame(createChase(cars),cars),frame=stepCamera(null,target,cars,2,STEP,profile);frames.push({frame,target});assert.ok(frame.pitch<=25*Math.PI/180);assert.ok(frame.pitch>=19.9*Math.PI/180);}
@@ -84,4 +84,16 @@ test('the second panel has an approach button and independent replicated state',
   const expected=[{...button},{...rider}],predicted=expected.map(c=>({...c}));
   for(let i=0;i<20;i++){updateFactoryMechanics(expected,expected[0].raceTime+STEP);for(const c of expected){stepCar(c,NEUTRAL);c.raceTime+=STEP;}predictFleet(predicted[0],[predicted[1]],NEUTRAL,STEP);}
   for(let i=0;i<2;i++){assert.equal(predicted[i][tip.stateKey],expected[i][tip.stateKey]);assert.ok(Math.hypot(predicted[i].x-expected[i].x,predicted[i].z-expected[i].z)<1e-8);assert.equal(predicted[i].y,expected[i].y);}
+});
+
+test('volcano fast lava lanes and their entrances are clear of rock obstacles',()=>{
+  selectTrack('volcano');
+  for(const zone of VOLCANO_HOT)for(let along=-zone.length/2;along<=zone.length/2;along+=1){
+    const fraction=zone.fraction+along/TRACK_LENGTH,bounds=volcanoLavaBounds(fraction,TRACK_LENGTH);if(!bounds)continue;
+    const p=trackAt(fraction);
+    for(const [lo,hi]of bounds)for(let i=0;i<=8;i++){
+      const lateral=(lo+(hi-lo)*i/8)*p.halfWidth,x=p.x+p.nx*lateral,z=p.z+p.nz*lateral;
+      for(const o of OBSTACLES)assert.ok(Math.hypot(x-o.x,z-o.z)>o.radius+1.05,'a whole car can use the lava lane without touching a boulder');
+    }
+  }
 });
