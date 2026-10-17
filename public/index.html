@@ -84,6 +84,7 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
   <section class="modal settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <button id="settings-close" class="close" aria-label="Close settings"></button>
     <h2 id="settings-title">Settings</h2>
+    <div class="settings-body">
     <div class="settings-grid">
       <div class="settings-column settings-audio">
         <div class="audio-volume"><label for="effects-volume">Sound effects</label><output id="effects-volume-value" for="effects-volume">40%</output><input id="effects-volume" type="range" min="0" max="100" step="1" value="40"></div>
@@ -111,6 +112,7 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
       </div>
     </div>
     <details id="lan-status" hidden><summary>LAN connections & help</summary><button id="enable-phones" class="secondary" hidden>Retry phone connection</button><p id="lan-setup-status" role="status"></p><ul id="lan-connections"></ul><p>Can’t connect? Use your main Wi-Fi, not Guest. Allow local-network access in your browser and enable LAN access in your VPN. On your own router, check AP / client isolation. Keep this tab open and the laptop awake.</p></details>
+    </div>
   </section>
 </div>
 <div id="dialog" class="modal-backdrop" hidden><section class="modal"><button id="close-dialog" class="close" aria-label="Close dialog"></button><div id="dialog-body"></div></section></div>
