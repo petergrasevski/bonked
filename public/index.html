@@ -55,7 +55,7 @@ body.booting{margin:0;background:#101c23}body.booting>:not(#startup){visibility:
 // Match detectDevice before the game module graph downloads (including desktop-mode iPads).
 document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
 </script>
-<div id="scene" aria-label="3D view of the Saltwater Circuit"></div>
+<div id="scene" tabindex="-1" aria-label="3D view of the Saltwater Circuit"></div>
 <div class="grain"></div>
 <header class="topbar"><a href="/" class="brand" aria-label="Bonked home"><img src="/logo.svg?v=bonked" alt="Bonked" width="300" height="82"></a><div class="top-right"><span class="connection"><i id="connection-dot"></i><span id="menu-fps" class="network-ping dev-stat" aria-label="Frames per second">FPS —</span><span id="connection-label" class="dev-stat">CONNECTING</span></span><button id="settings-open" class="icon-button" aria-label="Settings">⚙</button></div></header>
 <main id="lobby">

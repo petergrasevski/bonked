@@ -17,7 +17,7 @@ export const WEAPONS = {
 export const WEAPON_IDS=Object.keys(WEAPONS);
 export const FLAME_RANGE=(CAR_LENGTH*2+1)*1.5;
 export const TASER_RADIUS=CAR_LENGTH*1.75;
-export const DAMAGE={taser:15,pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:12,plasma:8,shotgunPellet:12};
+export const DAMAGE={taser:15,pulse:8,rocket:42,machinegun:2,railgun:75,mine:28,chain:45,flame:65/3,plasma:8,shotgunPellet:12};
 export function initCombat(room){room.serial??=0;room.arcs=[];room.sounds=[];room.projectiles=[];room.effects=[];room.mines=[];room.chains=[];room.pulses=[];}
 export function giveWeapon(car,id){if(!WEAPONS[id])throw Error('Unknown weapon');car.item=id;car.ammo=WEAPONS[id].ammo;car.fireCooldown=0;}
 const randomWeapon=random=>WEAPON_IDS[Math.floor(random()*WEAPON_IDS.length)];
@@ -48,11 +48,16 @@ function hit(room,p,amount,now,kick={}){
   const damaged=damageCar(c,amount);
   if(protectedByShield)effect(room,'shield-hit',c.x,c.z,now,{y:c.y,color:'#66dcff',duration:160});
   if(!damaged)return false;
+  if(!wasWreck&&['machinegun','plasma'].includes(kick.weapon)){
+    const origin=weaponMuzzle(c,0,0),basis=weaponBasis(c),point=kick.point,delta={x:point.x-origin.x,y:point.y-origin.y,z:point.z-origin.z};
+    const dot=axis=>delta.x*axis.x+delta.y*axis.y+delta.z*axis.z;
+    effect(room,'projectile-hit',point.x,point.z,now,{y:point.y,target:p.id,owner:kick.owner,weapon:kick.weapon,localX:dot(basis.forward),localY:dot(basis.up)+MUZZLE_HEIGHT,localZ:dot(basis.side),duration:220,color:kick.weapon==='plasma'?'#63dfff':'#ffcb65'});
+  }
   weaponImpact(c,kick,healthBefore);
   if(!wasWreck&&c.wrecked){
     awardArenaKill(room,p,kick.owner,now);
     c.eliminatedAt=now-room.startAt;c.explosionShown=true;sound(room,'explosion',c,now);effect(room,'explosion',c.x,c.z,now,{y:c.y,duration:1100});}
-  else if(amount>=8)effect(room,'hit',c.x,c.z,now,{y:c.y,duration:220});
+  else if(amount>=8&&!['machinegun','plasma'].includes(kick.weapon))effect(room,'hit',c.x,c.z,now,{y:c.y,duration:220});
   return true;
 }
 function pulse(room,owner,now){
@@ -193,7 +198,7 @@ export function updateCombat(room,dt,now){
     if(shot.kind==='machinegun')effect(room,'tracer',oldX,oldZ,now,{y:oldY,toX:shot.x,toY:shot.y,toZ:shot.z,duration:80,color:'#ffe7a3'});
     if(target||hitWall){
       sound(room,shot.kind==='rocket'?'explosion':'impact',shot,now);
-      if(!hitWall)hit(room,target.p,DAMAGE[shot.kind],now,{owner:shot.owner,x:Math.cos(shot.angle)*(shot.kind==='rocket'?12:1),z:Math.sin(shot.angle)*(shot.kind==='rocket'?12:1),up:shot.kind==='rocket'?8:0,point:{x:shot.x,y:shot.y,z:shot.z}});
+      if(!hitWall)hit(room,target.p,DAMAGE[shot.kind],now,{owner:shot.owner,weapon:shot.kind,x:Math.cos(shot.angle)*(shot.kind==='rocket'?12:1),z:Math.sin(shot.angle)*(shot.kind==='rocket'?12:1),up:shot.kind==='rocket'?8:0,point:{x:shot.x,y:shot.y,z:shot.z}});
       shot.until=0;if(shot.kind==='rocket')effect(room,'explosion',shot.x,shot.z,now,{y:shot.y,duration:650});
     }
   }

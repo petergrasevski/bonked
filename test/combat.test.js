@@ -27,6 +27,18 @@ test('machine gun fires only while held and consumes exactly 30 rounds',()=>{
 test('fast bullets sweep through targets instead of tunnelling',()=>{
   const a=player('a'),b=player('b',7),r=room(a,b);fire(r,a,'machinegun');updateCombat(r,STEP,17);assert.equal(b.car.health,98);assert.equal(r.projectiles.length,0);
 });
+test('close-range bullets and plasma report confirmed hits at the target surface, including shots consumed in one tick',()=>{
+  for(const weapon of ['machinegun','plasma'])for(const shield of [0,8]){
+    const a=player('a'),b=player('b',6),r=room(a,b);b.car.shield=shield;fire(r,a,weapon);updateCombat(r,STEP,17);
+    assert.equal(r.projectiles.length,0);
+    const impacts=r.effects.filter(e=>e.kind==='projectile-hit');
+    if(shield){assert.equal(b.car.health,100);assert.equal(impacts.length,0);assert.ok(r.effects.some(e=>e.kind==='shield-hit'));continue;}
+    assert.equal(b.car.health,100-DAMAGE[weapon]);assert.equal(impacts.length,1);
+    const impact=impacts[0];assert.equal(impact.weapon,weapon);assert.equal(impact.target,'b');assert.equal(impact.owner,'a');
+    assert.ok(impact.x<b.car.x-CAR_LENGTH/2+.1,'impact is on the rear surface rather than hidden at the car centre');
+    assert.ok(Math.abs(b.car.x+impact.localX-impact.x)<1e-8);assert.ok(Math.abs(b.car.y+impact.localY-impact.y)<1e-8);
+  }
+});
 test('shield blocks damage and launches for eight seconds',()=>{
   const a=player('a'),r=room(a);fire(r,a,'shield');assert.equal(a.car.shield,8);damageCar(a.car,75);launchCar(a.car,15,1,1);assert.equal(a.car.health,100);assert.equal(a.car.y,0);
   const p=trackAt(.01);Object.assign(a.car,{x:p.x,z:p.z,angle:p.angle});for(let i=0;i<479;i++)stepCar(a.car,NEUTRAL);assert.ok(a.car.shield>0);damageCar(a.car,10);assert.equal(a.car.health,100);stepCar(a.car,NEUTRAL);stepCar(a.car,NEUTRAL);damageCar(a.car,10);assert.equal(a.car.health,90);
@@ -47,7 +59,7 @@ test('ball and chain obeys its tether and transfers motion through turns',()=>{
   const b=player('b',ball.x+.5,ball.z);b.car.y=ball.y-.75;r.players.set('b',b);updateCombat(r,STEP,10000);assert.equal(b.car.health,55);assert.equal(b.car.vy,0,'fresh chassis resist launch impulses');assert.equal(r.chains.length,0);
 });
 test('flamethrower has three seconds of held fuel, limited forward reach and continuous damage',()=>{
-  const a=player('a'),b=player('b',7),c=player('c',18),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-76)<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-64)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
+  const a=player('a'),b=player('b',7),c=player('c',18),behind=player('behind',-4),r=room(a,b,c,behind);giveWeapon(a.car,'flame');run(r,1);assert.equal(a.car.ammo,3);a.input.fire=true;run(r,2,1000);assert.ok(Math.abs(b.car.health-(100-130/3))<1e-6);a.input.fire=false;run(r,1,3000);assert.ok(Math.abs(a.car.ammo-1)<1e-6);assert.equal(a.car.firing,null);a.input.fire=true;run(r,4,4000);assert.equal(a.car.item,null);assert.ok(Math.abs(b.car.health-35)<1e-6);assert.equal(c.car.health,100);assert.equal(behind.car.health,100);
 });
 test('plasma travels straight at 1.5 times top speed with minor damage',()=>{
   const a=player('a'),b=player('b',30),r=room(a,b);fire(r,a,'plasma');const shot=r.projectiles[0],x=shot.x;updateCombat(r,STEP,17);assert.equal(shot.speed,54);assert.equal(shot.angle,0);assert.ok(Math.abs(shot.x-x-54*STEP)<1e-6);run(r,.6,17);assert.equal(b.car.health,92);
@@ -71,7 +83,7 @@ test('all three shotgun barrels deal independent damage with matching visible sh
   assert.deepEqual(losses,[12,24,36]);
 });
 test('flame reaches 1.5 times its former range but still respects the far limit',()=>{
-  const a=player('a'),near=player('near',15),far=player('far',17),r=room(a,near,far);giveWeapon(a.car,'flame');a.input.fire=true;run(r,1);assert.ok(Math.abs(near.car.health-88)<1e-6);assert.equal(far.car.health,100);
+  const a=player('a'),near=player('near',15),far=player('far',17),r=room(a,near,far);giveWeapon(a.car,'flame');a.input.fire=true;run(r,1);assert.ok(Math.abs(near.car.health-(100-65/3))<1e-6);assert.equal(far.car.health,100);
 });
 
 

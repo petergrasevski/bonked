@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {CAR_LENGTH} from '../shared/game.js';
-import {FLAME_RANGE,TASER_RADIUS} from '../shared/combat.js';
+import {TASER_RADIUS} from '../shared/combat.js';
 
 // All weapons share four fixed-size draws. Visual time, particles and event IDs
 // live here only: no random draw or cosmetic pose ever reaches the simulation.
@@ -79,6 +79,14 @@ export class WeaponEffects{
     if(e.kind==='explosion'){
       this.burst(e.x,y,e.z,0xffd478,36,15);
       for(let i=0;i<12;i++){const a=Math.random()*TAU,r=Math.random()*1.3;this.particle(e.x+Math.cos(a)*r,y+Math.random(),e.z+Math.sin(a)*r,i%2?0xff832a:0xffd777,.7+Math.random()*.7,.25+Math.random()*.28,Math.cos(a)*3,3+Math.random()*4,Math.sin(a)*3,false,2);this.particle(e.x,y,e.z,0x414450,.65+Math.random()*.6,.9+Math.random()*.5,Math.cos(a)*4,3+Math.random()*4,Math.sin(a)*4,true,2);}
+    }else if(e.kind==='projectile-hit'){
+      const plasma=e.weapon==='plasma';
+      this.particle(e.x,e.y,e.z,plasma?0x9defff:0xffe4a3,plasma?1.25:.8,.12);
+      for(let i=0;i<10;i++){
+        const angle=Math.random()*TAU,speed=3+Math.random()*6;
+        const spark=this.particle(e.x,e.y,e.z,plasma?0x63dfff:0xffcb65,.12,.16+Math.random()*.12,Math.cos(angle)*speed,2+Math.random()*5,Math.sin(angle)*speed,false,0,12);
+        if(spark)spark.streak=true;
+      }
     }else if(e.kind==='hit'||e.kind==='shield-hit'){this.burst(e.x,y,e.z,e.kind==='shield-hit'?0x77dfff:0xffd59a,14,e.kind==='shield-hit'?6:9);}
     else if(e.kind==='pulse'){for(let i=0;i<24;i++){const a=i/24*TAU;this.particle(e.x,y,e.z,color,.22,.4,Math.cos(a)*13,Math.random()*2,Math.sin(a)*13,false,.3);}}
     else if(e.kind==='shotgun'||e.kind==='rail'){
@@ -86,9 +94,20 @@ export class WeaponEffects{
       this.particle(e.x,y,e.z,0x8d8d84,.45,.6,0,1,0,true,.9);
     }
   }
-  drawEvent(e,dt,camera,viewportHeight){
+  drawEvent(e,dt,camera,viewportHeight,cars){
     e.age+=dt;const t=e.age/e.duration;if(t>=1)return false;const fade=(1-t)**2,color=e.color||0xffa550,y=(e.y??0)+.15;
-    if(e.toX!==undefined){
+    if(e.kind==='projectile-hit'){
+      const car=cars.get(e.target);if(!car?.visible)return true;
+      const point=car.localToWorld(new THREE.Vector3(e.localX,e.localY,e.localZ));
+      const radius=(e.weapon==='plasma'?.65:.4)+t*.8;
+      for(let i=0;i<6;i++){
+        const angle=i/6*TAU;
+        this.a.set(Math.cos(angle)*radius*.35,Math.sin(angle)*radius*.35,0).applyQuaternion(camera.quaternion).add(point);
+        this.b.set(Math.cos(angle)*radius,Math.sin(angle)*radius,0).applyQuaternion(camera.quaternion).add(point);
+        this.line(this.a.x,this.a.y,this.a.z,this.b.x,this.b.y,this.b.z,.055,color,fade);
+      }
+      const paint=car.userData.paint;if(paint){paint.emissive.set(color);paint.emissiveIntensity=Math.max(paint.emissiveIntensity,fade*1.15);}
+    }else if(e.toX!==undefined){
       const toY=e.toY??e.y??.85,fromY=e.y??.85,dx=e.toX-e.x,dy=toY-fromY,dz=e.toZ-e.z,length=Math.hypot(dx,dy,dz)||1;
       if(e.kind==='rail'){
         this.line(e.x,fromY,e.z,e.toX,toY,e.toZ,.045+Math.max(0,.16-e.age)*.8,0xebffff,fade);
@@ -114,9 +133,13 @@ export class WeaponEffects{
     if(round!==this.round){this.reset();this.round=round;}if(!round)return;
     dt=Math.min(.05,Math.max(0,dt));this.clock+=dt;this.emission+=dt;const emit=this.emission>=1/35;if(emit)this.emission%=1/35;
     camera.getWorldDirection(this.cameraDirection);this.lineCount=0;this.ringCount=0;
-    for(const e of state.effects||[])if(!this.seen.has(e.id)){this.seen.add(e.id);this.event(e,Math.max(0,(e.until-(state.combatTime??state.time))/1000));}
+    for(const e of state.effects||[])if(!this.seen.has(e.id)){
+      this.seen.add(e.id);
+      const car=e.kind==='projectile-hit'?cars.get(e.target):null,point=car?.localToWorld(new THREE.Vector3(e.localX,e.localY,e.localZ));
+      this.event(point?{...e,x:point.x,y:point.y,z:point.z}:e,Math.max(0,(e.until-(state.combatTime??state.time))/1000));
+    }
     if(this.seen.size>WEAPON_EFFECT_LIMITS.seen)this.seen=new Set([...this.seen].slice(-WEAPON_EFFECT_LIMITS.seen/2));
-    this.events=this.events.filter(e=>this.drawEvent(e,dt,camera,viewportHeight));
+    this.events=this.events.filter(e=>this.drawEvent(e,dt,camera,viewportHeight,cars));
     const ids=new Set();
     for(const shot of state.projectiles||[]){
       const g=rockets.get(shot.id);if(!g)continue;ids.add(shot.id);const p=g.position,previous=this.projectiles.get(shot.id);
@@ -154,10 +177,6 @@ export class WeaponEffects{
         }
       }
       if(player.shield>0&&g.userData.shield?.material.uniforms)g.userData.shield.material.uniforms.time.value=now/1000;
-      if(player.firing==='flame'&&emit){
-        const forward=new THREE.Vector3(1,0,0).applyQuaternion(g.quaternion);for(let i=0;i<4;i++){const point=g.localToWorld(new THREE.Vector3(CAR_LENGTH/2+Math.random()*.7,.72,(Math.random()-.5)*.3)),speed=15+Math.random()*5;this.particle(point.x,point.y,point.z,i===0?0xfff2ad:i===1?0xffad31:0xff4c13,.2+Math.random()*.13,Math.min(.58,(FLAME_RANGE-CAR_LENGTH/2)/speed),forward.x*speed,forward.y*speed+.3+Math.random(),forward.z*speed,false,1.7);}
-        const nozzle=g.localToWorld(new THREE.Vector3(CAR_LENGTH/2+.15,.72,0));this.particle(nozzle.x,nozzle.y,nozzle.z,0x73aaff,.28,.065);
-      }
       if(player.firing==='taser'){
         this.ring(g.position.x,(player.groundY??g.position.y)+.1,g.position.z,TASER_RADIUS,0x278fd9,.1+.04*Math.sin(now*.012));
         if(emit){const point=g.localToWorld(new THREE.Vector3(0,2.2,0));this.particle(point.x,point.y,point.z,0x8cceff,.45,.06);}

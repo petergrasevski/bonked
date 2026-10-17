@@ -123,10 +123,11 @@ export function volcanoLavaBounds(fraction,length){
   const center=.69+Math.sin(u*11)*.045,width=.36*taper;
   return [[Math.max(.22,center-width+wave),Math.min(.99,center+width+wave*.3)]];
 }
-export const FACTORY_TIP={fraction:.88,length:30,buttonOffset:26,maxAngle:35*Math.PI/180,dropSeconds:.25,holdSeconds:1.5,riseSeconds:1.55,rearmSeconds:.5};
+// Keep each button five metres from its panel's nearest edge.
+export const FACTORY_TIP={fraction:.88,length:30,buttonOffset:20,maxAngle:35*Math.PI/180,dropSeconds:.25,holdSeconds:1.5,riseSeconds:1.55,rearmSeconds:.5};
 export const FACTORY_TIPS=[
   {...FACTORY_TIP,stateKey:'factoryTipAt'},
-  {...FACTORY_TIP,fraction:.70,buttonOffset:-36,stateKey:'factoryTip2At'},
+  {...FACTORY_TIP,fraction:.70,buttonOffset:-20,stateKey:'factoryTip2At'},
 ];
 export function factoryTipAt(fraction,length,margin=0){return FACTORY_TIPS.find(tip=>circuitDistance(fraction,tip.fraction,length)<tip.length/2+margin);}
 export function factoryTipAngle(seconds,at){

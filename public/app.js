@@ -358,7 +358,7 @@ for(const event of ['touchstart','touchmove','touchend'])document.addEventListen
 for(const event of ['gesturestart','gesturechange','gestureend','dblclick'])document.addEventListener(event,e=>{if(document.body.classList.contains('playing')&&!editable(e.target)&&e.cancelable)e.preventDefault();},{passive:false});
 $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>{if(e.target===$('dialog'))$('dialog').hidden=true;};
 $('settings-open').onclick=()=>{releaseControls();$('change-circuit').hidden=!state||state.host!==myId;$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;updateBotDifficulty();updateGraphicsStatus();$('settings-close').focus();};
-function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('race-settings'):$('settings-open')).focus();}
+function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('scene'):$('settings-open')).focus({preventScroll:true});}
 $('race-settings').onclick=$('settings-open').onclick;
 function updateBotDifficulty(){
   const control=$('bot-difficulty');control.value=state?.botDifficulty||'medium';

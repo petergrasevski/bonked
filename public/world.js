@@ -43,10 +43,11 @@ import {createGustTrails} from './desert-storm.js';
 import {createCoastalWater} from './water.js';
 import {projectilePose} from './projectile-motion.js';
 import * as THREE from 'three';
+import {createFlamethrower,createFlamethrowerMaterial} from './flamethrower.js';
 import {syncCarWeapon} from './car-weapons.js';
 import {buildLandmarks,animateLandmarks,LANDMARKS} from './landmarks.js';
 import { createPickupModel, PICKUP_COLORS } from './pickups.js';
-import { FLAME_RANGE,WEAPON_IDS } from '/shared/combat.js';
+import { WEAPON_IDS } from '/shared/combat.js';
 import {createSportsCar,disposeCarInstance} from './car-model.js';
 import { mergeGeometries } from '/vendor/BufferGeometryUtils.js';
 import { iceSplit,activeTrack, TRACK, SEGMENTS, ROAD_WIDTH, trackAt, angleDelta, COLORS, TRACK_LENGTH, START_FRACTION, PICKUP_LOCATIONS, spawnCar, MAX_PLAYERS, hasBarrier, damageLevel, damageSeverity, CAR_LENGTH, CAR_WIDTH, SURFACE_HALF_WIDTH, nearestTrack, collideCars, OBSTACLES } from '/shared/game.js';
@@ -294,7 +295,7 @@ export class World{
   createCar(color){
     const g=createSportsCar(color,{headlights:activeTrack.id==='ice'}),{paint}=g.userData;
     const shield=new THREE.Mesh(new THREE.SphereGeometry(3.2,20,12),createWeaponShieldMaterial());shield.position.y=.7;shield.scale.y=.65;shield.visible=false;g.add(shield);g.userData={...g.userData,shield,paint,baseColor:new THREE.Color(color),chassisSize:{length:CAR_LENGTH,width:CAR_WIDTH}};g.rotation.order='YXZ';
-    const flame=this.createFlame();flame.scale.x=(FLAME_RANGE-CAR_LENGTH/2)/8.35;g.add(flame);g.userData.flame=flame;const exhaust=new THREE.Group();exhaust.visible=false;for(const side of [-1,1]){const jet=this.createFlame();jet.visible=true;jet.position.set(-2.36,.37,side*.50);jet.rotation.y=Math.PI;jet.scale.set(.32,.13,.13);exhaust.add(jet);}g.add(exhaust);g.userData.boostExhaust=exhaust;
+    const flame=createFlamethrower(this.flamethrowerMaterial??=createFlamethrowerMaterial());g.add(flame);g.userData.flame=flame;const exhaust=new THREE.Group();exhaust.visible=false;for(const side of [-1,1]){const jet=this.createFlame();jet.visible=true;jet.position.set(-2.36,.37,side*.50);jet.rotation.y=Math.PI;jet.scale.set(.32,.13,.13);exhaust.add(jet);}g.add(exhaust);g.userData.boostExhaust=exhaust;
     if(activeTrack.id==='volcano'){const heatFlames=createWheelHeatFlames(this.heatFlameMaterial??=createWheelHeatMaterial());g.add(heatFlames);g.userData.heatFlames=heatFlames;}
     this.sceneMaterials.adopt(g);
     this.staticShadows?.apply(g);this.distanceFade.apply(g);return g;
@@ -353,6 +354,7 @@ export class World{
       if(g.userData.heatFlames)updateWheelHeatFlames(g.userData.heatFlames,car,now/1000);
       const oldWeapon=g.userData.weaponModel;syncCarWeapon(g,p);if(g.userData.weaponModel&&g.userData.weaponModel!==oldWeapon){this.sceneMaterials.adopt(g.userData.weaponModel,true);this.staticShadows?.apply(g.userData.weaponModel);this.distanceFade.apply(g.userData.weaponModel);}
       g.userData.flame.visible=p.firing==='flame'&&!p.eliminated;
+      if(g.userData.flame.visible)this.flamethrowerMaterial.uniforms.time.value=now/1000;
       const thrust=boostExhaustStrength(car.padBoostRemaining)*Math.sqrt(car.padBoostPower??1);g.userData.boostExhaust.visible=thrust>0&&!p.eliminated;for(const jet of g.userData.boostExhaust.children)jet.scale.set(.32*thrust,.13*Math.sqrt(thrust),.13*Math.sqrt(thrust));
       g.userData.shield.visible=p.shield>0&&!p.eliminated;
       g.userData.paint.emissive.setHex(p.tased>0?0x2868c5:0xff641c);g.userData.paint.emissiveIntensity=p.tased>0?.7:Math.min(1,(car.circuitHeat||0)/3)*.65;
