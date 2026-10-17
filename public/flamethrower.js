@@ -30,7 +30,7 @@ export function createFlamethrowerMaterial(){
 
 export function createFlamethrower(material){
   const jet=new THREE.Group();jet.name='flamethrower-jet';jet.visible=false;
-  jet.position.set(CAR_LENGTH/2,.9,0);
+  jet.position.set(-CAR_LENGTH/2,.9,0);jet.rotation.y=Math.PI;
   // Crossed layers keep the flame visible from above and from the chase camera.
   const length=FLAME_RANGE-CAR_LENGTH/2,geometry=new THREE.PlaneGeometry(length,5);
   for(const angle of [0,Math.PI/3,Math.PI*2/3]){

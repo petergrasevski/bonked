@@ -70,7 +70,7 @@ export function botShouldFire(room,p){
     if(id==='chain'&&Math.abs(dy)<2&&along<1&&along> -15&&Math.abs(side)<8)return true;
     if(id==='flame'){
       const x=t.x-origin.x,y=t.y+.7-origin.y,z=t.z-origin.z;
-      const fore=x*basis.forward.x+y*basis.forward.y+z*basis.forward.z,lateral=Math.abs(x*basis.side.x+y*basis.side.y+z*basis.side.z),vertical=Math.abs(x*basis.up.x+y*basis.up.y+z*basis.up.z);
+      const fore=-(x*basis.forward.x+y*basis.forward.y+z*basis.forward.z),lateral=Math.abs(x*basis.side.x+y*basis.side.y+z*basis.side.z),vertical=Math.abs(x*basis.up.x+y*basis.up.y+z*basis.up.z);
       if(fore>0&&fore<FLAME_RANGE&&lateral<1.2+fore*.24&&vertical<1.2+fore*.12)return true;
     }
     if(rays&&d2<20*20&&rays.some(r=>rayCar3D(r.origin,{x:r.direction.x*16,y:r.direction.y*16,z:r.direction.z*16},t,.1)!==null))return true;

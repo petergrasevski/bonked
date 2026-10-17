@@ -11,16 +11,16 @@ const camera=()=>{const c=new THREE.PerspectiveCamera();c.position.set(-20,25,20
 const state=(effects=[])=>({phase:'racing',code:'FX',round:1,trackId:'coast',time:1000,combatTime:1000,players:[],projectiles:[],mines:[],chains:[],arcs:[],effects});
 const update=(view,s,dt=1/60,objects={})=>view.update(s,objects.cars||new Map(),objects.rockets||new Map(),objects.mines||new Map(),objects.chains||new Map(),camera(),dt,1000);
 
-test('flamethrower stays ahead of a moving, turning car without leaving detached fire',()=>{
+test('flamethrower stays attached to the rear of a moving, turning car without leaving detached fire',()=>{
   const material=createFlamethrowerMaterial(),jet=createFlamethrower(material),car=new THREE.Group(),view=new WeaponEffects(new THREE.Scene()),s=state();
   car.add(jet);jet.visible=true;const cars=new Map([['driver',car]]);s.players=[{id:'driver',firing:'flame',vx:36,vz:0}];
   const bounds=new THREE.Box3().setFromObject(jet);
-  assert.ok(Math.abs(bounds.min.x-CAR_LENGTH/2)<1e-6);assert.ok(Math.abs(bounds.max.x-FLAME_RANGE)<1e-6);
+  assert.ok(Math.abs(bounds.min.x+FLAME_RANGE)<1e-6);assert.ok(Math.abs(bounds.max.x+CAR_LENGTH/2)<1e-6);
   for(let frame=0;frame<60;frame++){
     car.position.set(frame*.6,4,frame*.2);car.rotation.y=frame*.03;car.updateMatrixWorld(true);
     update(view,s,1/30,{cars});
-    const front=car.localToWorld(new THREE.Vector3(CAR_LENGTH/2,.9,0));assert.ok(jet.getWorldPosition(new THREE.Vector3()).distanceTo(front)<1e-8);
-    assert.equal(view.particles.length,0,'flame cannot linger behind the car or after releasing fire');
+    const rear=car.localToWorld(new THREE.Vector3(-CAR_LENGTH/2,.9,0));assert.ok(jet.getWorldPosition(new THREE.Vector3()).distanceTo(rear)<1e-8);
+    assert.equal(view.particles.length,0,'flame remains attached rather than leaving detached particles');
   }
   jet.children[0].geometry.dispose();material.dispose();view.dispose();
 });

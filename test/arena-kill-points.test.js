@@ -12,7 +12,8 @@ function fixture(){
 }
 for(const weapon of ['railgun','machinegun','plasma','rocket','pulse','taser','flame','shotgun','mine','chain'])test(`${weapon} credits exactly one arena kill bonus to its owner`,()=>{
   const {engine,room,attacker,victim}=fixture();giveWeapon(attacker.car,weapon);
-  if(['pulse','taser','flame'].includes(weapon))victim.car.x=-55;
+  if(['pulse','taser'].includes(weapon))victim.car.x=-55;
+  if(weapon==='flame')victim.car.x=-65;
   if(weapon==='shotgun')Object.assign(victim.car,{x:-60,z:5});
   if(['taser','flame'].includes(weapon)){attacker.simInput={fire:true};updateCombat(room,.1,10000);}
   else{

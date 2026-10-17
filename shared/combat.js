@@ -9,7 +9,7 @@ export const WEAPONS = {
   railgun:{name:'Railgun',icon:'↗',ammo:1,hint:'one piercing shot straight ahead'},
   mine:{name:'Mines',icon:'✹',ammo:3,hint:'tap to drop · three mines'},
   chain:{name:'Ball & chain',icon:'●',ammo:1,hint:'swing it into another car'},
-  flame:{name:'Flamethrower',icon:'♨',ammo:3,continuous:true,hint:'hold to burn · three seconds of fuel'},
+  flame:{name:'Flamethrower',icon:'♨',ammo:3,continuous:true,hint:'hold to burn behind you · three seconds of fuel'},
   plasma:{name:'Plasma cannon',icon:'◉',ammo:12,continuous:true,hint:'hold to fire · 12 plasma rounds'},
   taser:{name:'Taser',icon:'ϟ',ammo:5,continuous:true,hint:'hold to arc · 5 seconds · nearby cars'},
   shotgun:{name:'Shotgun',icon:'↔',ammo:4,hint:'fires from both sides · four shells'},
@@ -179,7 +179,7 @@ export function updateCombat(room,dt,now){
     }else if(c.item==='flame'&&held){
       const used=Math.min(dt,c.ammo);c.ammo-=used;c.firing='flame';
       for(const q of targets(room,p.id)){
-        const origin=weaponMuzzle(c,0,0),b=weaponBasis(c),dx=q.car.x-origin.x,dy=q.car.y+.7-origin.y,dz=q.car.z-origin.z,along=dx*b.forward.x+dy*b.forward.y+dz*b.forward.z,side=Math.abs(dx*b.side.x+dy*b.side.y+dz*b.side.z),vertical=Math.abs(dx*b.up.x+dy*b.up.y+dz*b.up.z);
+        const origin=weaponMuzzle(c,0,0),b=weaponBasis(c),dx=q.car.x-origin.x,dy=q.car.y+.7-origin.y,dz=q.car.z-origin.z,along=-(dx*b.forward.x+dy*b.forward.y+dz*b.forward.z),side=Math.abs(dx*b.side.x+dy*b.side.y+dz*b.side.z),vertical=Math.abs(dx*b.up.x+dy*b.up.y+dz*b.up.z);
         if(clearArenaSight(c,q.car)&&along>0&&along<FLAME_RANGE&&side<1.2+along*.24&&vertical<1.2+along*.12)hit(room,q,DAMAGE.flame*used,now,{owner:p.id});
       }
       if(c.ammo<=.00001){c.item=null;c.ammo=0;}

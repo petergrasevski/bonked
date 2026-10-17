@@ -18,7 +18,7 @@ function arena(item,x,z){
 test('bots use the firing geometry of every weapon and reject irrelevant targets',()=>{
   for(const [id,x,z,badX,badZ] of [
     ['machinegun',25,0,25,8],['plasma',25,0,25,8],['railgun',25,0,25,8],
-    ['shotgun',0,8,8,0],['flame',8,0,-8,0],['taser',0,6,0,12],
+    ['shotgun',0,8,8,0],['flame',-8,0,8,0],['taser',0,6,0,12],
     ['pulse',0,12,0,18],['mine',-12,0,12,0],['chain',-10,2,10,2],['shield',12,0,40,0],
   ]){
     const {a,b,room}=arena(id,x,z);b.car.vx=id==='mine'?20:0;
