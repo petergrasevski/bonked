@@ -472,3 +472,36 @@ body.mobile .lan-mobile-join{display:flex;grid-row:3;text-decoration:none}
 .entry-options{margin-top:8px;padding-top:8px}
 .entry-option{gap:4px}
 }
+/* Keep game type and arena instructions together with the map picker. */
+#room-panel .room-race-setup{display:flex;flex-direction:column;gap:10px;grid-column:2;grid-row:2/4;min-width:0;align-self:start}
+#room-panel .room-race-setup .track-choice{width:100%;min-width:0;align-self:stretch}
+#room-panel .room-race-setup #start{width:100%;min-height:44px;flex-shrink:0}
+.track-card[hidden]{display:none}
+.track-card.cafe canvas{opacity:1}.track-card.cafe .track-card-name{position:absolute;top:12px;left:12px;right:12px;text-shadow:0 2px 5px #000;font-size:22px}.track-card.cafe .track-card-description{position:absolute;bottom:12px;left:12px;right:28px;text-shadow:0 1px 4px #000}
+@media(orientation:portrait) and (max-width:800px){#room-panel .room-race-setup{order:3;width:100%;align-self:stretch}}
+
+/* Camera choices wrap within their column instead of widening the modal. */
+.settings-card{overflow-x:hidden}
+.settings-card .settings-grid,.settings-column,.graphics-control{min-width:0;max-width:100%;box-sizing:border-box}
+.camera-choice{margin:0 0 10px;padding:0;border:0;min-width:0;width:100%}
+.camera-choice legend{font-size:13px;font-weight:700;letter-spacing:0;margin-bottom:10px;padding:0}
+.camera-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.camera-options button{min-width:0;width:100%;white-space:normal;padding:12px 7px;min-height:66px;border:1px solid #8296a54d;border-radius:6px;background:#152633;color:#c4d4df;letter-spacing:0;text-align:left;box-sizing:border-box}
+.camera-options button strong,.camera-options button span{display:block;overflow-wrap:anywhere}
+.camera-options button strong{font-size:12px;line-height:1.4}.camera-options button span{font-size:10px;line-height:1.5;margin-top:4px;color:#9cb3c3}
+.camera-options button[aria-pressed=true]{border-color:#e9ca90;background:#3a3930;color:#fff0ce;box-shadow:inset 0 0 0 1px #e9ca9040}
+.camera-options button:focus-visible{outline:2px solid #e9ca90;outline-offset:2px}
+.camera-options button:disabled{cursor:default;opacity:.65}
+/* Only the circuit carousel scrolls sideways; the lobby remains contained. */
+#lobby:has(#room-panel:not([hidden])){box-sizing:border-box;overflow-x:hidden}
+#room-panel .room-race-setup{min-width:0;max-width:100%;overflow:hidden}
+#room-panel .track-choice,.circuit-carousel,#track-picker{box-sizing:border-box;min-width:0;max-width:100%}
+.arena-stamp{position:absolute;left:12%;right:12%;top:40%;padding:7px 2px;transform:rotate(-10deg);border:3px solid #ffe6b1;border-radius:5px;background:#6b3522e8;color:#ffe6b1;box-shadow:0 3px 12px #0006;font-size:clamp(18px,2.8vw,35px);font-weight:900;letter-spacing:.12em;text-align:center;line-height:1.1;text-shadow:none}
+.track-card.lan-unavailable{opacity:.5;filter:saturate(.25)}
+.track-card.lan-unavailable .track-card-description{font-size:10px}
+.race-minimap{position:absolute;top:max(18px,env(safe-area-inset-top));right:max(18px,env(safe-area-inset-right));width:210px;max-width:32vw;padding:10px;border:1px solid #b6cddd40;border-radius:10px;background:#101b25df;box-shadow:0 3px 12px #0003;pointer-events:none;box-sizing:border-box}
+.race-minimap[hidden]{display:none}.race-minimap canvas{display:block;width:100%;height:auto}
+.minimap-key{display:flex;justify-content:space-between;gap:7px;color:#bed0dc;font-size:9px;margin-top:4px;letter-spacing:0}.minimap-key .you{color:#fff0ce}.minimap-key .death{color:#ff7373}
+@media(max-height:560px){.race-minimap{width:160px;top:10px;right:10px;padding:7px}.minimap-key{font-size:8px}}
+@media(orientation:portrait){.race-minimap{top:85px;right:10px;width:165px;max-width:40vw}}
+#room-panel .room-race-setup #start{margin:0;max-width:100%;box-sizing:border-box}

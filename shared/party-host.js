@@ -12,7 +12,7 @@ export function createPartyHost({post,now=Date.now,graceMs=PLAYER_GRACE_MS}){
     const {type,id}=data;
     if(type==='create'){
       if(room)return;
-      room={code:data.code||'LOCAL',host:'lan-display',trackId:'coast',players:new Map()};engine.resetRoom(room,{newTournament:true});
+      room={mode:'lan',code:data.code||'LOCAL',host:'lan-display',trackId:'coast',players:new Map()};engine.resetRoom(room,{newTournament:true});
       post({type:'ready'});engine.publish(room);return;
     }
     if(!room)return;
@@ -38,7 +38,7 @@ export function createPartyHost({post,now=Date.now,graceMs=PLAYER_GRACE_MS}){
     if(type!=='command')return;
     const msg=data.message,p=id==='lan-display'?{id}:player;
     if(!p||!msg||typeof msg!=='object')return;
-    if(id==='lan-display'&&!['ping','start','rematch','lobby','track','bot','remove-bot','reset-scores'].includes(msg.type))return;
+    if(id==='lan-display'&&!['ping','start','rematch','lobby','track','game-type','bot','remove-bot','reset-scores'].includes(msg.type))return;
     if(id==='lan-display'&&['start','rematch'].includes(msg.type)&&!room.players.size)return deliver(id,{type:'error',message:'Join with a controller, connect a phone or add a bot first.'});
     if(id!=='lan-display'){
       if(!p.ws)return;

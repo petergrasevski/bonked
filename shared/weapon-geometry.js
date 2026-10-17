@@ -1,3 +1,4 @@
+import {ARENA_SOLIDS,ARENA_SIZE} from './arena.js';
 import {CAR_LENGTH,CAR_WIDTH,SEGMENTS,TRACK_LENGTH,activeTrack,hasBarrier,iceSplit,clamp} from './game.js';
 export const MUZZLE_HEIGHT=.9;
 export function weaponBasis(car){
@@ -33,6 +34,12 @@ function trackWalls(){
 }
 export function sweepTrackWalls(origin,delta,radius=.25){
   let first=null;
+  if(activeTrack.id==='cafe'){
+    const edge=ARENA_SIZE/2;
+    const solids=[...ARENA_SOLIDS,{x:-edge,z:0,w:1,d:ARENA_SIZE,h:20},{x:edge,z:0,w:1,d:ARENA_SIZE,h:20},{x:0,z:-edge,w:ARENA_SIZE,d:1,h:20},{x:0,z:edge,w:ARENA_SIZE,d:1,h:20}];
+    for(const p of solids){const interval=[0,first??1];if(slab(interval,origin.x,delta.x,p.x-p.w/2-radius,p.x+p.w/2+radius)&&slab(interval,origin.z,delta.z,p.z-p.d/2-radius,p.z+p.d/2+radius)&&slab(interval,origin.y,delta.y,-radius,p.h+radius))first=interval[0];}
+    return first;
+  }
   for(const w of trackWalls()){
     const extent=w.width+radius;
     if(Math.max(origin.x,origin.x+delta.x)<w.minX-extent||Math.min(origin.x,origin.x+delta.x)>w.maxX+extent||Math.max(origin.z,origin.z+delta.z)<w.minZ-extent||Math.min(origin.z,origin.z+delta.z)>w.maxZ+extent)continue;

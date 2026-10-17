@@ -1,3 +1,4 @@
+import {ARENA_SPAWNS,ARENA_PICKUPS,arenaSurface,constrainArena} from './arena.js';
 import {collideFactoryRotors,rotorBotTarget} from './factory-rotors.js';
 import {FACTORY_PRESSES,EXTRA_CIRCUITS,extraCircuitPoints,extraHalfWidth,extraHasBarrier,circuitSurface,applyCircuitForces,advanceCircuitHeat,heatSpeedMultiplier,FACTORY_TIPS,factoryTipAt,factoryTipAngle} from './extra-circuits.js';
 import {coastalHasBarrier} from './coastal-barriers.js';
@@ -54,6 +55,7 @@ function spline(p0, p1, p2, p3, t) {
   return p1 + .5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
 }
 export const TRACKS = Object.freeze({
+  cafe:{id:'cafe',name:'Cat Café Clash',description:'Balloon battle · coffee cups · climbing blocks',grip:1,gameType:'battle-arena'},
   coast:{id:'coast',name:'Saltwater Circuit',description:'Coastal causeways · technical turns',grip:1},
   ice:{id:'ice',name:'Frost & Furious',description:'2.03 km of ice · split lanes · exposed straights',grip:.12},
   desert:{id:'desert',name:'Redrock Overpass',description:'Mountain bridge · four jumps · mole flats',grip:.85},
@@ -73,7 +75,7 @@ function buildSegmentTree(start=0,end=SEGMENTS.length){
 }
 function segmentAtDistance(d){let lo=0,hi=SEGMENTS.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(SEGMENTS[mid].start+SEGMENTS[mid].len>=d)hi=mid;else lo=mid+1;}return SEGMENTS[lo];}
 export function getLandscape(){if(!landscapeCache.has(activeTrack.id))landscapeCache.set(activeTrack.id,createLandscape({id:activeTrack.id,segments:SEGMENTS,trackLength:TRACK_LENGTH,trackAt,nearestTrack,hasBarrier}));return landscapeCache.get(activeTrack.id);}
-export function terrainAt(x,z,ceiling=Infinity){const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=(activeTrack.id==='factory'?-8:-4)?{y:activeTrack.id==='factory'?-8:-4,nx:0,ny:1,nz:0}:null);}
+export function terrainAt(x,z,ceiling=Infinity){if(activeTrack.id==='cafe')return arenaSurface(x,z,ceiling);const land=getLandscape().surface.sample(x,z,ceiling);return land||(activeTrack.id!=='coast'&&ceiling>=(activeTrack.id==='factory'?-8:-4)?{y:activeTrack.id==='factory'?-8:-4,nx:0,ny:1,nz:0}:null);}
 const arcDistance=(a,b)=>Math.abs(((a-b+.5)%1+1)%1-.5)*TRACK_LENGTH;
 function icePoints(){
   // Each straight is 914.4m: exactly 60% of the former 1,524m.
@@ -101,6 +103,7 @@ export function iceSplit(x){
 }
 // Each side can independently be guarded; inner refers to the split's gap edge.
 export function hasBarrier(fraction,side=0,inner=false){
+  if(activeTrack.id==='cafe')return false;
   if(activeTrack.id==='ice'){
     const p=trackAt(fraction);
     // First straight's boost-fed right branch is exposed at both the crevasse
@@ -176,6 +179,7 @@ PICKUP_LOCATIONS = pickupFractions.flatMap((initialFraction,row)=>{
   return Array.from({length:count},(_,lane)=>{let offset=-edge+2*edge*lane/(count-1);if(iceSplit(p.x)>0&&Math.abs(offset)<iceSplit(p.x)+1.8)offset=Math.sign(offset||1)*(iceSplit(p.x)+1.8);return {...p,x:p.x+p.nx*offset,z:p.z+p.nz*offset,row,lane,fraction};});
 });
   BOOST_PADS=boostLayout({id,trackAt,nearestTrack,length:TRACK_LENGTH,carWidth:CAR_WIDTH,obstacles:[...OBSTACLES,...MOLES],segments:SEGMENTS});
+  if(id==='cafe'){PICKUP_LOCATIONS=ARENA_PICKUPS;PICKUP_ROW_COUNT=15;BOOST_PADS=[];OBSTACLES=[];MOLES=[];CRABS=[];}
   trackCache.set(id,{TRACK,SEGMENTS,TRACK_LENGTH,PLAZAS,OBSTACLES,MOLES,CRABS,PICKUP_ROW_COUNT,PICKUP_LOCATIONS,BOOST_PADS,segmentTree});
   return activeTrack;
 }
@@ -249,7 +253,7 @@ export function collideCoastalCrabs(car,seconds=car.raceTime||0){collideCrabs(ca
 export const gridSlotDistance=slot=>6+Math.floor(slot/2)*5.5;
 export function spawnCar(slot=0,startFraction=START_FRACTION) {
   const fraction = startFraction - gridSlotDistance(slot)/TRACK_LENGTH;
-  const p=trackAt(fraction), side=(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
+  const p=activeTrack.id==='cafe'?ARENA_SPAWNS[(slot*7)%15]:trackAt(fraction), side=activeTrack.id==='cafe'?0:(slot%2===0?-1:1)*(2.3+iceSplit(p.x)*1.05);
   return { raceTime:0,contact:null,contactTime:0,moleCooldown:0,steering:0,padBoostRemaining:0,padBoostFrom:0,padBoostPower:1,gridSlot:slot,tased:0,tasePhase:0,nudgeTime:0,nudgeCooldown:0,nudgeHeld:0,nudgeHits:[], x:p.x+p.nx*side,z:p.z+p.nz*side,angle:p.angle,vx:0,vz:0,progress:fraction-START_FRACTION,trackFraction:fraction,lap:1,item:null,boost:0,spinout:0,launchResult:null,stun:0,finished:false,finishTime:null,eliminated:false,eliminatedAt:null,health:100,shield:0,ammo:0,fireCooldown:0,firing:null,groundY:p.y,y:p.y,vy:0,roll:0,pitch:Math.atan(p.grade||0),rollVelocity:0,pitchVelocity:0,yawVelocity:0,impactTime:0,wallCooldown:0,contactCooldown:0,wrecked:false,overturned:false,falling:false };
 }
 export function sanitizeInput(raw) {
@@ -267,14 +271,14 @@ export function advanceNudge(car,dt){
 
 }
 // Only active nudges check contacts; each target can be hit once per press.
-export function resolveNudges(cars,{damage=true}={}){
+export function resolveNudges(cars,{damage=true,onElimination}={}){
   for(const a of cars){
     if(!a.nudgeMoved||a.eliminated||a.y-(a.groundY||0)>.05)continue;
     const nx=-Math.sin(a.nudgeAngle)*a.nudgeDirection,nz=Math.cos(a.nudgeAngle)*a.nudgeDirection;
     for(const b of cars){
       if(a===b||Math.abs(a.y-b.y)>1.3||b.eliminated||b.finished||b.falling||b.y-(b.groundY||0)>.05||b.shield>0||a.nudgeHits.includes(b.gridSlot))continue;
       const contact=carContact(a,b);if((b.x-a.x)*nx+(b.z-a.z)*nz<=0||!contact)continue;
-      a.nudgeHits=[...a.nudgeHits,b.gridSlot];if(damage)damageCar(b,5);
+      a.nudgeHits=[...a.nudgeHits,b.gridSlot];if(damage&&damageCar(b,5)&&b.wrecked)onElimination?.(b,a);
       if(!b.eliminated){
         // The powered sidestep contributes contact velocity. Apply a rigid-body
         // impulse at the contact patch: quarter hits turn a car, door hits slide it.
@@ -377,12 +381,14 @@ function tipSurface(t,x,z){
   return {...t,y:t.y+lateral*slope,surface:{nx:-t.nx*Math.sin(angle),ny,nz:-t.nz*Math.sin(angle)}};
 }
 export function roadSurfaceAt(x,z,hint){
+  if(activeTrack.id==='cafe')return {...arenaSurface(x,z),x,z,halfWidth:80,fraction:0};
   const t=nearestTrack(x,z,hint),gap=iceSplit(t.x),lateral=Math.abs((x-t.x)*t.nx+(z-t.z)*t.nz);
   return t.distance<=t.halfWidth+.6&&(gap<.01||lateral>=gap)?tipSurface(t,x,z):null;
 }
 // Tyres follow visible land. Height limits distinguish a reachable surface from
 // an overhead deck; slope traction, gravity and impacts govern volcano terrain.
 export function drivingSurfaceAt(x,z,hint,ceiling=Infinity){
+  if(activeTrack.id==='cafe'){const surface=arenaSurface(x,z,ceiling);return {...surface,surface,x,z,fraction:0,halfWidth:80};}
   const road=roadSurfaceAt(x,z,hint);if(road&&road.y<=ceiling)return road;
   if(activeTrack.id==='volcano'){
     const surface=getLandscape().surface.sample(x,z,ceiling);
@@ -440,6 +446,7 @@ function supportRoad(car,t){
   }
 }
 export function constrainRoad(car){
+  if(activeTrack.id==='cafe')return constrainArena(car);
   if(activeTrack.id==='factory'){tipTime=car.circuitTime??car.raceTime??0;tipState=car;}
   const t=nearestTrack(car.x,car.z,car.trackFraction);
   const support=['coast','factory','volcano'].includes(activeTrack.id)?drivingSurfaceAt(car.x,car.z,car.trackFraction,['factory','volcano'].includes(activeTrack.id)?car.y+.6:Infinity):null;
@@ -619,7 +626,7 @@ export function carContact(a,b){
   const normal=(a.x*nx+a.z*nz+radius(fa,sa,nx,nz)+b.x*nx+b.z*nz-radius(fb,sb,nx,nz))/2;
   return {depth,nx,nz,x:nx*normal+tx*tangent,z:nz*normal+tz*tangent};
 }
-export function collideCars(cars,{road=false,damage=true}={}){
+export function collideCars(cars,{road=false,damage=true,onElimination}={}){
   for(let pass=0;pass<6;pass++){for(let i=0;i<cars.length;i++)for(let j=i+1;j<cars.length;j++){
     const a=cars[i],b=cars[j];if((a.eliminated&&!a.wrecked)||(b.eliminated&&!b.wrecked)||Math.abs(a.y-b.y)>1.3||a.falling||b.falling)continue;
     const hit=carContact(a,b);if(!hit)continue;const {nx,nz}=hit;
@@ -643,7 +650,7 @@ export function collideCars(cars,{road=false,damage=true}={}){
       shoveRollover(a,-tx*friction*ma,-tz*friction*ma);shoveRollover(b,tx*friction*mb,tz*friction*mb);
       softenPadBoostImpact(a,beforeA,Math.hypot(a.vx,a.vz));softenPadBoostImpact(b,beforeB,Math.hypot(b.vx,b.vz));
       a.impactTime=b.impactTime=.65;
-      if(damage&&pass===0&&speed>7){if(a.contactCooldown<=0){damageCar(a,(speed-7)*.35);a.contactCooldown=.2;}if(b.contactCooldown<=0){damageCar(b,(speed-7)*.35);b.contactCooldown=.2;}}
+      if(damage&&pass===0&&speed>7){if(a.contactCooldown<=0){if(damageCar(a,(speed-7)*.35)&&a.wrecked)onElimination?.(a,b);a.contactCooldown=.2;}if(b.contactCooldown<=0){if(damageCar(b,(speed-7)*.35)&&b.wrecked)onElimination?.(b,a);b.contactCooldown=.2;}}
     }
   }
     if(road)for(const car of cars)if(!car.eliminated||car.wrecked)constrainRoad(car);

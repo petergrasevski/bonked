@@ -590,3 +590,11 @@ After pushing the branch, select it when manually running the deploy workflow.
 For rollback, manually run that workflow on the unchanged `main` branch. Its
 occupancy gate waits for active online rooms and LAN parties before restarting.
 No deployment has been performed as part of implementing this feature.
+
+### Cameras and Battle Arena
+
+Settings → Camera view offers Standard (follow the pack) and Third person (follow your car). The preference is saved locally. Third-person racing includes a minimap that follows and zooms into the relevant track section, keeping all cars, your marker and the moving red death line visible.
+
+Choose **Cat Café Clash** at the end of the lobby carousel; its **ARENA** stamp distinguishes it from the racing circuits. It uses a more distant third-person camera, 100 health per car and the existing weapon damage values. The square café has coffee cups, cats, cover, three raised decks, ramps, 15 round spawn positions and 15 regenerating pickups. There are no balloons, laps or death line. Eliminated drivers get an overhead camera and push-only sky beams. The last car standing wins, with the existing tournament scoring and ready-up flow. Each arena kill (weapons, rams or nudges) also awards its attacker one immediate tournament point and a brief +1 above their car. Round results include those bonuses once, and placement penalties cannot erase bonuses at the zero-score floor. Switching between arena and racing starts a fresh tournament; switching racing circuits preserves scores.
+
+Cat Café Clash is disabled in local LAN parties, which currently share one camera and HUD. Independent views require separate game clients. Local split screen would require per-player rendering viewports, HUDs and spectator aiming; it is not implemented. Bots can play the arena and seek pickups and opponents.

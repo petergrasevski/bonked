@@ -1,11 +1,12 @@
 import {cameraFrame} from './chase.js';
 import {skyGroundAt} from './sky-ground.js';
 import {PULSE_RADIUS,pulsePush} from './shockwave.js';
-import {nearestTrack} from './game.js';
+import {activeTrack,nearestTrack} from './game.js';
 export const SKY_DELAY=600,SKY_COOLDOWN=3000;
 export const SKY_TRACK_MARGIN=10;
 export function sanitizeSkyAim(aim){return aim&&Number.isFinite(aim.x)&&Number.isFinite(aim.z)?{x:aim.x,z:aim.z}:null;}
 export function clampSkyAimToTrack(aim){
+  if(activeTrack.id==='cafe')return {x:Math.max(-78,Math.min(78,aim.x)),z:Math.max(-78,Math.min(78,aim.z))};
   // Use the full outer road width, including the ice split's centre gap.
   // The shared spatial index also handles bends and the desert crossing.
   const road=nearestTrack(aim.x,aim.z),limit=road.halfWidth+.6+SKY_TRACK_MARGIN;

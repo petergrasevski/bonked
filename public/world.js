@@ -1,3 +1,7 @@
+import {ScorePopups} from './score-popups.js';
+import {sweepTrackWalls} from '/shared/weapon-geometry.js';
+import {buildCatCafe} from './cat-cafe.js';
+import {arenaOverview} from '/shared/arena.js';
 import {HeatOverlay} from './heat-overlay.js';
 import {createWheelHeatMaterial,createWheelHeatFlames,updateWheelHeatFlames} from './wheel-heat.js';
 import {CIRCUIT_PALETTES,circuitRoadMaterial,circuitGroundMaterial,buildExtraCircuit} from './extra-circuits.js';
@@ -48,13 +52,13 @@ import { mergeGeometries } from '/vendor/BufferGeometryUtils.js';
 import { iceSplit,activeTrack, TRACK, SEGMENTS, ROAD_WIDTH, trackAt, angleDelta, COLORS, TRACK_LENGTH, START_FRACTION, PICKUP_LOCATIONS, spawnCar, MAX_PLAYERS, hasBarrier, damageLevel, damageSeverity, CAR_LENGTH, CAR_WIDTH, SURFACE_HALF_WIDTH, nearestTrack, collideCars, OBSTACLES } from '/shared/game.js';
 import { cameraFrame, createChase } from '/shared/chase.js';
 import {factoryTipAt} from '/shared/extra-circuits.js';
-import { CAMERA_FOV, stepCamera, cameraPose } from '/shared/camera.js';
+import { CAMERA_FOV, stepCamera, stepPersonalCamera, cameraPose } from '/shared/camera.js';
 const C={asphalt:0x394951,sand:0x938d7c,cliff:0x777568,cream:0xc8c6b7,coral:0xae6654,navy:0x263941,teal:0x497475,lime:0xcbd3db};
 export class World{
   constructor(container,{preview=false,deferred=false}={}){
-    this.trackId=activeTrack.id;this.previewOnly=preview;this.distanceCulledScenery=[];this.distanceFade=new DistanceFade();this.sceneMaterials=new SceneMaterials();
+    this.trackId=activeTrack.id;this.cameraView='shared';this.previewOnly=preview;this.distanceCulledScenery=[];this.distanceFade=new DistanceFade();this.sceneMaterials=new SceneMaterials();
     this.container=container;this.scene=new THREE.Scene();this.scene.background=new THREE.Color(0x8094a3);
-    this.weaponEffects=new WeaponEffects(this.scene);
+    this.weaponEffects=new WeaponEffects(this.scene);this.scorePopups=new ScorePopups(this.scene);
     this.tyreTracks=createTyreTracks();this.scene.add(this.tyreTracks.mesh);
     this.carShadows=createCarShadows();this.scene.add(this.carShadows.mesh);
     this.nudgeEffects=createNudgeEffects(MAX_PLAYERS);this.scene.add(this.nudgeEffects.group);
@@ -75,6 +79,13 @@ export class World{
     if(!deferred){for(const [,build]of this.buildStages())build();this.finishBuild();if(!preview)this.renderer.compile(this.scene,this.camera);}
   }
   *buildStages(){
+    if(this.trackId==='cafe'){
+      yield ['Building Cat Café',()=>{buildCatCafe(this);this.landmarks=[];this.waterMaterial={uniforms:{time:{value:0}}};}];
+      yield ['Preparing arena objects',()=>{this.buildPickups();this.buildEliminationLine();this.buildParticles();}];
+      yield ['Preparing cars',()=>{this.previewCars=COLORS.slice(0,2).map(color=>{const mesh=this.createCar(color);this.scene.add(mesh);return mesh;});}];
+      return;
+    }
+
     yield ['Building road',()=>this.buildTrack()];
     yield ['Building terrain',()=>{if(activeTrack.id==='coast')this.buildScenery();else this.buildBiome();}];
     yield ['Adding landmarks',()=>{this.landmarks=activeTrack.id==='coast'?buildLandmarks(this):[];}];
@@ -272,7 +283,8 @@ export class World{
   }
   followFrame(frame,dt,cars){
     const aspect=this.container.clientWidth/Math.max(1,this.container.clientHeight);
-    const f=this.follow=stepCamera(this.follow,frame,cars,aspect,dt,activeTrack.camera),pose=cameraPose(f);
+    const f=this.follow=frame.personalCar?stepPersonalCamera(this.follow,frame.personalCar,dt):frame.arenaOverview?{...frame,distance:Math.max(205,95/(Math.tan(CAMERA_FOV*Math.PI/360)*aspect)),far:Math.max(350,95/(Math.tan(CAMERA_FOV*Math.PI/360)*aspect)+150)}:stepCamera(this.follow,frame,cars,aspect,dt,activeTrack.camera),pose=cameraPose(f);
+    if(frame.personalCar){const c=frame.personalCar,origin={x:c.x,y:(c.y||0)+2.2,z:c.z},delta={x:pose.x-origin.x,y:pose.y-origin.y,z:pose.z-origin.z},hit=sweepTrackWalls(origin,delta,.4);if(hit!==null){const t=Math.max(.05,hit-.04);pose.x=origin.x+delta.x*t;pose.y=origin.y+delta.y*t;pose.z=origin.z+delta.z*t;}}
     // Avoid drawing scenery already hidden by weather; always retain the pack.
     const far=sceneRange(this.trackId,f);this.distanceFade.update(far);
     if(this.camera.aspect!==aspect||this.camera.far!==far){this.camera.aspect=aspect;this.camera.far=far;this.camera.updateProjectionMatrix();}
@@ -311,7 +323,7 @@ export class World{
     sync(this.chains,state?.chains||[],()=>{const g=new THREE.Group();const ball=this.mesh(new THREE.IcosahedronGeometry(.95,1),0x4b5258,0,0,0,g);for(let i=0;i<8;i++)this.mesh(new THREE.TorusGeometry(.22,.07,4,6),0xa4a9ad,0,0,0,g);return g;},(g,b)=>{const pose=g.userData.motion=projectilePose(g.userData.motion,{...b,vx:b.renderVx??b.vx,vy:b.renderVy??b.vy,vz:b.renderVz??b.vz,angle:0,pitch:0},state.combatTime??state.time,dt,now);const ownerState=state.players.find(p=>p.id===b.owner),ballRoad=nearestTrack(pose.x,pose.z,ownerState?.trackFraction);if(ballRoad.distance<=ballRoad.halfWidth+.6)pose.y=Math.max(pose.y,ballRoad.y+.98);const owner=this.cars.get(b.owner),anchor=owner?owner.localToWorld(new THREE.Vector3(-CAR_LENGTH/2,.9,0)):{x:b.anchorX??pose.x,y:b.anchorY??pose.y,z:b.anchorZ??pose.z};g.children[0].position.set(pose.x,pose.y,pose.z);g.children[0].rotation.z=now*.002;for(let i=1;i<9;i++){const t=i/9,x=pose.x+(anchor.x-pose.x)*t,z=pose.z+(anchor.z-pose.z)*t,road=nearestTrack(x,z,ownerState?.trackFraction),lineY=pose.y+(anchor.y-pose.y)*t,y=road.distance<=road.halfWidth+.6?Math.max(lineY,road.y+.22):lineY;g.children[i].position.set(x,y,z);g.children[i].rotation.set(i%2*Math.PI/2,-Math.atan2(anchor.z-pose.z,anchor.x-pose.x),Math.atan2(anchor.y-pose.y,Math.hypot(anchor.x-pose.x,anchor.z-pose.z)));}});
   }
   dispose(){
-    this.heatOverlay?.dispose();this.staticShadows?.dispose();this.weaponEffects.dispose();this.resizeObserver?.disconnect();this.previewTarget?.dispose();
+    this.scorePopups.dispose();this.heatOverlay?.dispose();this.staticShadows?.dispose();this.weaponEffects.dispose();this.resizeObserver?.disconnect();this.previewTarget?.dispose();
     const geometries=new Set(),materials=new Set(this.sceneMaterials.materials.values()),textures=new Set(this.textures.values());
     this.scene.traverse(o=>{if(o.isInstancedMesh)o.dispose();if(o.name==='ice-headlight')o.dispose();if(o.geometry)geometries.add(o.geometry);for(const geometry of o.userData.detailLevels||[])geometries.add(geometry);for(const m of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){materials.add(m);if(m.map)textures.add(m.map);}});
     for(const g of geometries)if(!g.userData.sharedCarResource)g.dispose();for(const m of materials)if(!m.userData.sharedCarResource)m.dispose();for(const t of textures)t.dispose();
@@ -328,10 +340,10 @@ export class World{
     const previewProgress=START_FRACTION+((now/1000*22)%TRACK_LENGTH)/TRACK_LENGTH;
     const previewChase=createChase([{progress:previewProgress-START_FRACTION}]);
     const mode=state?`${state.code}:${state.round||1}`:'preview';if(this.cameraMode!==mode){this.follow=null;this.cameraMode=mode;this.weaponEffects.reset();this.nudgeEffects.reset();this.tyreTracks.reset();}
-    this.deadline.visible=!!state&&state.phase!=='lobby';
+    this.deadline.visible=this.trackId!=='cafe'&&!!state&&state.phase!=='lobby';
     if(state?.chase){const d=state.chase;this.deadline.position.set(d.x,d.y||0,d.z);this.deadline.rotation.order='YXZ';this.deadline.rotation.set(0,-d.angle,Math.atan(d.grade||0));this.deadline.scale.z=((d.halfWidth||6)*2+2)/(ROAD_WIDTH+2);}
     const previewFleet=[];
-    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const fraction=previewProgress-i*1.7/TRACK_LENGTH,p=trackAt(fraction),lane=Math.min(p.halfWidth-CAR_WIDTH/2-.5,activeTrack.id==='ice'?iceSplit(p.x)+1.8:1.8),side=i===0?-lane:lane,x=p.x+p.nx*side,z=p.z+p.nz*side;g.position.set(x,p.y,z);g.rotation.set(0,-p.angle,Math.atan(p.grade||0));updateCarVisuals(g,{...p,vx:Math.cos(p.angle)*22,vz:Math.sin(p.angle)*22,steering:angleDelta(trackAt(fraction+.002).angle,p.angle)*4},dt);previewFleet.push({...p,x,z,trackFraction:fraction,progress:fraction-START_FRACTION});}});
+    const inRoom=!!state;this.previewCars.forEach((g,i)=>{g.visible=!inRoom;if(!inRoom){const fraction=previewProgress-i*1.7/TRACK_LENGTH,p=this.trackId==='cafe'?{x:-10+i*20,y:0,z:15,angle:0,halfWidth:6,nx:0,nz:1}:trackAt(fraction),lane=Math.min(p.halfWidth-CAR_WIDTH/2-.5,activeTrack.id==='ice'?iceSplit(p.x)+1.8:1.8),side=i===0?-lane:lane,x=p.x+p.nx*side,z=p.z+p.nz*side;g.position.set(x,p.y,z);g.rotation.set(0,-p.angle,Math.atan(p.grade||0));updateCarVisuals(g,{...p,vx:Math.cos(p.angle)*22,vz:Math.sin(p.angle)*22,steering:angleDelta(trackAt(fraction+.002).angle,p.angle)*4},dt);previewFleet.push({...p,x,z,trackFraction:fraction,progress:fraction-START_FRACTION});}});
     const present=new Set(),tyreCars=[];
     if(state)for(const p of state.players){present.add(p.id);let g=this.cars.get(p.id);if(!g){g=this.createCar(p.color);this.scene.add(g);this.cars.set(p.id,g);g.position.set(p.x,0,p.z);g.rotation.y=-p.angle;}
       const car=p.id===localId&&localCar&&!p.wrecked?localCar:p;const a=1;g.userData.snap=false;
@@ -361,11 +373,15 @@ export class World{
     this.carShadows.update(state?visibleCars:previewFleet);
     this.nudgeEffects.update(now/1000,state?.phase==='racing'?visibleCars:[]);
     // Rendering is read-only: physics contacts are solved only on simulation ticks.
-    this.followFrame(state?.camera||cameraFrame(previewChase,previewFleet),dt,state?visibleCars:previewFleet);
+    const me=state?.players.find(p=>p.id===localId),personal=!!me&&!me.eliminated&&state.phase!=='lobby'&&(this.trackId==='cafe'||this.cameraView==='personal');
+    const viewMode=personal?'personal':this.trackId==='cafe'?'arena':'shared';if(this.viewMode!==viewMode){this.follow=null;this.viewMode=viewMode;}
+    const cameraTarget=personal?{personalCar:visibleCars.find(p=>p.id===localId)||me}:this.trackId==='cafe'?arenaOverview():state?.camera||cameraFrame(previewChase,previewFleet);
+    this.followFrame(cameraTarget,dt,state?visibleCars:previewFleet);
     this.heatOverlay?.update(visibleCars,this.camera,this.container.clientWidth,this.container.clientHeight);
     this.skyView.update(state,localId,this.camera,this.follow,this.skyMove,dt,this.skyControllers);this.skyAim=this.skyView.aim;
     this.boxes.forEach((g,i)=>{const pickup=state?.pickups[i];g.visible=g.userData.available=!state||pickup?.readyAt<=state.time;this.setPickupModel(g,pickup?.item||WEAPON_IDS[i%WEAPON_IDS.length]);g.userData.model.rotation.y=now*.00045+i;g.position.y=(PICKUP_LOCATIONS[i]?.y||0)+1.9+Math.sin(now*.0017+i)*.18;g.userData.halo.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.08-g.position.y;g.userData.ring.position.y=(PICKUP_LOCATIONS[i]?.y||0)+.13-g.position.y;});
     this.combatObjects(state,dt,now);this.weaponEffects.update(state,this.cars,this.rockets,this.mines,this.chains,this.camera,dt,now,this.container.clientHeight);animateLandmarks(this,now);this.updateParticles(dt);
+    this.scorePopups.update(state,this.cars,now);
     this.atmosphere.update(this.camera,now,this.follow?.y||0,state?(state.phase==='racing'?state.raceTime:0):now/1000,this.follow);this.cullDistantScenery(this.camera);this.renderer.render(this.scene,this.camera);
   }
   screenPosition(id){const g=this.cars.get(id);if(!g)return null;const p=g.position.clone();p.y+=3.3;p.project(this.camera);const r=this.container.getBoundingClientRect();return {x:r.left+(p.x+1)/2*r.width,y:r.top+(1-p.y)/2*r.height};}

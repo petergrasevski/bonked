@@ -6,9 +6,9 @@ import {TRACK_TITLES} from '../public/track-title-assets.js';
 import {TRACKS} from '../shared/game.js';
 import {assetHeaders} from '../server-assets.js';
 const root=new URL('../public/',import.meta.url);
-test('all five tracks have title artwork and a small preview fallback',async()=>{
-  assert.deepEqual(Object.keys(TRACK_TITLES).sort(),Object.keys(TRACKS).sort());
-  for(const id of Object.keys(TRACKS)){assert.ok((await stat(new URL('track-previews/'+id+'.webp',root))).size<30000);}
+test('all race tracks have title artwork and a small preview fallback',async()=>{
+  assert.deepEqual(Object.keys(TRACK_TITLES).sort(),Object.keys(TRACKS).filter(id=>id!=='cafe').sort());
+  for(const id of Object.keys(TRACK_TITLES)){assert.ok((await stat(new URL('track-previews/'+id+'.webp',root))).size<30000);}
   assert.equal(TRACKS.factory.name,'Skid Mark Industries');assert.equal(TRACKS.volcano.name,'Krakatoa');assert.equal(TRACKS.ice.name,'Frost & Furious');
 });
 test('three generated titles are compact, transparent PNGs with content-addressed immutable URLs',async()=>{

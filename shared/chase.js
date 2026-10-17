@@ -1,4 +1,5 @@
-import { START_FRACTION, TRACK_LENGTH, TOP_SPEED, trackAt } from './game.js';
+import {arenaOverview} from './arena.js';
+import { activeTrack, START_FRACTION, TRACK_LENGTH, TOP_SPEED, trackAt } from './game.js';
 export const CAMERA_LOOKAHEAD = 9; // Road metres ahead of the leader.
 export const CHASE_DISTANCE = TOP_SPEED * 2.25; // Fixed road distance, not a timer.
 // Race progress is unwrapped across the start line. Never compare wrapped fractions.
@@ -25,6 +26,7 @@ export function chaseSnapshot(chase){
 export const CAMERA_REAR_SPACE = 9;
 // All drivers receive the same route target. Eliminated cars stop stretching the pack.
 export function cameraFrame(chase,cars=[]){
+  if(activeTrack.id==='cafe')return arenaOverview();
   const running=cars.filter(car=>!car.eliminated);
   const leader=running.length?Math.max(...running.map(car=>car.progress)):chase.leaderProgress;
   const rear=running.length?Math.min(...running.map(car=>car.progress)):leader;

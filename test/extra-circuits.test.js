@@ -118,4 +118,4 @@ test('presses occupy the geometric inside lane, and factory outside corners have
   selectTrack('factory');for(const f of FACTORY_PRESSES){const p=trackAt(f);assert.equal(circuitSurface('factory',f,p.insideSide*p.halfWidth*.56,p.halfWidth,TRACK_LENGTH,2.5,p.insideSide).kind,'press');assert.notEqual(circuitSurface('factory',f,-p.insideSide*p.halfWidth*.56,p.halfWidth,TRACK_LENGTH,2.5,p.insideSide).kind,'press');}
   let exposed=0;for(const p of SEGMENTS)if(Math.abs(p.turn)>.065&&!hasBarrier(p.start/TRACK_LENGTH,-p.insideSide))exposed++;assert.ok(exposed>100);
 });
-test('the removed water circuit cannot be selected',()=>{assert.equal(Object.keys(TRACKS).length,5);assert.throws(()=>selectTrack('ruins'));});
+test('the removed water circuit cannot be selected',()=>{assert.equal(Object.keys(TRACKS).length,6);assert.throws(()=>selectTrack('ruins'));});

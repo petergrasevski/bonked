@@ -1,3 +1,5 @@
+import {RaceMinimap} from './race-minimap.js';
+import {readCameraView,saveCameraView} from './camera-settings.js';
 import {createControllerConnectionGuide} from './controller-connection-guide.js';
 import {LocalControllers} from './local-controllers.js';
 import {createLocalPartyUI} from './local-party-ui.js';
@@ -53,6 +55,15 @@ const predictionClock=new PredictionTimeline();
 let lagReportUI;
 const voice=new PartyVoice($('voice-toggle'));
 let controllerLeft=false,controllerRight=false,controllerBlocked=false;
+let cameraStorage;try{cameraStorage=localStorage;}catch{}
+let cameraView=readCameraView(cameraStorage);
+function syncCameraView(arena=false){
+  for(const view of ['shared','personal']){const button=$('camera-'+view);button.disabled=arena;button.setAttribute('aria-pressed',String(view===(arena?'personal':cameraView)));}
+  $('camera-view-hint').textContent=arena?'Arena uses third person. Eliminated drivers get a top-down view.':'Saved on this device. Third person includes a race minimap.';
+}
+for(const view of ['shared','personal'])$('camera-'+view).onclick=()=>{cameraView=saveCameraView(cameraStorage,view);if(world){world.cameraView=cameraView;world.follow=null;}syncCameraView();};
+syncCameraView();
+const raceMinimap=new RaceMinimap($('race-ui'));
 function selectWorld(id){circuitLoader.request(id);}
 let world,displayGuide=null,howToPlay=null,controllerGuide=null;
 const weaponHud=new WeaponHUD($('desktop-weapon'),()=>world);
@@ -60,6 +71,7 @@ const resultsScreen=new RoundResults($('results'));
 const trackPicker=createTrackPicker($('track-picker'),()=>world,chooseCircuit,()=>circuitLoader.loading);
 const optimisticBots=new OptimisticBots();
 try{world=await World.load($('scene'),{progress:stage=>window.bonkedStartup?.progress(({'Caching scenery shadows':'Finishing touches','Preparing race objects':'Getting the race ready'}[stage]||stage)+'…')});}catch(error){window.bonkedStartup?.fail('Could not prepare 3D graphics. Try a recent Safari or Chrome browser with hardware acceleration enabled.');throw error;}
+world.cameraView=cameraView;
 let snapshotToReconcile=null;
 const localPresentation=new LocalPresentation();
 let lanTransport=null,lanWakeLock=null,partyControllers=null,partyUI=null;
@@ -80,7 +92,7 @@ const circuitLoader=new CircuitLoader({initialId:world?.trackId,build:async(id,o
   releaseControls();stopGameAudio();predicted=null;predictedOthers=[];corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();history=[];pending=[];accumulator=0;
   await yieldToLobby();world?.dispose();world=null;selectTrack(id);$('scene').setAttribute('aria-label','3D view of '+activeTrack.name);
   return World.load($('scene'),options);
-},onReady:loaded=>{world=loaded;world.resolution?.setQuality(graphicsQuality);if(state?.trackId===loaded.trackId)snapshotToReconcile={state,at:lastState};},onChange:updateCircuitStatus});
+},onReady:loaded=>{world=loaded;world.cameraView=cameraView;world.resolution?.setQuality(graphicsQuality);if(state?.trackId===loaded.trackId)snapshotToReconcile={state,at:lastState};},onChange:updateCircuitStatus});
 function chooseCircuit(id){
   if(id===(requestedTrack||state?.trackId))return;
   requestedTrack=id;updateUI(performance.now());
@@ -180,7 +192,7 @@ updateEntryButtons();
 function enter(type){const name=$('name').value.trim();if(!name){$('name').focus();return toast('Enter your name first.');}voice.prepare();try{localStorage.setItem('drift-name',name);}catch{}if(type==='join'&&!/^[A-Z]{3}$/.test($('code').value.toUpperCase()))return toast('Enter the three-letter room code.');const msg={type,name,code:$('code').value.toUpperCase()};cancelEntryRetry();entryRequest=msg;setBusy(true);if(!send(msg)){intent=msg;toast('Connecting to the race server…');}}
 $('lan-host').onclick=hostLanParty;
 $('create').onclick=()=>enter('create');$('join').onclick=()=>enter('join');$('code').addEventListener('input',()=>{$('code').value=$('code').value.toUpperCase().replace(/[^A-Z]/g,'');updateEntryButtons();});$('code').addEventListener('keydown',e=>{if(e.key==='Enter')enter('join');});$('name').addEventListener('keydown',e=>{if(e.key==='Enter')enter(inviteCode?'join':'create');});
-function clearRoom(){localPresentation.reset();partyControllers?.dispose();partyUI?.dispose();partyControllers=null;partyUI=null;$('controller-configure').hidden=true;$('local-mapping').hidden=true;$('copy').disabled=false;$('room-code').previousElementSibling.textContent='Room code';lanWakeLock?.release().catch(()=>{});lanWakeLock=null;const oldLan=lanTransport;lanTransport=null;if(oldLan){oldLan.close();connect();}document.body.classList.remove('lan-host');$('lan-invite').hidden=true;$('lan-status').hidden=true;$('voice-toggle').hidden=false;snapshotToReconcile=null;$('how-to-play-open').hidden=false;cancelEntryRetry();intent=null;requestedTrack=null;optimisticBots.clear();trackPicker.sync(activeTrack.id,false,false);voice.leave();stopGameAudio();corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);clientUpdates.apply();}
+function clearRoom(){syncCameraView();raceMinimap.hide();localPresentation.reset();partyControllers?.dispose();partyUI?.dispose();partyControllers=null;partyUI=null;$('controller-configure').hidden=true;$('local-mapping').hidden=true;$('copy').disabled=false;$('room-code').previousElementSibling.textContent='Room code';lanWakeLock?.release().catch(()=>{});lanWakeLock=null;const oldLan=lanTransport;lanTransport=null;if(oldLan){oldLan.close();connect();}document.body.classList.remove('lan-host');$('lan-invite').hidden=true;$('lan-status').hidden=true;$('voice-toggle').hidden=false;snapshotToReconcile=null;$('how-to-play-open').hidden=false;cancelEntryRetry();intent=null;requestedTrack=null;optimisticBots.clear();trackPicker.sync(activeTrack.id,false,false);voice.leave();stopGameAudio();corrections.reset();combatPrediction.reset();predictionClock.reset();network.resetStream();state=null;myId=null;session=null;predicted=null;pending=[];history=[];phase=null;rosterKey='';saveSession();releaseControls();document.body.classList.remove('playing');$('race-ui').hidden=true;$('results').hidden=true;$('room-panel').hidden=true;$('entry-panel').hidden=false;setBusy(false);clientUpdates.apply();}
 function leave(){$('settings').hidden=true;send({type:'leave'});clearRoom();}
 function changeCircuit(){
   $('settings').hidden=true;
@@ -263,7 +275,10 @@ function updateUI(now){
   updateCircuitStatus();$('start').hidden=!host;$('host-hint').textContent=host?'':'Waiting for host.';
   $('reset-scores').hidden=!host;$('reset-scores').disabled=!state.players.some(p=>p.score);
   $('change-circuit').hidden=!host;
-  trackPicker.sync(requestedTrack||state.trackId||'coast',host&&state.phase==='lobby',state.phase==='lobby');$('map-title').textContent=TRACKS[requestedTrack||state.trackId||'coast'].name;
+  trackPicker.sync(requestedTrack||state.trackId||'coast',host&&state.phase==='lobby',state.phase==='lobby',!!lanTransport);$('map-title').textContent=TRACKS[requestedTrack||state.trackId||'coast'].name;
+  const arena=state.gameType==='battle-arena';
+  $('circuit-label').textContent='Circuits & arenas';
+  syncCameraView(arena);
   if(state.phase==='lobby')return;
   renderScores();if(lanTransport){$('you-label').hidden=true;if(state.phase==='finished')renderResults();return;}const serverNow=Date.now()+clockOffset;
   $('finish-note').hidden=(!me.finished&&!me.eliminated)||state.phase==='finished';$('finish-note').textContent=me.eliminated?(me.wrecked?'Wrecked':'Eliminated'):'Finished';$('you-label').hidden=me.eliminated;$('race-ui').classList.toggle('spectating',me.eliminated||me.finished);const sky=skyMode(),cooldown=Math.max(0,((me.skyCooldownUntil||0)-serverNow)/1000);$('race-ui').classList.toggle('sky-beam',sky);$('race-ui').style.setProperty('--sky-color',me.color);if(sky)$('finish-note').textContent='Spectating · Sky beam';
@@ -448,6 +463,7 @@ function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationF
   const rendered=circuitLoader.loading||circuitLoader.error?null:renderedState(now,Math.min(.25,Math.max(0,frameMs/1000)));if(!circuitLoader.loading&&!circuitLoader.error){if(!(howToPlay?.isOpen()||controllerGuide?.isOpen()||!$('controller-configure').hidden)){if(world)world.skyControllers=lanTransport?.skyControllers();world?.update(rendered,myId,null,dt,now);if(world&&lanTransport)lanTransport.setSkyAims(world.skyView.externalAims);}howToPlay?.update(now);carNames.update(now);trackPicker.tick(now);
 
   }
+  raceMinimap.update(rendered,myId,{enabled:cameraView==='personal'&&!lanTransport&&world?.viewMode==='personal',now});
   lagRecorder.frame({frameMs,age:now-lastState,hidden:document.hidden,phase:state?.phase||'menu',track:activeTrack.id,round:state?.round,overlay:!$('settings').hidden||!$('dialog').hidden||circuitLoader.loading||!!displayGuide?.isOpen()||!!(howToPlay?.isOpen()||controllerGuide?.isOpen()||!$('controller-configure').hidden),players:rendered?.players,camera:world?.follow,cameraTarget:rendered?.camera,cameraPosition:world?.camera.position,skyTargets:world?.skyView.targets,predicted:predicted?[predicted,...predictedOthers]:[],queuedBytes:ws?.bufferedAmount||0});
   if(state&&world&&!circuitLoader.loading){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);

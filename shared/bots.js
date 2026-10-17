@@ -1,3 +1,4 @@
+import {ARENA_SOLIDS,ARENA_PICKUPS,inside} from './arena.js';
 // Authoritative decisions shared by Node and browser hosts. Steering remains in shared/game.js; none of this state
 // is attached to car snapshots or evaluated by browser prediction.
 import {botInput,botSteeringTarget,botLaneBounds,botRouteSide,nearestTrack,MOLES,OBSTACLES,trackAt,TRACK_LENGTH,PLAZAS,PICKUP_LOCATIONS,activeTrack,angleDelta,clamp,CAR_WIDTH,CAR_LENGTH,STEP,NUDGE_DURATION} from './game.js';
@@ -170,6 +171,23 @@ export function botAvoidance(room,p,options={},previous=null){
 }
 
 export function botControls(room,p,now,random=Math.random){
+  if(activeTrack.id==='cafe'){
+    const c=p.car;if(!live(c))return {steer:0,throttle:0,fire:false};
+    if(c.overturned)return {steer:-Math.sign(angleDelta(c.roll,0))||1,throttle:1,fire:false};
+    const distance=t=>Math.hypot(t.x-c.x,t.z-c.z);
+    const opponents=[...room.players.values()].filter(q=>q!==p&&live(q.car)).map(q=>q.car).sort((a,b)=>distance(a)-distance(b));
+    const pickups=room.pickups.filter(t=>t.readyAt<=now&&Math.abs(t.y-c.y)<2).sort((a,b)=>distance(a)-distance(b));
+    const target=(!c.item&&pickups[0])||opponents[0]||ARENA_PICKUPS[p.car.gridSlot%12];
+    let heading=Math.atan2(target.z-c.z,target.x-c.x),best=Infinity;
+    for(const offset of [0,.5,-.5,1,-1,1.6,-1.6,2.4,-2.4,Math.PI]){
+      const a=heading+offset,x=c.x+Math.cos(a)*9,z=c.z+Math.sin(a)*9;
+      const blocked=Math.abs(x)>76||Math.abs(z)>76||ARENA_SOLIDS.some(o=>c.y<o.h-.5&&inside(o,x,z,3));
+      const score=(blocked?1000:0)+Math.abs(offset)+Math.abs(angleDelta(a,c.angle))*.4;
+      if(score<best){best=score;heading=a;}
+    }
+    const error=angleDelta(heading,c.angle);return {steer:clamp(error*2,-1,1),throttle:Math.abs(error)>1.2?.4:1,reverse:false,brake:false,fire:botShouldFire(room,p)&&(WEAPONS[c.item]?.continuous||!p.fireLatch),nudge:0};
+  }
+
   const c=p.car;
   const state=p.botState??={preferredLane:(c.gridSlot%2?1:-1)*(.55+random()*.35),side:c.gridSlot%2?-1:1,lane:0,desiredLane:0,nextPlan:0,nextFire:0,nextNudge:0,nextAvoid:0,avoidLane:null,avoidance:null,fire:false,item:null,ammo:0,lastUse:room.raceTime,forceUse:false,target:null,approaches:new Map()};
   if(!live(c))return {...botInput(c),fire:false,nudge:0};

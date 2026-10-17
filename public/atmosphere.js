@@ -3,6 +3,7 @@ import {detectDevice} from './display.js';
 import * as THREE from 'three';
 // Lighting, fog, reflections and ocean share the same palette and sun direction.
 export const ATMOSPHERES={
+  cafe:{viewDistance:400,fog:0xe5d2b8,density:.0008,zenith:0x8aafbf,horizon:0xf7dec0,ground:0xb58d69,sunColor:0xffdfad,sunOffset:[-60,120,-40],sunPower:2.2,skyLight:0xe6e6df,groundLight:0x9d8068,ambient:1.3,exposure:1.05,clouds:.1},
   factory:{viewDistance:650,fog:0x414f57,density:.0015,zenith:0x536d82,horizon:0xd7bc91,ground:0x424e51,sunColor:0xffd3a0,sunOffset:[-100,130,-70],sunPower:3.1,skyLight:0xb4ccd6,groundLight:0x737b7b,ambient:1.25,exposure:1.05,clouds:.6},
   volcano:{viewDistance:850,fog:0x977b80,density:.004,zenith:0x443e5e,horizon:0xe5a17b,ground:0x49343e,sunColor:0xffbc8e,sunOffset:[-100,115,-85],sunPower:3.4,skyLight:0xbdb6d1,groundLight:0x826c65,ambient:1.1,exposure:1.08,clouds:.58},
   coast:{viewDistance:420,fog:0xb4b4b5,density:.0036,zenith:0x4d789e,horizon:0xf3c5a0,ground:0x80666b,sunColor:0xffcf91,sunOffset:[-70,24,-50],sunPower:3.8,skyLight:0xa9c7e7,groundLight:0x665448,ambient:.68,exposure:1.0,clouds:.25},

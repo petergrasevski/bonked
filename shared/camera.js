@@ -56,3 +56,11 @@ export function cameraPose(frame){
   const behind=frame.distance*Math.cos(frame.pitch);
   return {x:frame.x-Math.cos(frame.angle)*behind,y:(frame.y||0)+TARGET_HEIGHT+frame.distance*Math.sin(frame.pitch),z:frame.z-Math.sin(frame.angle)*behind,targetX:frame.x,targetY:(frame.y||0)+TARGET_HEIGHT,targetZ:frame.z};
 }
+
+// Local viewpoint never considers opponents or track progress.
+export function stepPersonalCamera(previous,car,dt){
+  const target={x:car.x+Math.cos(car.angle)*4,y:(car.y||0)+.5,z:car.z+Math.sin(car.angle)*4,angle:car.angle,pitch:.42,distance:24,far:350,spread:0,from:0,to:0};
+  if(!previous)return target;
+  const move=1-Math.exp(-Math.max(0,dt)*12),turn=1-Math.exp(-Math.max(0,dt)*7);
+  return {...target,x:previous.x+(target.x-previous.x)*move,y:(previous.y||0)+(target.y-(previous.y||0))*move,z:previous.z+(target.z-previous.z)*move,angle:previous.angle+angleDelta(target.angle,previous.angle)*turn};
+}

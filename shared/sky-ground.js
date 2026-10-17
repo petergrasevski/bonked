@@ -1,3 +1,4 @@
+import {arenaTriangles,arenaSurface} from './arena.js';
 import {activeTrack,SEGMENTS,TRACK_LENGTH,iceSplit,getLandscape} from './game.js';
 import {TerrainSurface} from './landscape.js';
 import {desertRampLift} from './desert-features.js';
@@ -5,6 +6,7 @@ const cache=new Map();
 export const skyFloor=()=>activeTrack.id==='coast'?-2.05:activeTrack.id==='factory'?-8:-4;
 // Reuse the terrain's spatial index; index road decks once per circuit too.
 export function skySurfaces(){
+  if(activeTrack.id==='cafe'){if(!cache.has('cafe')){const surface=new TerrainSurface();surface.add(arenaTriangles());cache.set('cafe',[surface]);}return cache.get('cafe');}
   if(!cache.has(activeTrack.id)){
     const road=new TerrainSurface(),vertices=[];
     for(let i=0;i<SEGMENTS.length;i++){

@@ -5,7 +5,8 @@ const SIZE=320;
 export const SELECTED_PREVIEW_INTERVAL=100;
 export function captureTrackPreview(world,canvas,now=0){
   const id=world.trackId,camera=new THREE.PerspectiveCamera(48,1,.2,1400);let target;
-  if(id==='coast'){const p=trackAt(14.5/24);target=new THREE.Vector3(p.x+p.nx*4,0,p.z+p.nz*4);camera.position.set(p.x+p.nx*43-Math.cos(p.angle)*22,39,p.z+p.nz*43-Math.sin(p.angle)*22);}
+  if(id==='cafe'){target=new THREE.Vector3(0,0,0);camera.position.set(110,145,120);}
+  else if(id==='coast'){const p=trackAt(14.5/24);target=new THREE.Vector3(p.x+p.nx*4,0,p.z+p.nz*4);camera.position.set(p.x+p.nx*43-Math.cos(p.angle)*22,39,p.z+p.nz*43-Math.sin(p.angle)*22);}
   else if(id==='ice'){target=new THREE.Vector3(0,0,0);camera.position.set(95,140,150);}
   else if(['factory','volcano'].includes(id)){const p=trackAt(id==='volcano'?.19:.18),side=id==='volcano'?-1:1;target=new THREE.Vector3(p.x,p.y+3,p.z);camera.position.set(p.x+p.nx*45*side-Math.cos(p.angle)*30,p.y+(id==='volcano'?30:47),p.z+p.nz*45*side-Math.sin(p.angle)*30);}
   else{const p=trackAt(.25);target=new THREE.Vector3(p.x,24,p.z);camera.position.set(p.x+145,150,p.z+125);}
@@ -41,7 +42,7 @@ export function createTrackPicker(root,getWorld,onSelect,isLoading=()=>false){
   root.addEventListener('pointermove',e=>{if(!drag||drag.id!==e.pointerId)return;const delta=e.clientX-drag.x;if(Math.abs(delta)>6&&!drag.moved){drag.moved=true;root.setPointerCapture(e.pointerId);root.classList.add('dragging');}if(drag.moved){e.preventDefault();root.scrollLeft=drag.scroll-delta;}});
   const stopDrag=e=>{if(!drag)return;suppressClick=drag.moved;if(root.hasPointerCapture(e.pointerId))root.releasePointerCapture(e.pointerId);root.classList.remove('dragging');drag=null;};root.addEventListener('pointerup',stopDrag);root.addEventListener('pointercancel',stopDrag);
   root.addEventListener('click',e=>{if(suppressClick){e.preventDefault();e.stopPropagation();suppressClick=false;}},true);
-  for(const track of Object.values(TRACKS)){
+  for(const track of Object.values(TRACKS).sort((a,b)=>Number(a.id==='cafe')-Number(b.id==='cafe'))){
     const button=document.createElement('button');button.type='button';button.className='track-card '+track.id;button.setAttribute('aria-label',track.name);button.setAttribute('aria-pressed','false');button.dataset.trackId=track.id;
     const canvas=document.createElement('canvas');canvas.width=canvas.height=SIZE;canvas.setAttribute('aria-hidden','true');
     if(TRACK_TITLES[track.id]){
@@ -51,13 +52,14 @@ export function createTrackPicker(root,getWorld,onSelect,isLoading=()=>false){
     }else{
       button.classList.add('text-card');
       const title=document.createElement('span');title.className='track-card-name';title.textContent=track.name;
-      const description=document.createElement('span');description.className='track-card-description';description.textContent=track.description;
+      const description=document.createElement('span');description.className='track-card-description';description.textContent=track.id==='cafe'?'100 HP · no death line':track.description;
       button.append(canvas,title,description);
     }
+    if(track.id==='cafe'){const badge=document.createElement('span');badge.className='arena-stamp';badge.textContent='ARENA';button.append(badge);button.setAttribute('aria-label',track.name+' · Battle Arena');}
     const check=document.createElement('span');check.className='track-selected';check.textContent='✓';check.setAttribute('aria-hidden','true');button.append(check);button.onclick=()=>onSelect(track.id);root.append(button);cards.set(track.id,{button,canvas});
   }
   return {
-    sync(id,canSelect,isVisible){visible=isVisible;if(isVisible&&selected!==id){selected=id;const card=cards.get(id)?.button;if(card){const bounds=root.getBoundingClientRect(),item=card.getBoundingClientRect(),delta=item.left<bounds.left?item.left-bounds.left:item.right>bounds.right?item.right-bounds.right:0;if(delta)root.scrollTo({left:Math.max(0,Math.min(root.scrollWidth-root.clientWidth,root.scrollLeft+delta)),behavior:motion()});}}updateArrows();for(const [key,{button}]of cards){button.setAttribute('aria-pressed',String(key===id));button.disabled=!canSelect;}},
+    sync(id,canSelect,isVisible,localParty=false){visible=isVisible;if(isVisible&&selected!==id){selected=id;const card=cards.get(id)?.button;if(card){const bounds=root.getBoundingClientRect(),item=card.getBoundingClientRect(),delta=item.left<bounds.left?item.left-bounds.left:item.right>bounds.right?item.right-bounds.right:0;if(delta)root.scrollTo({left:Math.max(0,Math.min(root.scrollWidth-root.clientWidth,root.scrollLeft+delta)),behavior:motion()});}}updateArrows();for(const [key,{button}]of cards){button.hidden=false;button.setAttribute('aria-pressed',String(key===id));button.disabled=!canSelect||(key==='cafe'&&localParty);button.title=key==='cafe'&&localParty?'Arena requires individual screens. Unavailable in local parties.':'';button.classList.toggle('lan-unavailable',key==='cafe'&&localParty);}},
     tick(now){
       if(!visible||document.hidden||isLoading())return;
       const world=getWorld();if(world&&now-lastCapture>=SELECTED_PREVIEW_INTERVAL){lastCapture=now;const card=cards.get(world.trackId);captureTrackPreview(world,card.canvas,now);card.button.classList.add('ready');}
