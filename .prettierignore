@@ -1,0 +1,6 @@
+node_modules/
+test-results/
+playwright-report/
+
+# Local work that predates the formatting cleanup.
+scripts/load-public.mjs

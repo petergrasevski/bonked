@@ -20,6 +20,14 @@ Keep the laptop awake and the server running. If macOS prompts about incoming co
 
 To use another port: `PORT=4000 npm start`. To bind only to this machine: `HOST=127.0.0.1 npm start`. `npm run dev` restarts the server on edits; a restart ends active rooms.
 
+## Code formatting
+
+Run `npm run format` to format JavaScript, HTML, and CSS, or
+`npm run format:check` to check formatting without changing files. The pinned
+Prettier version and `.prettierrc.json` keep formatting consistent. Tests use
+`node --test --test-concurrency=1 test/*.test.js` in CI so real-time socket tests
+do not compete with the physics suites.
+
 ## Startup
 
 The first page shows a loading screen while game code downloads, the circuit builds in stages, and the race server connects. Phones show landscape guidance immediately, before the 3D modules load. Controls appear after the first scene frame and server connection are ready. Long waits and load failures offer a retry button. Audio continues to load separately when enabled.

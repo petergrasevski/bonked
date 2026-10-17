@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Eight-player, phone-first 3D combat racing",
   "scripts": {
+    "format": "prettier --write \"**/*.{js,mjs,css,html}\" package.json .prettierrc.json",
+    "format:check": "prettier --check \"**/*.{js,mjs,css,html}\" package.json .prettierrc.json",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test test/*.test.js",
@@ -17,5 +19,8 @@
     "qrcode": "^1.5.4",
     "three": "^0.180.0",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
   }
 }

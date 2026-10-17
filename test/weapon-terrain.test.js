@@ -1,164 +1,388 @@
-import {DESERT_JUMPS} from '../shared/desert-features.js';
+import { DESERT_JUMPS } from '../shared/desert-features.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Vector3,Euler} from 'three';
-import {selectTrack,trackAt,nearestTrack,TRACK_LENGTH,spawnCar,NEUTRAL,STEP,stepCar,hasBarrier} from '../shared/game.js';
-import {initCombat,giveWeapon,pressWeapon,updateCombat,DAMAGE} from '../shared/combat.js';
-import {shotgunRays,weaponBasis,weaponMuzzle,weaponDirection,rayCar3D,sweepTrackWalls} from '../shared/weapon-geometry.js';
-import {projectilePose} from '../public/projectile-motion.js';
-function player(id,f,progress=f){const p=trackAt(f);return {id,car:{...spawnCar(),...p,trackFraction:f,progress,groundY:p.y,pitch:Math.atan(p.grade)},input:{...NEUTRAL}};}
-function room(...ps){const r={phase:'racing',startAt:0,players:new Map(ps.map(p=>[p.id,p]))};initCombat(r);return r;}
-function fire(r,p,kind){giveWeapon(p.car,kind);assert.equal(pressWeapon(r,p,0),true);}
+import { Vector3, Euler } from 'three';
+import {
+  selectTrack,
+  trackAt,
+  nearestTrack,
+  TRACK_LENGTH,
+  spawnCar,
+  NEUTRAL,
+  STEP,
+  stepCar,
+  hasBarrier,
+} from '../shared/game.js';
+import { initCombat, giveWeapon, pressWeapon, updateCombat, DAMAGE } from '../shared/combat.js';
+import {
+  shotgunRays,
+  weaponBasis,
+  weaponMuzzle,
+  weaponDirection,
+  rayCar3D,
+  sweepTrackWalls,
+} from '../shared/weapon-geometry.js';
+import { projectilePose } from '../public/projectile-motion.js';
+function player(id, f, progress = f) {
+  const p = trackAt(f);
+  return {
+    id,
+    car: {
+      ...spawnCar(),
+      ...p,
+      trackFraction: f,
+      progress,
+      groundY: p.y,
+      pitch: Math.atan(p.grade),
+    },
+    input: { ...NEUTRAL },
+  };
+}
+function room(...ps) {
+  const r = { phase: 'racing', startAt: 0, players: new Map(ps.map((p) => [p.id, p])) };
+  initCombat(r);
+  return r;
+}
+function fire(r, p, kind) {
+  giveWeapon(p.car, kind);
+  assert.equal(pressWeapon(r, p, 0), true);
+}
 
-test('weapon basis and muzzle match the rendered YXZ car transform, including roll',()=>{
-  const c={x:7,y:20,z:-4,angle:.7,pitch:.32,roll:-.44},basis=weaponBasis(c),rotation=new Euler(c.roll,-c.angle,c.pitch,'YXZ');
-  for(const [key,v]of [['forward',[1,0,0]],['up',[0,1,0]],['side',[0,0,1]]]){
-    const transformed=new Vector3(...v).applyEuler(rotation);assert.ok(transformed.distanceTo(new Vector3(...Object.values(basis[key])))<1e-12);
+test('weapon basis and muzzle match the rendered YXZ car transform, including roll', () => {
+  const c = { x: 7, y: 20, z: -4, angle: 0.7, pitch: 0.32, roll: -0.44 },
+    basis = weaponBasis(c),
+    rotation = new Euler(c.roll, -c.angle, c.pitch, 'YXZ');
+  for (const [key, v] of [
+    ['forward', [1, 0, 0]],
+    ['up', [0, 1, 0]],
+    ['side', [0, 0, 1]],
+  ]) {
+    const transformed = new Vector3(...v).applyEuler(rotation);
+    assert.ok(transformed.distanceTo(new Vector3(...Object.values(basis[key]))) < 1e-12);
   }
-  const muzzle=weaponMuzzle(c),expected=new Vector3(2.95,.9,0).applyEuler(rotation).add(new Vector3(c.x,c.y+(1-Math.cos(c.roll)*Math.cos(c.pitch))*.5,c.z));
-  assert.ok(expected.distanceTo(new Vector3(muzzle.x,muzzle.y,muzzle.z))<1e-12);
-  assert.ok(weaponDirection(c,Math.PI/2).y>0,'banking tilts the side-mounted shotgun direction');
+  const muzzle = weaponMuzzle(c),
+    expected = new Vector3(2.95, 0.9, 0)
+      .applyEuler(rotation)
+      .add(new Vector3(c.x, c.y + (1 - Math.cos(c.roll) * Math.cos(c.pitch)) * 0.5, c.z));
+  assert.ok(expected.distanceTo(new Vector3(muzzle.x, muzzle.y, muzzle.z)) < 1e-12);
+  assert.ok(
+    weaponDirection(c, Math.PI / 2).y > 0,
+    'banking tilts the side-mounted shotgun direction',
+  );
 });
 
-test('grounded cars aim along the real desert grade; airborne rotation remains ballistic',()=>{
-  selectTrack('desert');const c=player('a',.88).car;
-  c.pitch=0;for(let i=0;i<60;i++)stepCar(c,NEUTRAL);
-  assert.ok(c.pitch>.09);c.angle+=Math.PI;for(let i=0;i<60;i++)stepCar(c,NEUTRAL);assert.ok(c.pitch<-.09);
-  Object.assign(c,{y:c.groundY+5,vy:2,pitch:.7,pitchVelocity:.2});stepCar(c,NEUTRAL);assert.ok(c.pitch>.7,'launch pitch must not be flattened to the ground normal');
-});
-
-test('railgun aims up and down real desert slopes and sends both endpoint heights',()=>{
+test('grounded cars aim along the real desert grade; airborne rotation remains ballistic', () => {
   selectTrack('desert');
-  for(const f of [.07,.88]){
-    const a=player('a',f),b=player('b',f+20/TRACK_LENGTH),r=room(a,b);fire(r,a,'railgun');
-    assert.equal(b.car.health,100-DAMAGE.railgun);const beam=r.effects.find(e=>e.kind==='rail');
-    assert.ok(Math.abs(beam.toY-beam.y)>8);assert.equal(Math.sign(beam.toY-beam.y),Math.sign(a.car.pitch));
+  const c = player('a', 0.88).car;
+  c.pitch = 0;
+  for (let i = 0; i < 60; i++) stepCar(c, NEUTRAL);
+  assert.ok(c.pitch > 0.09);
+  c.angle += Math.PI;
+  for (let i = 0; i < 60; i++) stepCar(c, NEUTRAL);
+  assert.ok(c.pitch < -0.09);
+  Object.assign(c, { y: c.groundY + 5, vy: 2, pitch: 0.7, pitchVelocity: 0.2 });
+  stepCar(c, NEUTRAL);
+  assert.ok(c.pitch > 0.7, 'launch pitch must not be flattened to the ground normal');
+});
+
+test('railgun aims up and down real desert slopes and sends both endpoint heights', () => {
+  selectTrack('desert');
+  for (const f of [0.07, 0.88]) {
+    const a = player('a', f),
+      b = player('b', f + 20 / TRACK_LENGTH),
+      r = room(a, b);
+    fire(r, a, 'railgun');
+    assert.equal(b.car.health, 100 - DAMAGE.railgun);
+    const beam = r.effects.find((e) => e.kind === 'rail');
+    assert.ok(Math.abs(beam.toY - beam.y) > 8);
+    assert.equal(Math.sign(beam.toY - beam.y), Math.sign(a.car.pitch));
   }
 });
 
-test('inclined plasma and machine-gun sweeps hit at the intersection height, not launch height',()=>{
+test('inclined plasma and machine-gun sweeps hit at the intersection height, not launch height', () => {
   selectTrack('desert');
-  for(const kind of ['plasma','machinegun']){
-    const a=player('a',.88),m=weaponMuzzle(a.car),d=weaponDirection(a.car),b=player('b',.88),under=player('under',.88);
-    Object.assign(b.car,{x:m.x+d.x*18,y:m.y+d.y*18-.7,z:m.z+d.z*18,angle:a.car.angle,pitch:0});
-    Object.assign(under.car,{x:b.car.x,y:b.car.y-8,z:b.car.z,angle:b.car.angle,pitch:0});
-    const r=room(a,b,under);fire(r,a,kind);const shot=r.projectiles[0];assert.ok(shot.vy>0);assert.ok(shot.y>a.car.y+.9);
-    for(let i=1;i<=30&&r.projectiles.length;i++)updateCombat(r,STEP,i*STEP*1000);
-    assert.equal(b.car.health,100-DAMAGE[kind]);assert.equal(under.car.health,100);
-    if(kind==='machinegun')assert.ok(r.effects.some(e=>e.kind==='tracer'&&e.toY>e.y));
+  for (const kind of ['plasma', 'machinegun']) {
+    const a = player('a', 0.88),
+      m = weaponMuzzle(a.car),
+      d = weaponDirection(a.car),
+      b = player('b', 0.88),
+      under = player('under', 0.88);
+    Object.assign(b.car, {
+      x: m.x + d.x * 18,
+      y: m.y + d.y * 18 - 0.7,
+      z: m.z + d.z * 18,
+      angle: a.car.angle,
+      pitch: 0,
+    });
+    Object.assign(under.car, {
+      x: b.car.x,
+      y: b.car.y - 8,
+      z: b.car.z,
+      angle: b.car.angle,
+      pitch: 0,
+    });
+    const r = room(a, b, under);
+    fire(r, a, kind);
+    const shot = r.projectiles[0];
+    assert.ok(shot.vy > 0);
+    assert.ok(shot.y > a.car.y + 0.9);
+    for (let i = 1; i <= 30 && r.projectiles.length; i++) updateCombat(r, STEP, i * STEP * 1000);
+    assert.equal(b.car.health, 100 - DAMAGE[kind]);
+    assert.equal(under.car.health, 100);
+    if (kind === 'machinegun') assert.ok(r.effects.some((e) => e.kind === 'tracer' && e.toY > e.y));
   }
 });
 
-test('3D ray avoids a stacked car on the other desert bridge deck',()=>{
-  selectTrack('desert');const lower=player('low',.5).car,upper=player('high',0).car;
-  const start={x:lower.x-10,y:lower.y+.8,z:lower.z},delta={x:20,y:0,z:0};
-  assert.notEqual(rayCar3D(start,delta,lower),null);assert.equal(rayCar3D(start,delta,upper),null);
-  assert.notEqual(rayCar3D({...start,y:20.8},delta,upper),null);assert.equal(rayCar3D({...start,y:20.8},delta,lower),null);
+test('3D ray avoids a stacked car on the other desert bridge deck', () => {
+  selectTrack('desert');
+  const lower = player('low', 0.5).car,
+    upper = player('high', 0).car;
+  const start = { x: lower.x - 10, y: lower.y + 0.8, z: lower.z },
+    delta = { x: 20, y: 0, z: 0 };
+  assert.notEqual(rayCar3D(start, delta, lower), null);
+  assert.equal(rayCar3D(start, delta, upper), null);
+  assert.notEqual(rayCar3D({ ...start, y: 20.8 }, delta, upper), null);
+  assert.equal(rayCar3D({ ...start, y: 20.8 }, delta, lower), null);
 });
 
-test('rockets follow each figure-eight route through the crossing and hit the next car on that deck',()=>{
+test('rockets follow each figure-eight route through the crossing and hit the next car on that deck', () => {
   selectTrack('desert');
-  for(const [from,to,otherFraction]of [[.49,.53,0],[.99,1.03,.5]]){
-    const a=player('a',from),b=player('b',to%1,to),other=player('other',otherFraction,to+1),r=room(a,b,other);fire(r,a,'rocket');
-    assert.equal(r.projectiles[0].target,'b');let crossed=false;
-    for(let i=1;i<=200&&r.projectiles.length;i++){
-      updateCombat(r,STEP,i*STEP*1000);const shot=r.projectiles[0];if(!shot)break;
-      const t=nearestTrack(shot.x,shot.z,shot.trackFraction);assert.ok(t.distance<1);assert.ok(shot.y>=t.y+.89);
-      if(Math.hypot(shot.x,shot.z)<8){crossed=true;if(from<.5)assert.ok(shot.y<2);else assert.ok(shot.y>20);}
+  for (const [from, to, otherFraction] of [
+    [0.49, 0.53, 0],
+    [0.99, 1.03, 0.5],
+  ]) {
+    const a = player('a', from),
+      b = player('b', to % 1, to),
+      other = player('other', otherFraction, to + 1),
+      r = room(a, b, other);
+    fire(r, a, 'rocket');
+    assert.equal(r.projectiles[0].target, 'b');
+    let crossed = false;
+    for (let i = 1; i <= 200 && r.projectiles.length; i++) {
+      updateCombat(r, STEP, i * STEP * 1000);
+      const shot = r.projectiles[0];
+      if (!shot) break;
+      const t = nearestTrack(shot.x, shot.z, shot.trackFraction);
+      assert.ok(t.distance < 1);
+      assert.ok(shot.y >= t.y + 0.89);
+      if (Math.hypot(shot.x, shot.z) < 8) {
+        crossed = true;
+        if (from < 0.5) assert.ok(shot.y < 2);
+        else assert.ok(shot.y > 20);
+      }
     }
-    assert.equal(crossed,true);assert.equal(b.car.health,58);assert.equal(other.car.health,100);
+    assert.equal(crossed, true);
+    assert.equal(b.car.health, 58);
+    assert.equal(other.car.health, 100);
   }
 });
 
-test('rockets stay above steep uphill and downhill desert road without cutting across bends',()=>{
+test('rockets stay above steep uphill and downhill desert road without cutting across bends', () => {
   selectTrack('desert');
-  for(const [from,to]of [[.12,.20],[.82,.90]]){
-    const a=player('a',from),b=player('b',to),r=room(a,b);fire(r,a,'rocket');
-    for(let i=1;i<=240&&r.projectiles.length;i++){
-      updateCombat(r,STEP,i*STEP*1000);const shot=r.projectiles[0];if(!shot)break;
-      const road=nearestTrack(shot.x,shot.z,shot.trackFraction);
-      assert.ok(shot.y>=road.y+.89);assert.ok(road.distance<2,'rocket stays on its own curving route');
+  for (const [from, to] of [
+    [0.12, 0.2],
+    [0.82, 0.9],
+  ]) {
+    const a = player('a', from),
+      b = player('b', to),
+      r = room(a, b);
+    fire(r, a, 'rocket');
+    for (let i = 1; i <= 240 && r.projectiles.length; i++) {
+      updateCombat(r, STEP, i * STEP * 1000);
+      const shot = r.projectiles[0];
+      if (!shot) break;
+      const road = nearestTrack(shot.x, shot.z, shot.trackFraction);
+      assert.ok(shot.y >= road.y + 0.89);
+      assert.ok(road.distance < 2, 'rocket stays on its own curving route');
     }
-    assert.equal(b.car.health,58);
+    assert.equal(b.car.health, 58);
   }
 });
 
-test('rocket terrain following stays above the desert jump and continues over its launch edge',()=>{
-  selectTrack('desert');const ramp=DESERT_JUMPS[1],a=player('a',ramp.fraction-.02),b=player('b',ramp.fraction+.04),r=room(a,b);fire(r,a,'rocket');let airborne=false;
-  for(let i=1;i<=220&&r.projectiles.length;i++){
-    updateCombat(r,STEP,i*STEP*1000);const shot=r.projectiles[0];if(!shot)break;
-    const floor=nearestTrack(shot.x,shot.z,shot.trackFraction).y;
-    assert.ok(shot.y>=floor+.89);if(shot.y>floor+1.5)airborne=true;
+test('rocket terrain following stays above the desert jump and continues over its launch edge', () => {
+  selectTrack('desert');
+  const ramp = DESERT_JUMPS[1],
+    a = player('a', ramp.fraction - 0.02),
+    b = player('b', ramp.fraction + 0.04),
+    r = room(a, b);
+  fire(r, a, 'rocket');
+  let airborne = false;
+  for (let i = 1; i <= 220 && r.projectiles.length; i++) {
+    updateCombat(r, STEP, i * STEP * 1000);
+    const shot = r.projectiles[0];
+    if (!shot) break;
+    const floor = nearestTrack(shot.x, shot.z, shot.trackFraction).y;
+    assert.ok(shot.y >= floor + 0.89);
+    if (shot.y > floor + 1.5) airborne = true;
   }
-  assert.equal(airborne,true);assert.equal(b.car.health,58);
+  assert.equal(airborne, true);
+  assert.equal(b.car.health, 58);
 });
 
-test('continuous rocket wall sweeps detect outer and ice inner barriers without hitting another elevation',()=>{
-  selectTrack('desert');const p=trackAt(.05),origin={x:p.x,y:p.y+.9,z:p.z},delta={x:p.nx*40,y:0,z:p.nz*40};
-  assert.equal(hasBarrier(.05),true);const t=sweepTrackWalls(origin,delta);assert.ok(t>0&&t<1);
-  assert.equal(sweepTrackWalls({...origin,y:p.y+10},delta),null);
+test('continuous rocket wall sweeps detect outer and ice inner barriers without hitting another elevation', () => {
+  selectTrack('desert');
+  const p = trackAt(0.05),
+    origin = { x: p.x, y: p.y + 0.9, z: p.z },
+    delta = { x: p.nx * 40, y: 0, z: p.nz * 40 };
+  assert.equal(hasBarrier(0.05), true);
+  const t = sweepTrackWalls(origin, delta);
+  assert.ok(t > 0 && t < 1);
+  assert.equal(sweepTrackWalls({ ...origin, y: p.y + 10 }, delta), null);
   selectTrack('ice');
-  assert.notEqual(sweepTrackWalls({x:0,y:.9,z:-31},{x:0,y:0,z:-18}),null,'sweep crosses the guarded gap edge');
-  assert.equal(sweepTrackWalls({x:80,y:.9,z:-34},{x:0,y:0,z:-12}),null,'bare gap edges remain unguarded');
-  assert.equal(sweepTrackWalls({x:0,y:.9,z:-31},{x:0,y:0,z:-5}),null,'boost-fed right fork has no inner bumper');
-  const route=nearestTrack(0,-49),a=player('a',route.fraction);Object.assign(a.car,{x:0,z:-49,angle:Math.PI/2,pitch:0});const r=room(a);fire(r,a,'rocket');assert.equal(r.projectiles.length,1);
-  updateCombat(r,.2,200);assert.equal(r.projectiles.length,0,'large step cannot tunnel through inner bumper');
-  const explosion=r.effects.find(e=>e.kind==='explosion');assert.ok(explosion&&explosion.y>.5);assert.ok(explosion.z< -44);
+  assert.notEqual(
+    sweepTrackWalls({ x: 0, y: 0.9, z: -31 }, { x: 0, y: 0, z: -18 }),
+    null,
+    'sweep crosses the guarded gap edge',
+  );
+  assert.equal(
+    sweepTrackWalls({ x: 80, y: 0.9, z: -34 }, { x: 0, y: 0, z: -12 }),
+    null,
+    'bare gap edges remain unguarded',
+  );
+  assert.equal(
+    sweepTrackWalls({ x: 0, y: 0.9, z: -31 }, { x: 0, y: 0, z: -5 }),
+    null,
+    'boost-fed right fork has no inner bumper',
+  );
+  const route = nearestTrack(0, -49),
+    a = player('a', route.fraction);
+  Object.assign(a.car, { x: 0, z: -49, angle: Math.PI / 2, pitch: 0 });
+  const r = room(a);
+  fire(r, a, 'rocket');
+  assert.equal(r.projectiles.length, 1);
+  updateCombat(r, 0.2, 200);
+  assert.equal(r.projectiles.length, 0, 'large step cannot tunnel through inner bumper');
+  const explosion = r.effects.find((e) => e.kind === 'explosion');
+  assert.ok(explosion && explosion.y > 0.5);
+  assert.ok(explosion.z < -44);
 });
 
-test('inclined projectile prediction advances elevation at every display frame and freezes when stale',()=>{
-  let pose=null,shot={x:0,y:3,z:0,angle:0,pitch:Math.atan2(12,50),speed:Math.hypot(50,12),vx:50,vy:12,vz:0},stamp=0,next=50;
-  for(let now=0;now<=500;now+=1000/120){if(now>=next){stamp=next;shot={...shot,x:next*.05,y:3+next*.012};next+=50;}const prior=pose;pose=projectilePose(pose,shot,stamp,1/120,now);if(prior)assert.ok(pose.y>prior.y);}
-  for(let now=510;now<2000;now+=10)pose=projectilePose(pose,shot,stamp,.01,now);
-  assert.ok(Math.abs(pose.y-(shot.y+1.8))<.01);
-});
-
-test('mines sit visibly on their actual drop point on climbs and descents',()=>{
-  selectTrack('desert');
-  for(const fraction of [.175,.33,.355,.37,.88])for(const sideways of [0,.8]){
-    const a=player('a',fraction);a.car.angle+=sideways;const r=room(a);fire(r,a,'mine');
-    const mine=r.mines[0],road=nearestTrack(mine.x,mine.z,a.car.trackFraction);
-    assert.ok(Math.abs(mine.y-road.y-.025)<1e-10,'mine rests on the road behind the car');
-    const up=new Vector3(0,1,0).applyEuler(new Euler(0,-mine.angle,mine.pitch,'YXZ'));
-    const normal=new Vector3(-road.grade*road.nz,1,road.grade*road.nx).normalize();
-    assert.ok(up.distanceTo(normal)<1e-10,'rendered mine base follows the road normal');
-    // The front and back of the base must not disappear beneath a descending deck.
-    for(const side of [-1,1]){
-      const rim=new Vector3(side*.8,.03,0).applyEuler(new Euler(0,-mine.angle,mine.pitch,'YXZ')).add(new Vector3(mine.x,mine.y,mine.z));
-      assert.ok(rim.y>nearestTrack(rim.x,rim.z,mine.trackFraction).y-.01,'mine rim stays visible');
+test('inclined projectile prediction advances elevation at every display frame and freezes when stale', () => {
+  let pose = null,
+    shot = {
+      x: 0,
+      y: 3,
+      z: 0,
+      angle: 0,
+      pitch: Math.atan2(12, 50),
+      speed: Math.hypot(50, 12),
+      vx: 50,
+      vy: 12,
+      vz: 0,
+    },
+    stamp = 0,
+    next = 50;
+  for (let now = 0; now <= 500; now += 1000 / 120) {
+    if (now >= next) {
+      stamp = next;
+      shot = { ...shot, x: next * 0.05, y: 3 + next * 0.012 };
+      next += 50;
     }
+    const prior = pose;
+    pose = projectilePose(pose, shot, stamp, 1 / 120, now);
+    if (prior) assert.ok(pose.y > prior.y);
   }
+  for (let now = 510; now < 2000; now += 10) pose = projectilePose(pose, shot, stamp, 0.01, now);
+  assert.ok(Math.abs(pose.y - (shot.y + 1.8)) < 0.01);
 });
 
-test('slope mines persist after dropping and detonate for a following car',()=>{
-  selectTrack('desert');const a=player('a',.35),b=player('b',.32),r=room(a,b);fire(r,a,'mine');
-  const mine={...r.mines[0]};updateCombat(r,STEP,150);assert.equal(r.mines.length,1);
-  Object.assign(b.car,{x:mine.x,z:mine.z,y:mine.y,groundY:mine.y});updateCombat(r,STEP,200);
-  assert.equal(r.mines.length,0);assert.equal(b.car.health,100-DAMAGE.mine);
-});
-
-test('mines stay on their own deck at the figure-eight crossing',()=>{
+test('mines sit visibly on their actual drop point on climbs and descents', () => {
   selectTrack('desert');
-  for(const fraction of [0,.5]){
-    const a=player('a',fraction),other=player('other',fraction===0?.5:0),r=room(a,other);fire(r,a,'mine');const mine=r.mines[0];
-    assert.ok(Math.abs(mine.y-a.car.y)<.1);Object.assign(other.car,{x:mine.x,z:mine.z});
-    updateCombat(r,STEP,150);assert.equal(other.car.health,100);assert.equal(r.mines.length,1);
-  }
-});
-
-
-test('chain ball rolls along mountain grades on its own deck and respects its 3D tether',()=>{
-  selectTrack('desert');for(const from of [.17,.33,.985,.485]){
-    const a=player('a',from),r=room(a);fire(r,a,'chain');let slopeDifference=0;
-    for(let i=1;i<100;i++){
-      const f=from+i*.25/TRACK_LENGTH,p=trackAt(f);Object.assign(a.car,p,{trackFraction:f,groundY:p.y,pitch:Math.atan(p.grade),vx:Math.cos(p.angle)*15,vz:Math.sin(p.angle)*15});updateCombat(r,STEP,i*1000*STEP);
-      const b=r.chains[0],road=nearestTrack(b.x,b.z,a.car.trackFraction);assert.ok(b.y>=road.y+.95,'ball stays above the road');assert.ok(Math.hypot(b.x-b.anchorX,b.y-b.anchorY,b.z-b.anchorZ)<=b.length+.001);slopeDifference=Math.max(slopeDifference,Math.abs(b.y-.98-a.car.y));
+  for (const fraction of [0.175, 0.33, 0.355, 0.37, 0.88])
+    for (const sideways of [0, 0.8]) {
+      const a = player('a', fraction);
+      a.car.angle += sideways;
+      const r = room(a);
+      fire(r, a, 'mine');
+      const mine = r.mines[0],
+        road = nearestTrack(mine.x, mine.z, a.car.trackFraction);
+      assert.ok(Math.abs(mine.y - road.y - 0.025) < 1e-10, 'mine rests on the road behind the car');
+      const up = new Vector3(0, 1, 0).applyEuler(new Euler(0, -mine.angle, mine.pitch, 'YXZ'));
+      const normal = new Vector3(-road.grade * road.nz, 1, road.grade * road.nx).normalize();
+      assert.ok(up.distanceTo(normal) < 1e-10, 'rendered mine base follows the road normal');
+      // The front and back of the base must not disappear beneath a descending deck.
+      for (const side of [-1, 1]) {
+        const rim = new Vector3(side * 0.8, 0.03, 0)
+          .applyEuler(new Euler(0, -mine.angle, mine.pitch, 'YXZ'))
+          .add(new Vector3(mine.x, mine.y, mine.z));
+        assert.ok(
+          rim.y > nearestTrack(rim.x, rim.z, mine.trackFraction).y - 0.01,
+          'mine rim stays visible',
+        );
+      }
     }
-    if(from===.17||from===.33)assert.ok(slopeDifference>1,'ball uses its own road height, not the car height');
+});
+
+test('slope mines persist after dropping and detonate for a following car', () => {
+  selectTrack('desert');
+  const a = player('a', 0.35),
+    b = player('b', 0.32),
+    r = room(a, b);
+  fire(r, a, 'mine');
+  const mine = { ...r.mines[0] };
+  updateCombat(r, STEP, 150);
+  assert.equal(r.mines.length, 1);
+  Object.assign(b.car, { x: mine.x, z: mine.z, y: mine.y, groundY: mine.y });
+  updateCombat(r, STEP, 200);
+  assert.equal(r.mines.length, 0);
+  assert.equal(b.car.health, 100 - DAMAGE.mine);
+});
+
+test('mines stay on their own deck at the figure-eight crossing', () => {
+  selectTrack('desert');
+  for (const fraction of [0, 0.5]) {
+    const a = player('a', fraction),
+      other = player('other', fraction === 0 ? 0.5 : 0),
+      r = room(a, other);
+    fire(r, a, 'mine');
+    const mine = r.mines[0];
+    assert.ok(Math.abs(mine.y - a.car.y) < 0.1);
+    Object.assign(other.car, { x: mine.x, z: mine.z });
+    updateCombat(r, STEP, 150);
+    assert.equal(other.car.health, 100);
+    assert.equal(r.mines.length, 1);
   }
 });
 
-test('shotgun barrel origins and spread rotate with all three chassis axes',()=>{
-  const c={x:7,y:20,z:-4,angle:.7,pitch:.32,roll:-.44},rays=shotgunRays(c),rotation=new Euler(c.roll,-c.angle,c.pitch,'YXZ');
-  assert.equal(rays.length,6);for(const ray of rays){const origin=new Vector3(ray.barrel*.25,1.39,ray.side*1.03).applyEuler(rotation).add(new Vector3(c.x,c.y+(1-Math.cos(c.roll)*Math.cos(c.pitch))*.5,c.z));assert.ok(origin.distanceTo(new Vector3(ray.origin.x,ray.origin.y,ray.origin.z))<1e-10);assert.ok(Math.abs(Math.hypot(...Object.values(ray.direction))-1)<1e-10);}
+test('chain ball rolls along mountain grades on its own deck and respects its 3D tether', () => {
+  selectTrack('desert');
+  for (const from of [0.17, 0.33, 0.985, 0.485]) {
+    const a = player('a', from),
+      r = room(a);
+    fire(r, a, 'chain');
+    let slopeDifference = 0;
+    for (let i = 1; i < 100; i++) {
+      const f = from + (i * 0.25) / TRACK_LENGTH,
+        p = trackAt(f);
+      Object.assign(a.car, p, {
+        trackFraction: f,
+        groundY: p.y,
+        pitch: Math.atan(p.grade),
+        vx: Math.cos(p.angle) * 15,
+        vz: Math.sin(p.angle) * 15,
+      });
+      updateCombat(r, STEP, i * 1000 * STEP);
+      const b = r.chains[0],
+        road = nearestTrack(b.x, b.z, a.car.trackFraction);
+      assert.ok(b.y >= road.y + 0.95, 'ball stays above the road');
+      assert.ok(Math.hypot(b.x - b.anchorX, b.y - b.anchorY, b.z - b.anchorZ) <= b.length + 0.001);
+      slopeDifference = Math.max(slopeDifference, Math.abs(b.y - 0.98 - a.car.y));
+    }
+    if (from === 0.17 || from === 0.33)
+      assert.ok(slopeDifference > 1, 'ball uses its own road height, not the car height');
+  }
+});
+
+test('shotgun barrel origins and spread rotate with all three chassis axes', () => {
+  const c = { x: 7, y: 20, z: -4, angle: 0.7, pitch: 0.32, roll: -0.44 },
+    rays = shotgunRays(c),
+    rotation = new Euler(c.roll, -c.angle, c.pitch, 'YXZ');
+  assert.equal(rays.length, 6);
+  for (const ray of rays) {
+    const origin = new Vector3(ray.barrel * 0.25, 1.39, ray.side * 1.03)
+      .applyEuler(rotation)
+      .add(new Vector3(c.x, c.y + (1 - Math.cos(c.roll) * Math.cos(c.pitch)) * 0.5, c.z));
+    assert.ok(origin.distanceTo(new Vector3(ray.origin.x, ray.origin.y, ray.origin.z)) < 1e-10);
+    assert.ok(Math.abs(Math.hypot(...Object.values(ray.direction)) - 1) < 1e-10);
+  }
 });

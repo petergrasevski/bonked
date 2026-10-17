@@ -1,142 +1,683 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="theme-color" content="#101c23"><meta name="apple-mobile-web-app-capable" content="yes">
-<title>Bonked</title>
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="Bonked">
-<meta property="og:title" content="Bonked">
-<meta property="og:url" content="https://bonked.fly.dev/">
-<meta property="og:image" content="https://bonked.fly.dev/social/bonked-v1.png">
-<meta property="og:image:type" content="image/png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Bonked logo">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Bonked">
-<meta name="twitter:image" content="https://bonked.fly.dev/social/bonked-v1.png">
-<meta name="twitter:image:alt" content="Bonked logo">
-<link rel="preload" href="/track-titles/coast.12314dc1cd97.webp" as="image" type="image/webp">
-<link rel="preload" href="/track-titles/ice.99ecf4e80c2d.png" as="image" type="image/png">
-<link rel="preload" href="/track-titles/desert.7a8e0665c0e3.webp" as="image" type="image/webp">
-<link rel="preload" href="/track-titles/factory.8bb2a05bbfbd.png" as="image" type="image/png">
-<link rel="preload" href="/track-titles/volcano.075ee04124bf.png" as="image" type="image/png">
-<meta name="apple-mobile-web-app-title" content="Bonked"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/bonked-game-180.png">
-<link rel="preload" href="/fonts/Righteous-Regular.ttf" as="font" type="font/ttf" crossorigin>
-<link rel="icon" href="/favicon.svg?v=bonked"><link rel="stylesheet" href="/style.css">
-<script type="importmap">{"imports":{"three":"/vendor/three.module.js","three/addons/utils/BufferGeometryUtils.js":"/vendor/BufferGeometryUtils.js"}}</script>
-<style>
-body.booting{margin:0;background:#101c23}body.booting>:not(#startup){visibility:hidden!important}
-#startup{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 50% 35%,#29414d,#101c23 70%);color:#eef1e7;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-align:center}
-#startup[hidden],#startup [hidden]{display:none!important}.startup-card{width:min(380px,100%)}.startup-logo{width:min(300px,80%);height:auto;filter:drop-shadow(0 8px 18px #0005)}
-.startup-track{height:4px;overflow:hidden;background:#ffffff18;border-radius:4px;margin:32px auto 20px;width:220px;max-width:85%}.startup-track span{display:block;width:40%;height:100%;background:#e9aa64;border-radius:4px;animation:startup-lap 1.3s ease-in-out infinite}
-#startup-status{min-height:1.5em;margin:0;color:#e1e9ed}#startup-help{font-size:13px;color:#a1b6b7;margin:18px 0 0}.startup-rotate{display:none;margin:24px 0 0;color:#cbd5df;font-size:14px}.startup-rotate span{display:block;font-size:42px;line-height:1.3;margin-bottom:8px}
-#startup-retry{font:inherit;color:#172329;background:#cbd5df;border:0;border-radius:8px;padding:12px 24px;margin-top:20px;cursor:pointer}.failed .startup-track span{animation:none;width:100%;background:#cbd5df}
-@keyframes startup-lap{from{transform:translateX(-110%)}to{transform:translateX(360%)}}
-@media(orientation:portrait){body.mobile.booting>#startup{visibility:visible!important}body.mobile.booting #rotate-hint{display:none}body.mobile .startup-rotate{display:block}}
-@media(max-height:420px){.startup-logo{width:210px}.startup-track{margin:18px auto 14px}}
-@media(prefers-reduced-motion:reduce){.startup-track span{animation:none;width:65%}}
-</style>
-</head>
-<body class="booting">
-<div id="startup" role="status" aria-live="polite" aria-busy="true">
-  <div class="startup-card">
-    <img class="startup-logo" src="/logo.svg?v=bonked" alt="Bonked" width="300" height="82">
-    <div class="startup-track" aria-hidden="true"><span></span></div>
-    <p id="startup-status">Getting the race ready…</p>
-    <p class="startup-rotate"><span aria-hidden="true">↻</span> Rotate your phone to landscape</p>
-    <p id="startup-help" hidden>This is taking a little longer. Check your connection, or try again.</p>
-    <button id="startup-retry" type="button" hidden onclick="location.reload()">Try again</button>
-    <noscript><p>Enable JavaScript to play Bonked.</p></noscript>
-  </div>
-</div>
-<script>
-// Match detectDevice before the game module graph downloads (including desktop-mode iPads).
-document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
-</script>
-<div id="scene" tabindex="-1" aria-label="3D view of the Saltwater Circuit"></div>
-<div class="grain"></div>
-<header class="topbar"><a href="/" class="brand" aria-label="Bonked home"><img src="/logo.svg?v=bonked" alt="Bonked" width="300" height="82"></a><div class="top-right"><span class="connection"><i id="connection-dot"></i><span id="menu-fps" class="network-ping dev-stat" aria-label="Frames per second">FPS —</span><span id="connection-label" class="dev-stat">CONNECTING</span></span><button id="settings-open" class="icon-button" aria-label="Settings">⚙</button></div></header>
-<main id="lobby">
-
-<section class="lobby-card">
-<div id="entry-panel"><label for="name" class="entry-title">Name</label><input id="name" required maxlength="18" placeholder="Name" autocomplete="nickname"><div class="entry-options"><section class="entry-option" aria-labelledby="create-title"><h3 id="create-title">Create a room</h3><p>Start a new lobby</p><button id="create" class="primary">Create <span>↗</span></button></section><section class="entry-option" aria-labelledby="join-title"><h3 id="join-title">Join a room</h3><input id="code" maxlength="3" placeholder="Room code" autocomplete="off" aria-label="Room code"><button id="join" class="primary" disabled>Join <span>→</span></button></section><section class="entry-option lan-entry" aria-labelledby="lan-title"><h3 id="lan-title">Local party</h3><p><span class="lan-mobile-description">Play on one screen</span><a href="/lan.html" class="lan-join-link lan-desktop-join">Join as a controller →</a></p><button id="lan-host" class="primary">Host <span>⌁</span></button><a href="/lan.html" class="primary lan-mobile-join" aria-label="Join local party as a controller">Connect <span>→</span></a></section></div></div>
-<div id="room-panel" hidden><div class="card-heading"><h2>Players</h2><button id="reset-scores" class="text-button" hidden>Reset scores</button></div><div class="room-code-row"><div class="room-identity"><label>Room code</label><strong id="room-code">—</strong></div><div id="lan-invite" hidden><img id="lan-qr" alt="Scan to join as a phone controller" width="104" height="104"><p>Scan with your phone.<br>Use the same main Wi-Fi as this laptop.</p></div><div class="room-actions"><button id="copy" class="secondary small">Copy invite ↗</button><button id="leave" class="secondary small">Leave</button></div></div><div id="roster"></div><div class="room-race-setup"><div class="track-choice"><div class="circuit-heading"><span id="circuit-label" class="circuit-label">Circuit</span><span id="circuit-status" role="status" aria-live="polite" hidden></span><button id="circuit-retry" class="text-button" hidden>Retry</button></div><div id="track-picker" role="group" aria-labelledby="circuit-label"></div></div><button id="start" class="primary">Start tournament <span>→</span></button><p id="host-hint" class="fine"></p></div></div>
-</section>
-
-</main>
-<div id="local-reclaim" role="region" aria-label="Reconnect a controller" hidden></div>
-<aside id="map-info"><h2 id="map-title">Saltwater Circuit</h2><p>TOURNAMENT</p></aside>
-
-<div id="race-ui" hidden>
-<div id="opponent-name" role="tooltip" hidden></div>
-<button id="nudge-left" class="nudge nudge-left" aria-label="Nudge left"><span>‹</span><strong>NUDGE LEFT</strong></button><button id="nudge-right" class="nudge nudge-right" aria-label="Nudge right"><span>›</span><strong>NUDGE RIGHT</strong></button><div id="race-hud"><div class="hud-heading"><span id="race-fps" class="network-ping dev-stat" aria-label="Frames per second">FPS —</span><span id="race-ping" class="network-ping dev-stat" aria-label="Server ping">Ping —</span><button id="race-settings" aria-label="Settings">⚙</button><span id="race-circuit-status" role="status" hidden></span><button id="race-circuit-retry" class="text-button" hidden>Retry circuit</button></div><div id="tournament-scores" aria-label="Tournament scores"></div><div id="finish-note" hidden>Finished</div></div>
-<div id="desktop-weapon" data-loaded="false" aria-label="No weapon"><div class="weapon-orb"><canvas width="256" height="256" aria-hidden="true"></canvas><span class="weapon-ammo"></span></div><strong class="weapon-name" role="status" aria-live="polite">No weapon</strong><span class="weapon-fire-hint"><kbd>Enter ↵</kbd> Fire</span></div><div id="countdown"></div><div id="you-label" aria-label="Your car"><svg viewBox="0 0 32 20" aria-hidden="true"><path d="M4 4 16 15 28 4"/></svg></div>
-<div class="controls"><div id="sky-joystick" role="group" aria-label="Move sky beam target"><span></span><small>AIM</small></div><div class="left-controls"><button id="steer-left" class="action steering" aria-label="Steer left"><span>‹</span><small>LEFT</small><small class="touch-steering-hint">Hold to turn<br>Swipe ← to nudge</small></button><button id="steer-right" class="action steering" aria-label="Steer right"><span>›</span><small>RIGHT</small><small class="touch-steering-hint">Hold to turn<br>Swipe → to nudge</small></button></div><div id="health-ui" data-level="0"><div id="health-bars"><i></i><i></i><i></i><i></i><i></i></div><strong><span id="health-number">100</span> <small id="health-unit">HP</small></strong><span id="health-status"></span><span id="shield-time"></span></div><div class="right-controls"><button id="item" class="action item" aria-label="Use weapon"><span id="item-icon">✦</span><small class="weapon-title">WEAPON</small><small id="item-label">—</small><small id="item-count"></small></button><button id="brake" class="action brake" aria-label="Reverse"><span>↓</span><small id="brake-label">REVERSE</small></button><button id="gas" class="action gas" aria-label="Accelerate"><span>↑</span><small>GO</small></button></div></div>
-
-</div>
-<div id="results" class="modal-backdrop" hidden><section class="modal results-card" role="dialog" aria-modal="true" aria-labelledby="results-title"><div class="results-heading"><div><h2 id="results-title">Round results</h2><p id="results-target"></p></div><button id="results-lobby" class="text-button">Change circuit</button></div><div id="standings" aria-label="Current leaderboard"></div><div class="round-actions"><div class="ready-control"><button id="ready" class="primary">Ready</button><span id="ready-key-hint">Press Enter</span></div><button id="rematch" class="primary" hidden>New tournament ↻</button></div><button id="lan-end-party" class="secondary" hidden>End local party</button><p id="rematch-hint" class="fine"></p></section></div>
-<div id="controller-connect" class="modal-backdrop" hidden><section class="modal controller-connect-card" role="dialog" aria-modal="true" aria-labelledby="controller-connect-title"><button class="close" data-guide-close aria-label="Close controller connection guide"></button><h2 id="controller-connect-title">Connect controllers</h2><p data-guide-intro>Pair in your laptop’s settings first, then join Bonked.</p><button id="controller-configure-open" class="secondary">Configure Controllers</button><div class="controller-guide-selectors"><label>Your laptop<select data-guide-os><option value="other">Choose Mac or Windows</option><option value="mac">macOS</option><option value="windows">Windows</option></select></label><label>Controller<select data-guide-controller></select></label></div><div data-guide-body></div></section></div>
-<div id="controller-configure" class="modal-backdrop" hidden><section class="modal controller-configure-card" role="dialog" aria-modal="true" aria-labelledby="controller-configure-title"><button id="controller-configure-close" class="close" aria-label="Back to Connect controllers"></button><h2 id="controller-configure-title">Configure controllers</h2><section id="controller-devices"><h3 data-summary>Controllers</h3><p class="fine">Change controls, view layouts or split a Joy-Con pair here. Release buttons before returning to the game.</p><div data-devices></div></section></section></div>
-<div id="local-mapping" class="modal-backdrop" hidden><section class="modal controller-mapping-card" role="dialog" aria-modal="true" aria-labelledby="local-mapping-title"><button class="close" data-close aria-label="Close controller configuration"></button><h2 id="local-mapping-title">Configure controller</h2><p>Move a stick or press buttons to see their numbers. Configure unfamiliar layouts here, then press a button to join.</p><div data-controller-diagram></div><output data-preview aria-live="off"></output><form><div data-fields></div><p data-error role="alert"></p><button class="primary" type="submit">Save controls</button></form></section></div>
-<div id="settings" class="modal-backdrop" hidden>
-  <section class="modal settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <button id="settings-close" class="close" aria-label="Close settings"></button>
-    <h2 id="settings-title">Settings</h2>
-    <div class="settings-body">
-    <div class="settings-grid">
-      <div class="settings-column settings-audio">
-        <div class="audio-volume"><label for="effects-volume">Sound effects</label><output id="effects-volume-value" for="effects-volume">40%</output><input id="effects-volume" type="range" min="0" max="100" step="1" value="40"></div>
-        <div class="audio-volume"><label for="music-volume">Music</label><output id="music-volume-value" for="music-volume">100%</output><input id="music-volume" type="range" min="0" max="100" step="1" value="100"></div>
-        <div class="graphics-control bot-setting"><label class="setting-row graphics-setting" for="bot-difficulty">Bot difficulty<select id="bot-difficulty" aria-describedby="bot-difficulty-hint"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option><option value="mixed">Mixed</option></select></label><p id="bot-difficulty-hint" class="render-help">The host can change this in the lobby.</p></div>
-        <button id="how-to-play-settings" class="setting-row">How to play <span>?</span></button>
-        <button id="controller-connect-settings" class="setting-row">Connect controllers <span>↗</span></button>
-        <button id="change-circuit" class="setting-row" hidden>Change circuit</button>
-        <button id="exit-race" class="setting-row">Leave race <span>↗</span></button>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#101c23" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Bonked</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bonked" />
+    <meta property="og:title" content="Bonked" />
+    <meta property="og:url" content="https://bonked.fly.dev/" />
+    <meta property="og:image" content="https://bonked.fly.dev/social/bonked-v1.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Bonked logo" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bonked" />
+    <meta name="twitter:image" content="https://bonked.fly.dev/social/bonked-v1.png" />
+    <meta name="twitter:image:alt" content="Bonked logo" />
+    <link rel="preload" href="/track-titles/coast.12314dc1cd97.webp" as="image" type="image/webp" />
+    <link rel="preload" href="/track-titles/ice.99ecf4e80c2d.png" as="image" type="image/png" />
+    <link
+      rel="preload"
+      href="/track-titles/desert.7a8e0665c0e3.webp"
+      as="image"
+      type="image/webp"
+    />
+    <link rel="preload" href="/track-titles/factory.8bb2a05bbfbd.png" as="image" type="image/png" />
+    <link rel="preload" href="/track-titles/volcano.075ee04124bf.png" as="image" type="image/png" />
+    <meta name="apple-mobile-web-app-title" content="Bonked" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/bonked-game-180.png" />
+    <link rel="preload" href="/fonts/Righteous-Regular.ttf" as="font" type="font/ttf" crossorigin />
+    <link rel="icon" href="/favicon.svg?v=bonked" />
+    <link rel="stylesheet" href="/style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three.module.js",
+          "three/addons/utils/BufferGeometryUtils.js": "/vendor/BufferGeometryUtils.js"
+        }
+      }
+    </script>
+    <style>
+      body.booting {
+        margin: 0;
+        background: #101c23;
+      }
+      body.booting > :not(#startup) {
+        visibility: hidden !important;
+      }
+      #startup {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: radial-gradient(ellipse at 50% 35%, #29414d, #101c23 70%);
+        color: #eef1e7;
+        font:
+          15px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        text-align: center;
+      }
+      #startup[hidden],
+      #startup [hidden] {
+        display: none !important;
+      }
+      .startup-card {
+        width: min(380px, 100%);
+      }
+      .startup-logo {
+        width: min(300px, 80%);
+        height: auto;
+        filter: drop-shadow(0 8px 18px #0005);
+      }
+      .startup-track {
+        height: 4px;
+        overflow: hidden;
+        background: #ffffff18;
+        border-radius: 4px;
+        margin: 32px auto 20px;
+        width: 220px;
+        max-width: 85%;
+      }
+      .startup-track span {
+        display: block;
+        width: 40%;
+        height: 100%;
+        background: #e9aa64;
+        border-radius: 4px;
+        animation: startup-lap 1.3s ease-in-out infinite;
+      }
+      #startup-status {
+        min-height: 1.5em;
+        margin: 0;
+        color: #e1e9ed;
+      }
+      #startup-help {
+        font-size: 13px;
+        color: #a1b6b7;
+        margin: 18px 0 0;
+      }
+      .startup-rotate {
+        display: none;
+        margin: 24px 0 0;
+        color: #cbd5df;
+        font-size: 14px;
+      }
+      .startup-rotate span {
+        display: block;
+        font-size: 42px;
+        line-height: 1.3;
+        margin-bottom: 8px;
+      }
+      #startup-retry {
+        font: inherit;
+        color: #172329;
+        background: #cbd5df;
+        border: 0;
+        border-radius: 8px;
+        padding: 12px 24px;
+        margin-top: 20px;
+        cursor: pointer;
+      }
+      .failed .startup-track span {
+        animation: none;
+        width: 100%;
+        background: #cbd5df;
+      }
+      @keyframes startup-lap {
+        from {
+          transform: translateX(-110%);
+        }
+        to {
+          transform: translateX(360%);
+        }
+      }
+      @media (orientation: portrait) {
+        body.mobile.booting > #startup {
+          visibility: visible !important;
+        }
+        body.mobile.booting #rotate-hint {
+          display: none;
+        }
+        body.mobile .startup-rotate {
+          display: block;
+        }
+      }
+      @media (max-height: 420px) {
+        .startup-logo {
+          width: 210px;
+        }
+        .startup-track {
+          margin: 18px auto 14px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .startup-track span {
+          animation: none;
+          width: 65%;
+        }
+      }
+    </style>
+  </head>
+  <body class="booting">
+    <div id="startup" role="status" aria-live="polite" aria-busy="true">
+      <div class="startup-card">
+        <img class="startup-logo" src="/logo.svg?v=bonked" alt="Bonked" width="300" height="82" />
+        <div class="startup-track" aria-hidden="true"><span></span></div>
+        <p id="startup-status">Getting the race ready…</p>
+        <p class="startup-rotate">
+          <span aria-hidden="true">↻</span> Rotate your phone to landscape
+        </p>
+        <p id="startup-help" hidden>
+          This is taking a little longer. Check your connection, or try again.
+        </p>
+        <button id="startup-retry" type="button" hidden onclick="location.reload()">
+          Try again
+        </button>
+        <noscript><p>Enable JavaScript to play Bonked.</p></noscript>
       </div>
-      <div class="settings-column settings-graphics">
-        <div class="graphics-control"><fieldset class="camera-choice"><legend>Camera view</legend><div class="camera-options"><button type="button" id="camera-shared" aria-pressed="true"><strong>Standard</strong><span>Follow the pack</span></button><button type="button" id="camera-personal" aria-pressed="false"><strong>Third person</strong><span>Follow my car</span></button></div></fieldset><p id="camera-view-hint" class="render-help">Your camera preference is saved on this device.</p></div><div class="graphics-control"><label class="setting-row graphics-setting" for="graphics-quality">3D resolution<select id="graphics-quality"><option value="auto">Auto</option><option value="high">High (fixed)</option></select></label><output id="graphics-resolution" aria-label="Current 3D resolution"></output><p id="graphics-hint"></p></div>
-        <label class="setting-row dev-setting" for="dev-logs">Dev logs<input id="dev-logs" type="checkbox" role="switch"></label>
-        <div id="render-debug" hidden>
-          <output id="render-stats" aria-label="Last scene rendering statistics"></output>
-          <p class="render-help">Last scene sample. JS time excludes GPU work.</p>
+    </div>
+    <script>
+      // Match detectDevice before the game module graph downloads (including desktop-mode iPads).
+      document.body.classList.toggle(
+        'mobile',
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+      );
+    </script>
+    <div id="scene" tabindex="-1" aria-label="3D view of the Saltwater Circuit"></div>
+    <div class="grain"></div>
+    <header class="topbar">
+      <a href="/" class="brand" aria-label="Bonked home"
+        ><img src="/logo.svg?v=bonked" alt="Bonked" width="300" height="82"
+      /></a>
+      <div class="top-right">
+        <span class="connection"
+          ><i id="connection-dot"></i
+          ><span id="menu-fps" class="network-ping dev-stat" aria-label="Frames per second"
+            >FPS —</span
+          ><span id="connection-label" class="dev-stat">CONNECTING</span></span
+        ><button id="settings-open" class="icon-button" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+    <main id="lobby">
+      <section class="lobby-card">
+        <div id="entry-panel">
+          <label for="name" class="entry-title">Name</label
+          ><input id="name" required maxlength="18" placeholder="Name" autocomplete="nickname" />
+          <div class="entry-options">
+            <section class="entry-option" aria-labelledby="create-title">
+              <h3 id="create-title">Create a room</h3>
+              <p>Start a new lobby</p>
+              <button id="create" class="primary">Create <span>↗</span></button>
+            </section>
+            <section class="entry-option" aria-labelledby="join-title">
+              <h3 id="join-title">Join a room</h3>
+              <input
+                id="code"
+                maxlength="3"
+                placeholder="Room code"
+                autocomplete="off"
+                aria-label="Room code"
+              /><button id="join" class="primary" disabled>Join <span>→</span></button>
+            </section>
+            <section class="entry-option lan-entry" aria-labelledby="lan-title">
+              <h3 id="lan-title">Local party</h3>
+              <p>
+                <span class="lan-mobile-description">Play on one screen</span
+                ><a href="/lan.html" class="lan-join-link lan-desktop-join"
+                  >Join as a controller →</a
+                >
+              </p>
+              <button id="lan-host" class="primary">Host <span>⌁</span></button
+              ><a
+                href="/lan.html"
+                class="primary lan-mobile-join"
+                aria-label="Join local party as a controller"
+                >Connect <span>→</span></a
+              >
+            </section>
+          </div>
         </div>
-        <div id="lag-report-controls" hidden>
-          <button id="report-lag" class="setting-row">Report recent lag <span>↓</span></button>
-          <p class="render-help">Saves the last 30 seconds of game timing, including before Dev logs was enabled. No names or voice audio.</p>
-          <a id="download-lag" class="setting-row" hidden>Download last lag report <span>↓</span></a>
-          <p id="lag-report-status" class="render-help" role="status" aria-live="polite"></p>
+        <div id="room-panel" hidden>
+          <div class="card-heading">
+            <h2>Players</h2>
+            <button id="reset-scores" class="text-button" hidden>Reset scores</button>
+          </div>
+          <div class="room-code-row">
+            <div class="room-identity">
+              <label>Room code</label><strong id="room-code">—</strong>
+            </div>
+            <div id="lan-invite" hidden>
+              <img id="lan-qr" alt="Scan to join as a phone controller" width="104" height="104" />
+              <p>Scan with your phone.<br />Use the same main Wi-Fi as this laptop.</p>
+            </div>
+            <div class="room-actions">
+              <button id="copy" class="secondary small">Copy invite ↗</button
+              ><button id="leave" class="secondary small">Leave</button>
+            </div>
+          </div>
+          <div id="roster"></div>
+          <div class="room-race-setup">
+            <div class="track-choice">
+              <div class="circuit-heading">
+                <span id="circuit-label" class="circuit-label">Circuit</span
+                ><span id="circuit-status" role="status" aria-live="polite" hidden></span
+                ><button id="circuit-retry" class="text-button" hidden>Retry</button>
+              </div>
+              <div id="track-picker" role="group" aria-labelledby="circuit-label"></div>
+            </div>
+            <button id="start" class="primary">Start tournament <span>→</span></button>
+            <p id="host-hint" class="fine"></p>
+          </div>
         </div>
-        <button id="copy-network" class="setting-row" hidden>Copy network log <span>↗</span></button>
+      </section>
+    </main>
+    <div id="local-reclaim" role="region" aria-label="Reconnect a controller" hidden></div>
+    <aside id="map-info">
+      <h2 id="map-title">Saltwater Circuit</h2>
+      <p>TOURNAMENT</p>
+    </aside>
+
+    <div id="race-ui" hidden>
+      <div id="opponent-name" role="tooltip" hidden></div>
+      <button id="nudge-left" class="nudge nudge-left" aria-label="Nudge left">
+        <span>‹</span><strong>NUDGE LEFT</strong></button
+      ><button id="nudge-right" class="nudge nudge-right" aria-label="Nudge right">
+        <span>›</span><strong>NUDGE RIGHT</strong>
+      </button>
+      <div id="race-hud">
+        <div class="hud-heading">
+          <span id="race-fps" class="network-ping dev-stat" aria-label="Frames per second"
+            >FPS —</span
+          ><span id="race-ping" class="network-ping dev-stat" aria-label="Server ping">Ping —</span
+          ><button id="race-settings" aria-label="Settings">⚙</button
+          ><span id="race-circuit-status" role="status" hidden></span
+          ><button id="race-circuit-retry" class="text-button" hidden>Retry circuit</button>
+        </div>
+        <div id="tournament-scores" aria-label="Tournament scores"></div>
+        <div id="finish-note" hidden>Finished</div>
+      </div>
+      <div id="desktop-weapon" data-loaded="false" aria-label="No weapon">
+        <div class="weapon-orb">
+          <canvas width="256" height="256" aria-hidden="true"></canvas
+          ><span class="weapon-ammo"></span>
+        </div>
+        <strong class="weapon-name" role="status" aria-live="polite">No weapon</strong
+        ><span class="weapon-fire-hint"><kbd>Enter ↵</kbd> Fire</span>
+      </div>
+      <div id="countdown"></div>
+      <div id="you-label" aria-label="Your car">
+        <svg viewBox="0 0 32 20" aria-hidden="true"><path d="M4 4 16 15 28 4" /></svg>
+      </div>
+      <div class="controls">
+        <div id="sky-joystick" role="group" aria-label="Move sky beam target">
+          <span></span><small>AIM</small>
+        </div>
+        <div class="left-controls">
+          <button id="steer-left" class="action steering" aria-label="Steer left">
+            <span>‹</span><small>LEFT</small
+            ><small class="touch-steering-hint">Hold to turn<br />Swipe ← to nudge</small></button
+          ><button id="steer-right" class="action steering" aria-label="Steer right">
+            <span>›</span><small>RIGHT</small
+            ><small class="touch-steering-hint">Hold to turn<br />Swipe → to nudge</small>
+          </button>
+        </div>
+        <div id="health-ui" data-level="0">
+          <div id="health-bars"><i></i><i></i><i></i><i></i><i></i></div>
+          <strong><span id="health-number">100</span> <small id="health-unit">HP</small></strong
+          ><span id="health-status"></span><span id="shield-time"></span>
+        </div>
+        <div class="right-controls">
+          <button id="item" class="action item" aria-label="Use weapon">
+            <span id="item-icon">✦</span><small class="weapon-title">WEAPON</small
+            ><small id="item-label">—</small><small id="item-count"></small></button
+          ><button id="brake" class="action brake" aria-label="Reverse">
+            <span>↓</span><small id="brake-label">REVERSE</small></button
+          ><button id="gas" class="action gas" aria-label="Accelerate">
+            <span>↑</span><small>GO</small>
+          </button>
+        </div>
       </div>
     </div>
-    <details id="lan-status" hidden><summary>LAN connections & help</summary><button id="enable-phones" class="secondary" hidden>Retry phone connection</button><p id="lan-setup-status" role="status"></p><ul id="lan-connections"></ul><p>Can’t connect? Use your main Wi-Fi, not Guest. Allow local-network access in your browser and enable LAN access in your VPN. On your own router, check AP / client isolation. Keep this tab open and the laptop awake.</p></details>
+    <div id="results" class="modal-backdrop" hidden>
+      <section
+        class="modal results-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="results-title"
+      >
+        <div class="results-heading">
+          <div>
+            <h2 id="results-title">Round results</h2>
+            <p id="results-target"></p>
+          </div>
+          <button id="results-lobby" class="text-button">Change circuit</button>
+        </div>
+        <div id="standings" aria-label="Current leaderboard"></div>
+        <div class="round-actions">
+          <div class="ready-control">
+            <button id="ready" class="primary">Ready</button
+            ><span id="ready-key-hint">Press Enter</span>
+          </div>
+          <button id="rematch" class="primary" hidden>New tournament ↻</button>
+        </div>
+        <button id="lan-end-party" class="secondary" hidden>End local party</button>
+        <p id="rematch-hint" class="fine"></p>
+      </section>
     </div>
-  </section>
-</div>
-<div id="dialog" class="modal-backdrop" hidden><section class="modal"><button id="close-dialog" class="close" aria-label="Close dialog"></button><div id="dialog-body"></div></section></div>
-<div id="install-guide" class="modal-backdrop" hidden><section class="modal install-card" role="dialog" aria-modal="true" aria-labelledby="install-title"><img src="/icons/bonked-game-192.png" width="56" height="56" alt=""><h2 id="install-title"></h2><p id="install-intro"></p><ol id="install-steps"></ol><p id="install-note"></p><div class="install-actions"><button id="install-native" class="primary" hidden>Install app</button><button id="install-fullscreen" class="secondary" hidden>Enter fullscreen</button><button id="install-continue" class="secondary">Continue in browser</button></div></section></div>
-<div id="how-to-play" class="modal-backdrop" hidden>
-  <section class="modal how-to-play-card" role="dialog" aria-modal="true" aria-labelledby="how-to-play-title">
-    <button class="close" aria-label="Close how to play"></button>
-    <div class="help-heading"><span class="eyebrow">BONKED</span><h2 id="how-to-play-title">How to play</h2><p data-help-copy="drive"></p></div>
-    <div class="help-grid">
-      <article class="help-step"><div class="help-visual" data-help-visual="objective"></div><div><span class="help-number">01</span><h3>Last car standing</h3><p>Be the last car alive each round. Earn points to win the tournament.</p></div></article>
-      <article class="help-step"><div class="help-visual" data-help-visual="weapon"></div><div><span class="help-number">02</span><h3>Grab a weapon</h3><p>Drive into a pickup. <span data-help-copy="weapon"></span></p></div></article>
-      <article class="help-step"><div class="help-visual" data-help-visual="line"></div><div><span class="help-number">03</span><h3>Keep up</h3><p>Fall behind the red death line and you’re out.</p></div></article>
-      <article class="help-step"><div class="help-visual" data-help-visual="sky"></div><div><span class="help-number">04</span><h3>Out? Bonk from above.</h3><p>Use the sky beam to shove cars around. <span data-help-copy="sky"></span></p></div></article>
+    <div id="controller-connect" class="modal-backdrop" hidden>
+      <section
+        class="modal controller-connect-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="controller-connect-title"
+      >
+        <button
+          class="close"
+          data-guide-close
+          aria-label="Close controller connection guide"
+        ></button>
+        <h2 id="controller-connect-title">Connect controllers</h2>
+        <p data-guide-intro>Pair in your laptop’s settings first, then join Bonked.</p>
+        <button id="controller-configure-open" class="secondary">Configure Controllers</button>
+        <div class="controller-guide-selectors">
+          <label
+            >Your laptop<select data-guide-os>
+              <option value="other">Choose Mac or Windows</option>
+              <option value="mac">macOS</option>
+              <option value="windows">Windows</option>
+            </select></label
+          ><label>Controller<select data-guide-controller></select></label>
+        </div>
+        <div data-guide-body></div>
+      </section>
     </div>
-  </section>
-</div>
-<div id="party-bar"><button id="how-to-play-open" aria-label="How to play" title="How to play">?</button><button id="voice-toggle" hidden aria-pressed="false" aria-label="Enable microphone" title="Enable microphone"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/><path class="mic-slash" d="M3 3l18 18"/></svg></button><button id="audio-toggle" aria-pressed="false" aria-label="Mute game audio" title="Mute game audio (voice chat stays on)"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M11 4 6 8H3v8h3l5 4Z"/><path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/><path class="speaker-slash" d="M3 3l18 18"/></svg></button></div><div id="controller-status"></div><div id="toast" role="status"></div><div id="rotate-hint" role="alert"><div class="rotate-phone">↻</div><h2>Rotate your phone</h2><p>Landscape required.</p></div>
-<script>
-import('/startup.js').then(({start})=>start()).catch(error=>{
-  console.error('Bonked loader failed',error);
-  document.getElementById('startup-status').textContent='Could not load Bonked. Check your connection and try again.';
-  document.getElementById('startup').classList.add('failed');
-  document.getElementById('startup').setAttribute('aria-busy','false');
-  document.getElementById('startup-retry').hidden=false;
-});
-</script>
-</body></html>
+    <div id="controller-configure" class="modal-backdrop" hidden>
+      <section
+        class="modal controller-configure-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="controller-configure-title"
+      >
+        <button
+          id="controller-configure-close"
+          class="close"
+          aria-label="Back to Connect controllers"
+        ></button>
+        <h2 id="controller-configure-title">Configure controllers</h2>
+        <section id="controller-devices">
+          <h3 data-summary>Controllers</h3>
+          <p class="fine">
+            Change controls, view layouts or split a Joy-Con pair here. Release buttons before
+            returning to the game.
+          </p>
+          <div data-devices></div>
+        </section>
+      </section>
+    </div>
+    <div id="local-mapping" class="modal-backdrop" hidden>
+      <section
+        class="modal controller-mapping-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="local-mapping-title"
+      >
+        <button class="close" data-close aria-label="Close controller configuration"></button>
+        <h2 id="local-mapping-title">Configure controller</h2>
+        <p>
+          Move a stick or press buttons to see their numbers. Configure unfamiliar layouts here,
+          then press a button to join.
+        </p>
+        <div data-controller-diagram></div>
+        <output data-preview aria-live="off"></output>
+        <form>
+          <div data-fields></div>
+          <p data-error role="alert"></p>
+          <button class="primary" type="submit">Save controls</button>
+        </form>
+      </section>
+    </div>
+    <div id="settings" class="modal-backdrop" hidden>
+      <section
+        class="modal settings-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+      >
+        <button id="settings-close" class="close" aria-label="Close settings"></button>
+        <h2 id="settings-title">Settings</h2>
+        <div class="settings-body">
+          <div class="settings-grid">
+            <div class="settings-column settings-audio">
+              <div class="audio-volume">
+                <label for="effects-volume">Sound effects</label
+                ><output id="effects-volume-value" for="effects-volume">40%</output
+                ><input id="effects-volume" type="range" min="0" max="100" step="1" value="40" />
+              </div>
+              <div class="audio-volume">
+                <label for="music-volume">Music</label
+                ><output id="music-volume-value" for="music-volume">100%</output
+                ><input id="music-volume" type="range" min="0" max="100" step="1" value="100" />
+              </div>
+              <div class="graphics-control bot-setting">
+                <label class="setting-row graphics-setting" for="bot-difficulty"
+                  >Bot difficulty<select id="bot-difficulty" aria-describedby="bot-difficulty-hint">
+                    <option value="easy">Easy</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="hard">Hard</option>
+                    <option value="mixed">Mixed</option>
+                  </select></label
+                >
+                <p id="bot-difficulty-hint" class="render-help">
+                  The host can change this in the lobby.
+                </p>
+              </div>
+              <button id="how-to-play-settings" class="setting-row">
+                How to play <span>?</span>
+              </button>
+              <button id="controller-connect-settings" class="setting-row">
+                Connect controllers <span>↗</span>
+              </button>
+              <button id="change-circuit" class="setting-row" hidden>Change circuit</button>
+              <button id="exit-race" class="setting-row">Leave race <span>↗</span></button>
+            </div>
+            <div class="settings-column settings-graphics">
+              <div class="graphics-control">
+                <fieldset class="camera-choice">
+                  <legend>Camera view</legend>
+                  <div class="camera-options">
+                    <button type="button" id="camera-shared" aria-pressed="true">
+                      <strong>Standard</strong><span>Follow the pack</span></button
+                    ><button type="button" id="camera-personal" aria-pressed="false">
+                      <strong>Third person</strong><span>Follow my car</span>
+                    </button>
+                  </div>
+                </fieldset>
+                <p id="camera-view-hint" class="render-help">
+                  Your camera preference is saved on this device.
+                </p>
+              </div>
+              <div class="graphics-control">
+                <label class="setting-row graphics-setting" for="graphics-quality"
+                  >3D resolution<select id="graphics-quality">
+                    <option value="auto">Auto</option>
+                    <option value="high">High (fixed)</option>
+                  </select></label
+                ><output id="graphics-resolution" aria-label="Current 3D resolution"></output>
+                <p id="graphics-hint"></p>
+              </div>
+              <label class="setting-row dev-setting" for="dev-logs"
+                >Dev logs<input id="dev-logs" type="checkbox" role="switch"
+              /></label>
+              <div id="render-debug" hidden>
+                <output id="render-stats" aria-label="Last scene rendering statistics"></output>
+                <p class="render-help">Last scene sample. JS time excludes GPU work.</p>
+              </div>
+              <div id="lag-report-controls" hidden>
+                <button id="report-lag" class="setting-row">
+                  Report recent lag <span>↓</span>
+                </button>
+                <p class="render-help">
+                  Saves the last 30 seconds of game timing, including before Dev logs was enabled.
+                  No names or voice audio.
+                </p>
+                <a id="download-lag" class="setting-row" hidden
+                  >Download last lag report <span>↓</span></a
+                >
+                <p id="lag-report-status" class="render-help" role="status" aria-live="polite"></p>
+              </div>
+              <button id="copy-network" class="setting-row" hidden>
+                Copy network log <span>↗</span>
+              </button>
+            </div>
+          </div>
+          <details id="lan-status" hidden>
+            <summary>LAN connections & help</summary>
+            <button id="enable-phones" class="secondary" hidden>Retry phone connection</button>
+            <p id="lan-setup-status" role="status"></p>
+            <ul id="lan-connections"></ul>
+            <p>
+              Can’t connect? Use your main Wi-Fi, not Guest. Allow local-network access in your
+              browser and enable LAN access in your VPN. On your own router, check AP / client
+              isolation. Keep this tab open and the laptop awake.
+            </p>
+          </details>
+        </div>
+      </section>
+    </div>
+    <div id="dialog" class="modal-backdrop" hidden>
+      <section class="modal">
+        <button id="close-dialog" class="close" aria-label="Close dialog"></button>
+        <div id="dialog-body"></div>
+      </section>
+    </div>
+    <div id="install-guide" class="modal-backdrop" hidden>
+      <section
+        class="modal install-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="install-title"
+      >
+        <img src="/icons/bonked-game-192.png" width="56" height="56" alt="" />
+        <h2 id="install-title"></h2>
+        <p id="install-intro"></p>
+        <ol id="install-steps"></ol>
+        <p id="install-note"></p>
+        <div class="install-actions">
+          <button id="install-native" class="primary" hidden>Install app</button
+          ><button id="install-fullscreen" class="secondary" hidden>Enter fullscreen</button
+          ><button id="install-continue" class="secondary">Continue in browser</button>
+        </div>
+      </section>
+    </div>
+    <div id="how-to-play" class="modal-backdrop" hidden>
+      <section
+        class="modal how-to-play-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="how-to-play-title"
+      >
+        <button class="close" aria-label="Close how to play"></button>
+        <div class="help-heading">
+          <span class="eyebrow">BONKED</span>
+          <h2 id="how-to-play-title">How to play</h2>
+          <p data-help-copy="drive"></p>
+        </div>
+        <div class="help-grid">
+          <article class="help-step">
+            <div class="help-visual" data-help-visual="objective"></div>
+            <div>
+              <span class="help-number">01</span>
+              <h3>Last car standing</h3>
+              <p>Be the last car alive each round. Earn points to win the tournament.</p>
+            </div>
+          </article>
+          <article class="help-step">
+            <div class="help-visual" data-help-visual="weapon"></div>
+            <div>
+              <span class="help-number">02</span>
+              <h3>Grab a weapon</h3>
+              <p>Drive into a pickup. <span data-help-copy="weapon"></span></p>
+            </div>
+          </article>
+          <article class="help-step">
+            <div class="help-visual" data-help-visual="line"></div>
+            <div>
+              <span class="help-number">03</span>
+              <h3>Keep up</h3>
+              <p>Fall behind the red death line and you’re out.</p>
+            </div>
+          </article>
+          <article class="help-step">
+            <div class="help-visual" data-help-visual="sky"></div>
+            <div>
+              <span class="help-number">04</span>
+              <h3>Out? Bonk from above.</h3>
+              <p>Use the sky beam to shove cars around. <span data-help-copy="sky"></span></p>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+    <div id="party-bar">
+      <button id="how-to-play-open" aria-label="How to play" title="How to play">?</button
+      ><button
+        id="voice-toggle"
+        hidden
+        aria-pressed="false"
+        aria-label="Enable microphone"
+        title="Enable microphone"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <rect x="9" y="2" width="6" height="12" rx="3" />
+          <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
+          <path class="mic-slash" d="M3 3l18 18" />
+        </svg></button
+      ><button
+        id="audio-toggle"
+        aria-pressed="false"
+        aria-label="Mute game audio"
+        title="Mute game audio (voice chat stays on)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M11 4 6 8H3v8h3l5 4Z" />
+          <path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14" />
+          <path class="speaker-slash" d="M3 3l18 18" />
+        </svg>
+      </button>
+    </div>
+    <div id="controller-status"></div>
+    <div id="toast" role="status"></div>
+    <div id="rotate-hint" role="alert">
+      <div class="rotate-phone">↻</div>
+      <h2>Rotate your phone</h2>
+      <p>Landscape required.</p>
+    </div>
+    <script>
+      import('/startup.js')
+        .then(({ start }) => start())
+        .catch((error) => {
+          console.error('Bonked loader failed', error);
+          document.getElementById('startup-status').textContent =
+            'Could not load Bonked. Check your connection and try again.';
+          document.getElementById('startup').classList.add('failed');
+          document.getElementById('startup').setAttribute('aria-busy', 'false');
+          document.getElementById('startup-retry').hidden = false;
+        });
+    </script>
+  </body>
+</html>

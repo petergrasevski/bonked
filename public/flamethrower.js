@@ -1,11 +1,17 @@
 import * as THREE from 'three';
-import {CAR_LENGTH} from '../shared/game.js';
-import {FLAME_RANGE} from '../shared/combat.js';
+import { CAR_LENGTH } from '../shared/game.js';
+import { FLAME_RANGE } from '../shared/combat.js';
 
-export function createFlamethrowerMaterial(){
-  return new THREE.ShaderMaterial({uniforms:{time:{value:0}},transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,toneMapped:false,
-    vertexShader:`varying vec2 flameUv;void main(){flameUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec2 flameUv;uniform float time;
+export function createFlamethrowerMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 } },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    vertexShader: `varying vec2 flameUv;void main(){flameUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader: `varying vec2 flameUv;uniform float time;
     float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
     float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.)),f.x),f.y);}
     void main(){
@@ -25,16 +31,24 @@ export function createFlamethrowerMaterial(){
       color=mix(color,vec3(.25,.48,1.),(1.-smoothstep(0.,.08,x))*core);
       gl_FragColor=vec4(color,alpha*.72);
       #include <colorspace_fragment>
-    }`});
+    }`,
+  });
 }
 
-export function createFlamethrower(material){
-  const jet=new THREE.Group();jet.name='flamethrower-jet';jet.visible=false;
-  jet.position.set(-CAR_LENGTH/2,.9,0);jet.rotation.y=Math.PI;
+export function createFlamethrower(material) {
+  const jet = new THREE.Group();
+  jet.name = 'flamethrower-jet';
+  jet.visible = false;
+  jet.position.set(-CAR_LENGTH / 2, 0.9, 0);
+  jet.rotation.y = Math.PI;
   // Crossed layers keep the flame visible from above and from the chase camera.
-  const length=FLAME_RANGE-CAR_LENGTH/2,geometry=new THREE.PlaneGeometry(length,5);
-  for(const angle of [0,Math.PI/3,Math.PI*2/3]){
-    const layer=new THREE.Mesh(geometry,material);layer.position.x=length/2;layer.rotation.x=angle;jet.add(layer);
+  const length = FLAME_RANGE - CAR_LENGTH / 2,
+    geometry = new THREE.PlaneGeometry(length, 5);
+  for (const angle of [0, Math.PI / 3, (Math.PI * 2) / 3]) {
+    const layer = new THREE.Mesh(geometry, material);
+    layer.position.x = length / 2;
+    layer.rotation.x = angle;
+    jet.add(layer);
   }
   return jet;
 }
