@@ -357,9 +357,16 @@ for(const event of ['contextmenu','selectstart','dragstart'])document.addEventLi
 for(const event of ['touchstart','touchmove','touchend'])document.addEventListener(event,e=>{if(e.target instanceof Element&&e.target.closest('.controls,#scene')&&e.cancelable)e.preventDefault();},{passive:false});
 for(const event of ['gesturestart','gesturechange','gestureend','dblclick'])document.addEventListener(event,e=>{if(document.body.classList.contains('playing')&&!editable(e.target)&&e.cancelable)e.preventDefault();},{passive:false});
 $('close-dialog').onclick=()=>{$('dialog').hidden=true;};$('dialog').onclick=e=>{if(e.target===$('dialog'))$('dialog').hidden=true;};
-$('settings-open').onclick=()=>{releaseControls();$('change-circuit').hidden=!state||state.host!==myId;$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;updateGraphicsStatus();$('settings-close').focus();};
+$('settings-open').onclick=()=>{releaseControls();$('change-circuit').hidden=!state||state.host!==myId;$('exit-race').hidden=!state||state.phase==='lobby';$('settings').hidden=false;updateBotDifficulty();updateGraphicsStatus();$('settings-close').focus();};
 function closeSettings(){$('settings').hidden=true;(state&&state.phase!=='lobby'?$('race-settings'):$('settings-open')).focus();}
 $('race-settings').onclick=$('settings-open').onclick;
+function updateBotDifficulty(){
+  const control=$('bot-difficulty');control.value=state?.botDifficulty||'medium';
+  control.disabled=!state||state.host!==myId||state.phase!=='lobby';
+  $('bot-difficulty-hint').textContent=!state?'Join a lobby to configure bots.':state.host!==myId?'The room host chooses bot difficulty.':state.phase!=='lobby'?'Return to the lobby to change difficulty.':control.value==='mixed'?'Each bot gets a random level, kept for every round.':'Applies to all current and new bots.';
+}
+$('bot-difficulty').onchange=()=>{send({type:'bot-difficulty',difficulty:$('bot-difficulty').value});updateBotDifficulty();};
+
 $('copy-network').onclick=async()=>{const log=network.export();try{await navigator.clipboard.writeText(log);toast('Network log copied.');}catch{const t=document.createElement('textarea');t.value=log;document.body.append(t);t.select();const copied=document.execCommand('copy');t.remove();toast(copied?'Network log copied.':'Could not copy. Use the browser console: bonkedNetwork.export()');}};
 $('settings-close').onclick=closeSettings;$('settings').onclick=e=>{if(e.target===$('settings'))closeSettings();};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettings();$('dialog').hidden=true;}});
@@ -467,7 +474,7 @@ function frame(now){const cpuStart=devLogs?performance.now():0;requestAnimationF
   lagRecorder.frame({frameMs,age:now-lastState,hidden:document.hidden,phase:state?.phase||'menu',track:activeTrack.id,round:state?.round,overlay:!$('settings').hidden||!$('dialog').hidden||circuitLoader.loading||!!displayGuide?.isOpen()||!!(howToPlay?.isOpen()||controllerGuide?.isOpen()||!$('controller-configure').hidden),players:rendered?.players,camera:world?.follow,cameraTarget:rendered?.camera,cameraPosition:world?.camera.position,skyTargets:world?.skyView.targets,predicted:predicted?[predicted,...predictedOthers]:[],queuedBytes:ws?.bufferedAmount||0});
   if(state&&world&&!circuitLoader.loading){const pos=world.screenPosition(myId);if(pos){$('you-label').style.transform=`translate3d(${Math.round(pos.x)}px,${Math.round(pos.y)}px,0) translate(-50%,-100%)`;}}
   if(state?.phase==='finished')resultsScreen.progress(state,Date.now()+clockOffset);
-  if(now-uiAt>100){uiAt=now;if(partyUI&&!lanTransport)partyUI.update(now);if(!$('settings').hidden)updateGraphicsStatus();updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);if(idleDisconnected)$('connection-label').textContent='IDLE';network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,render:devLogs?renderDiagnostics.latest:undefined,presentation:'predicted-fleet-clock',bufferMs:0,underruns:0,server:network.server});}
+  if(now-uiAt>100){uiAt=now;if(partyUI&&!lanTransport)partyUI.update(now);if(!$('settings').hidden){updateBotDifficulty();updateGraphicsStatus();}updateUI(now);network.updatePing(ws?.readyState===WebSocket.OPEN);if(idleDisconnected)$('connection-label').textContent='IDLE';network.add('bufferedBytes',ws?.bufferedAmount||0);network.report({phase:state?.phase||'menu',track:activeTrack.id,render:devLogs?renderDiagnostics.latest:undefined,presentation:'predicted-fleet-clock',bufferMs:0,underruns:0,server:network.server});}
   const listening=raceListener(rendered,world?.follow),audible=!circuitLoader.loading&&!circuitLoader.error&&soundEnabled&&ws?.readyState===WebSocket.OPEN&&!document.hidden&&now-lastState<1000;
   weaponAudio?.update(rendered,listening,audible,myId);engineAudio?.update(rendered,listening,audible,myId);roadAudio?.update(rendered,listening,audible,myId);
   const musicEnabled=!document.hidden&&!audioSettings.muted&&audioSettings.music>0;

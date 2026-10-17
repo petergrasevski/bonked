@@ -88,6 +88,7 @@ document.body.classList.toggle('mobile',/iPhone|iPad|iPod|Android/i.test(navigat
       <div class="settings-column settings-audio">
         <div class="audio-volume"><label for="effects-volume">Sound effects</label><output id="effects-volume-value" for="effects-volume">40%</output><input id="effects-volume" type="range" min="0" max="100" step="1" value="40"></div>
         <div class="audio-volume"><label for="music-volume">Music</label><output id="music-volume-value" for="music-volume">100%</output><input id="music-volume" type="range" min="0" max="100" step="1" value="100"></div>
+        <div class="graphics-control bot-setting"><label class="setting-row graphics-setting" for="bot-difficulty">Bot difficulty<select id="bot-difficulty" aria-describedby="bot-difficulty-hint"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option><option value="mixed">Mixed</option></select></label><p id="bot-difficulty-hint" class="render-help">The host can change this in the lobby.</p></div>
         <button id="how-to-play-settings" class="setting-row">How to play <span>?</span></button>
         <button id="controller-connect-settings" class="setting-row">Connect controllers <span>↗</span></button>
         <button id="change-circuit" class="setting-row" hidden>Change circuit</button>
